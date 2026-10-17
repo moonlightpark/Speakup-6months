@@ -27,6 +27,9 @@ pub struct Settings {
     /// Microphone / speaker names; empty = system default.
     pub input_device: String,
     pub output_device: String,
+    /// Speak with the natural neural voice (Kokoro) when its model is installed.
+    pub neural_tts: bool,
+    pub neural_voice: String,
 }
 
 impl Default for Settings {
@@ -47,6 +50,8 @@ impl Default for Settings {
             daily_goal_minutes: 30,
             input_device: String::new(),
             output_device: String::new(),
+            neural_tts: true,
+            neural_voice: "af_heart".into(),
         }
     }
 }

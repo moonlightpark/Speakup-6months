@@ -21,6 +21,9 @@ directories = "6"
 anyhow = "1"
 rand = "0.9"
 open = "5"
+bzip2 = "0.5"
+tar = "0.4"
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
 
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["eframe"] }

@@ -70,6 +70,7 @@ pub struct App {
     pub vocab_mode: usize,
     pub show_key: bool,
     edit_name: bool,
+    prefetched: Option<chrono::NaiveDate>,
     edit_key: bool,
     pub ytdlp_job: Pending<std::path::PathBuf>,
     pub api_url: String,
@@ -97,10 +98,19 @@ impl App {
         if model_file.exists() {
             stt.load(model_file);
         }
+        let player = crate::audio::Player::new(store.settings.output_device.clone());
+        let mut speaker = speaker;
+        let neural = crate::neural_tts::NeuralTts::new(player.handle());
+        if crate::neural_tts::is_installed(&store.models_dir()) {
+            neural.load(&store.models_dir());
+        }
+        speaker.neural = Some(neural);
+        speaker.use_neural = store.settings.neural_tts;
+        speaker.neural_voice = store.settings.neural_voice.clone();
         let voice = Voice {
             speaker,
             recorder: crate::audio::Recorder::new(store.settings.input_device.clone()),
-            player: crate::audio::Player::new(store.settings.output_device.clone()),
+            player,
             stt,
             base_rate: store.settings.tts_rate,
             last_recording: Vec::new(),
@@ -135,6 +145,7 @@ impl App {
             vocab_mode: 0,
             show_key: false,
             edit_name: false,
+            prefetched: None,
             edit_key: false,
             ytdlp_job: Pending::default(),
             api_url: crate::claude::API_URL.to_string(),
@@ -719,7 +730,12 @@ impl App {
             ui.label(RichText::new("3. 음성 인식 모델 (오프라인, 최초 1회 다운로드)").strong());
             self.stt_setup_ui(ui);
             ui.add_space(8.0);
-            ui.label(RichText::new("4. 마이크·스피커 점검").strong());
+            ui.label(RichText::new("4. 원어민 음성 (자연스러운 AI 음성, 최초 1회 다운로드)").strong());
+            if self.neural_setup_ui(ui) {
+                self.store.save_settings();
+            }
+            ui.add_space(8.0);
+            ui.label(RichText::new("5. 마이크·스피커 점검").strong());
             if self.audio_check_ui(ui) {
                 self.store.save_settings();
             }
@@ -744,6 +760,81 @@ impl App {
                 self.screen = Screen::Home;
             }
         });
+    }
+
+    /// Natural neural voice: download once, choose a speaker, test.
+    pub fn neural_setup_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        use crate::neural_tts::{self, NeuralStatus, VOICES};
+        let mut changed = false;
+        let Some(n) = self.voice.speaker.neural.as_ref() else { return false };
+        match n.status() {
+            NeuralStatus::Ready => {
+                ui.label(RichText::new("✅ 자연스러운 AI 음성 준비 완료 (Kokoro, 오프라인)").color(GOOD));
+            }
+            NeuralStatus::Loading => spinner_label(ui, "AI 음성 모델 불러오는 중…"),
+            NeuralStatus::Downloading => {
+                let d = n.downloaded.load(std::sync::atomic::Ordering::Relaxed) as f32;
+                let t = n.total.load(std::sync::atomic::Ordering::Relaxed).max(1) as f32;
+                ui.add(egui::ProgressBar::new(d / t).text(format!("AI 음성 모델 받는 중 {:.0} / {:.0} MB", d / 1e6, t / 1e6)));
+                ui.ctx().request_repaint_after(Duration::from_millis(200));
+            }
+            status => {
+                if let NeuralStatus::Error(e) = status {
+                    error_label(ui, &e);
+                }
+                ui.label(RichText::new("원어민처럼 매끄러운 신경망 음성입니다. 한 번만 받으면 인터넷 없이 계속 사용합니다 (약 330MB).").color(MUTED));
+                if ui.add(egui::Button::new(RichText::new("⬇ 자연스러운 AI 음성 받기 (권장)").strong()).fill(ACCENT)).clicked() {
+                    n.download(self.store.models_dir());
+                }
+            }
+        }
+        let mut warm: Option<String> = None;
+        if n.is_ready() {
+            ui.horizontal(|ui| {
+                changed |= ui.checkbox(&mut self.store.settings.neural_tts, "AI 음성 사용").changed();
+                let current = neural_tts::voice_label(&self.store.settings.neural_voice);
+                egui::ComboBox::from_id_salt("neural_voice").width(240.0).selected_text(current).show_ui(ui, |ui| {
+                    for (_, id, label) in VOICES {
+                        if ui.selectable_label(self.store.settings.neural_voice == *id, *label).clicked() {
+                            self.store.settings.neural_voice = id.to_string();
+                            warm = Some(id.to_string());
+                            changed = true;
+                        }
+                    }
+                });
+                if ui.button("🔊 들어보기").clicked() {
+                    self.voice.speaker.use_neural = true;
+                    self.voice.speaker.neural_voice = self.store.settings.neural_voice.clone();
+                    self.voice.say("Hi! I'm your English coach. Let's practice speaking together, one sentence at a time.");
+                }
+            });
+        }
+        // Opens (and warms up) the engine for a newly chosen accent in the background.
+        if let (Some(v), Some(n)) = (warm, &self.voice.speaker.neural) {
+            n.prefetch("Hello there.", &v, 1.0);
+        }
+        self.voice.speaker.use_neural = self.store.settings.neural_tts;
+        self.voice.speaker.neural_voice = self.store.settings.neural_voice.clone();
+        changed
+    }
+
+    /// Synthesizes today's lesson in the background so every 🔊 plays instantly.
+    pub fn prefetch_lesson(&mut self) {
+        let Some(lesson) = &self.lesson else { return };
+        if !self.voice.speaker.neural_active() || self.prefetched == lesson.date {
+            return;
+        }
+        self.prefetched = lesson.date;
+        let r = self.voice.base_rate;
+        for w in &lesson.words {
+            self.voice.speaker.prefetch(&w.word, r);
+        }
+        for s in &lesson.sentences {
+            self.voice.speaker.prefetch(&s.text, r);
+        }
+        for w in &lesson.words {
+            self.voice.speaker.prefetch(&w.example, r);
+        }
     }
 
     pub fn stt_setup_ui(&mut self, ui: &mut egui::Ui) {
@@ -804,6 +895,10 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("음성").strong());
+            ui.label(RichText::new("원어민 음성 (자연스러운 AI 음성)").color(Color32::WHITE));
+            changed |= self.neural_setup_ui(ui);
+            ui.add_space(6.0);
+            ui.label(RichText::new("시스템 음성 (AI 음성을 쓰지 않을 때)").color(MUTED));
             if let Some(e) = &self.voice.speaker.error {
                 error_label(ui, e);
             }
@@ -913,6 +1008,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.roll_day();
         self.poll_jobs();
+        self.prefetch_lesson();
         self.track_time(ctx);
         if self.lesson_job.running() || self.ytdlp_job.running() || self.voice.player.is_playing() {
             ctx.request_repaint_after(Duration::from_millis(100));

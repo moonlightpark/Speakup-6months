@@ -401,6 +401,8 @@ pub fn time_stretch(input: &[f32], rate: u32, speed: f32) -> Vec<f32> {
 
 enum PlayCmd {
     Play(Vec<f32>, u32, bool),
+    /// Queue after whatever is playing (sentence-by-sentence speech).
+    Append(Vec<f32>, u32),
     Stop,
     Device(String),
 }
@@ -487,6 +489,26 @@ impl Player {
                         }
                         looping = looped.then_some((samples, rate));
                     }
+                    Ok(PlayCmd::Append(samples, rate)) => {
+                        let source = rodio::buffer::SamplesBuffer::new(1, rate, samples);
+                        match &sink {
+                            Some(s) if !s.empty() => s.append(source),
+                            _ => {
+                                if out.is_none() {
+                                    out = open_output(&preferred);
+                                    fl.store(out.is_none(), Ordering::Relaxed);
+                                }
+                                if let Some(o) = &out {
+                                    if let Ok(s) = Sink::try_new(&o.handle) {
+                                        s.append(source);
+                                        sink = Some(s);
+                                        *cs.lock().unwrap() = Some(Instant::now());
+                                    }
+                                }
+                            }
+                        }
+                        looping = None;
+                    }
                     Ok(PlayCmd::Stop) => {
                         if let Some(s) = sink.take() {
                             s.stop();
@@ -519,6 +541,11 @@ impl Player {
             }
         });
         Self { tx, opening_since, playing, failed, clip_start, clip_len: 0.0 }
+    }
+
+    /// A cloneable sender for other threads (the speech synthesizer) to play through.
+    pub fn handle(&self) -> PlayerHandle {
+        PlayerHandle { tx: self.tx.clone(), playing: self.playing.clone() }
     }
 
     /// True when the OS audio output has not responded for several seconds (e.g. a hung
@@ -571,6 +598,23 @@ impl Player {
         };
         let samples: Vec<f32> = note(660.0, 0.25).chain(note(880.0, 0.35)).collect();
         self.play_samples(samples, rate, false);
+    }
+}
+
+#[derive(Clone)]
+pub struct PlayerHandle {
+    tx: std::sync::mpsc::Sender<PlayCmd>,
+    playing: Arc<AtomicBool>,
+}
+
+impl PlayerHandle {
+    pub fn play(&self, samples: Vec<f32>, rate: u32) {
+        self.playing.store(true, Ordering::Relaxed);
+        let _ = self.tx.send(PlayCmd::Play(samples, rate, false));
+    }
+    pub fn append(&self, samples: Vec<f32>, rate: u32) {
+        self.playing.store(true, Ordering::Relaxed);
+        let _ = self.tx.send(PlayCmd::Append(samples, rate));
     }
 }
 
