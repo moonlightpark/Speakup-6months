@@ -6,7 +6,7 @@ use crate::content;
 use crate::curriculum::{self, TOTAL_DAYS};
 use crate::language::{self, LanguagePack};
 use crate::models::*;
-use crate::screens::{library::LibraryState, writing::WritingState, audio_check::AudioCheckState, feedback::FeedbackState, speed::SpeedState, listening::ListeningState, practice::DrillQueue, speaking::{RoleplayState, SelfExprState}, homework::HomeworkState, test::LevelTest};
+use crate::screens::{translator::TranslatorState, library::LibraryState, writing::WritingState, audio_check::AudioCheckState, feedback::FeedbackState, speed::SpeedState, listening::ListeningState, practice::DrillQueue, speaking::{RoleplayState, SelfExprState}, homework::HomeworkState, test::LevelTest};
 use crate::srs;
 use crate::storage::Store;
 use crate::stt::{self, Stt, SttStatus};
@@ -30,6 +30,7 @@ pub enum Screen {
     Business,
     Library,
     Writing,
+    Translator,
     Vocabulary,
     Feedback,
     History,
@@ -88,6 +89,7 @@ pub struct App {
     pub audio_check: AudioCheckState,
     pub library: LibraryState,
     pub writing: WritingState,
+    pub translator: TranslatorState,
     pub test: Option<LevelTest>,
     pub toast: Option<(String, Instant)>,
     pub vocab_filter: String,
@@ -131,11 +133,17 @@ impl App {
         speaker.neural = Some(neural);
         speaker.use_neural = store.settings.neural_tts;
         speaker.neural_voice = store.settings.neural_voice.clone();
+        let stt_ko = Stt::new("ko");
+        let ko_model = stt::model_path(&store.models_dir(), &store.settings.korean_model);
+        if ko_model.exists() {
+            stt_ko.load(ko_model);
+        }
         let voice = Voice {
             speaker,
             recorder: crate::audio::Recorder::new(store.settings.input_device.clone()),
             player,
             stt,
+            stt_ko,
             base_rate: store.settings.tts_rate,
             last_recording: Vec::new(),
         };
@@ -165,6 +173,7 @@ impl App {
             audio_check: AudioCheckState::default(),
             library: LibraryState::default(),
             writing: WritingState::default(),
+            translator: TranslatorState::default(),
             test: None,
             toast: None,
             vocab_filter: String::new(),
@@ -530,6 +539,7 @@ impl App {
                     (Screen::Business, "💼  회화 · 비즈니스"),
                     (Screen::Library, "📘  리딩 라이브러리"),
                     (Screen::Writing, "✏  쓰기"),
+                    (Screen::Translator, "🌐  자동 번역기"),
                 ],
             ),
             ("내 학습", &[(Screen::Feedback, "🔬  피드백 센터"), (Screen::Vocabulary, "📒  내 단어장"), (Screen::History, "📅  학습 기록"), (Screen::Progress, "📈  레벨 · 평가"), (Screen::Settings, "⚙  설정")]),
@@ -1129,6 +1139,7 @@ impl eframe::App for App {
                             Screen::Business => self.business_ui(ui),
                             Screen::Library => self.library_ui(ui),
                             Screen::Writing => self.writing_ui(ui),
+                            Screen::Translator => self.translator_ui(ui),
                             Screen::Feedback => self.feedback_ui(ui),
                             Screen::Vocabulary => self.vocabulary_ui(ui),
                             Screen::History => self.history_ui(ui),

@@ -88,6 +88,11 @@ fn respond(body: &Value) -> Value {
     } else if prompt.contains("wrote this in English") {
         json!({"score": 72, "feedback_ko": "좋아요!", "corrections": [{"original": "I go park", "corrected": "I went to the park", "explanation_ko": "과거 시제"}],
                "natural_version": "I went to the park and had a coffee.", "natural_version_ko": "공원에 가서 커피를 마셨어요."})
+    } else if prompt.starts_with("A Korean learner wants to say") {
+        json!({"meaning_ko": "회의 연기 요청", "versions": [
+            {"level_ko": "쉽게", "english": "Can we move the meeting?", "note_ko": "move = 옮기다"},
+            {"level_ko": "중간", "english": "Could we push the meeting back a bit?", "note_ko": "push back = 미루다"},
+            {"level_ko": "고급", "english": "Would it be possible to reschedule today's meeting?", "note_ko": "정중한 표현"}]})
     } else if prompt.starts_with("Rewrite this page") {
         json!({"paragraphs": ["A lion slept. A mouse ran on him."], "summary_ko": "사자와 생쥐"})
     } else if prompt.contains("Diagnose") {
@@ -155,6 +160,7 @@ fn launch_at(dir: PathBuf, with_key: bool, prepare: impl FnOnce(&mut Store)) -> 
         recorder: Recorder::simulated(script.clone()),
         player: Player::silent(),
         stt: Stt::scripted(script.clone()),
+        stt_ko: Stt::scripted(script.clone()),
         base_rate: 1.0,
         last_recording: Vec::new(),
     };
@@ -763,6 +769,7 @@ fn ft19_saved_name_and_key_are_not_asked_again() {
         recorder: Recorder::simulated(script.clone()),
         player: Player::silent(),
         stt: Stt::scripted(script.clone()),
+        stt_ko: Stt::scripted(script.clone()),
         base_rate: 1.0,
         last_recording: Vec::new(),
     };
@@ -850,4 +857,35 @@ fn ft22_study_time_is_split_by_skill() {
     assert!((w - 1.0).abs() < 1e-6 && crate::app::SKILL_WEIGHTS[0].1 == 0.6);
     // The routine has a reading and a writing step.
     assert!(t.has("📘 리딩 (동화·소설)") && t.has("✏ 쓰기 (받아쓰기·작문)"));
+}
+
+#[test]
+fn ft23_translator_korean_speech_to_three_levels() {
+    let mut t = launch("translator");
+    t.nav("🌐  자동 번역기");
+    // Speak Korean into the mic (the scripted Korean recognizer is ready in tests).
+    t.say("오늘 회의 좀 미룰 수 있을까요?", 2.0);
+    t.wait("translation", |a| a.translator.result.is_some());
+    for text in ["쉽게", "중간", "고급", "Can we move the meeting?", "Could we push the meeting back a bit?", "Would it be possible to reschedule today's meeting?", "💡 push back = 미루다"] {
+        assert!(t.has(text), "translator should show {text:?}");
+    }
+    assert!(t.prompts().iter().any(|p| p.contains("오늘 회의 좀 미룰 수 있을까요?")));
+    // Repeat the everyday version out loud, and save it for review.
+    t.h.get_all_by_label("🎤 따라 말하기").nth(1).unwrap().click();
+    t.steps(3);
+    // Two mic buttons now: the Korean one at the top and the drill's.
+    t.script.lock().unwrap().push_back(("Could we push the meeting back a bit?".into(), 2.0));
+    t.h.get_all_by_label("🎤 말하기").nth(1).unwrap().click();
+    t.steps(3);
+    t.click("⏹ 녹음 끝내기");
+    t.steps(4);
+    assert!(t.app().store.profile.today.scores.contains(&100.0), "drill scored the repeat");
+    t.h.get_all_by_label("⭐ 저장 (복습)").nth(1).unwrap().click();
+    t.steps(3);
+    assert!(t.app().store.items.iter().any(|i| i.text == "Could we push the meeting back a bit?" && i.meaning_ko == "오늘 회의 좀 미룰 수 있을까요?"));
+    // Typing works too.
+    t.app_mut().translator.korean = "배고파 죽겠어".into();
+    t.click("번역 ›");
+    t.wait("second translation", |a| a.translator.result.is_some());
+    assert!(t.prompts().iter().any(|p| p.contains("배고파 죽겠어")));
 }

@@ -139,9 +139,16 @@ pub struct Capture {
     silent_since: Option<std::time::Instant>,
     /// When the last recording was stopped (for response-time measurement).
     pub stopped_at: Option<std::time::Instant>,
+    /// Recognize Korean instead of the target language (translator).
+    pub korean: bool,
 }
 
 impl Capture {
+    /// A capture that recognizes Korean (translator).
+    pub fn korean() -> Self {
+        Self { korean: true, ..Default::default() }
+    }
+
     /// A capture that stops by itself when the speaker goes quiet.
     pub fn auto_stopping() -> Self {
         Self { auto_stop: true, ..Default::default() }
@@ -180,7 +187,8 @@ impl Capture {
         }
         self.last_secs = crate::audio::voiced_seconds(&audio, crate::audio::STT_RATE);
         voice.last_recording = audio.clone();
-        self.rx.from_receiver(voice.stt.transcribe(audio));
+        let stt = if self.korean { &voice.stt_ko } else { &voice.stt };
+        self.rx.from_receiver(stt.transcribe(audio));
     }
 
     /// Big round mic button. Returns the transcript once recognition finishes.

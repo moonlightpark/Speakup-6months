@@ -1,4 +1,4 @@
-# Builds SpeakUp 6M for macOS, Windows and Linux on every push to main and publishes the
+# Builds SpeakUp 6M for macOS and Windows on every push to main and publishes the
 # packages to the "latest" GitHub release. Pushing a tag like v1.2.0 also creates a versioned release.
 name: build
 
@@ -25,8 +25,6 @@ jobs:
             name: macos-arm64
           - os: windows-latest
             name: windows-x64
-          - os: ubuntu-22.04
-            name: linux-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,13 +34,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.name }}
-
-      - name: Linux packages
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang libclang-dev libasound2-dev libspeechd-dev \
-            libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev
 
       - name: Windows libclang
         if: runner.os == 'Windows'
@@ -72,18 +63,6 @@ jobs:
           Get-ChildItem pkg
           Compress-Archive -Path pkg/* -DestinationPath "dist/SpeakUp6M-${{ matrix.name }}.zip"
 
-      - name: Package (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          cargo build --release
-          mkdir -p dist
-          # The neural voice needs the sherpa-onnx / onnxruntime libraries beside the binary.
-          mkdir -p pkg/SpeakUp6M
-          cp target/release/speakup pkg/SpeakUp6M/
-          cp -P target/release/*.so* pkg/SpeakUp6M/
-          ls -la pkg/SpeakUp6M
-          tar -C pkg -czf "dist/SpeakUp6M-${{ matrix.name }}.tar.gz" SpeakUp6M
-
       - uses: actions/upload-artifact@v4
         with:
           name: SpeakUp6M-${{ matrix.name }}
@@ -112,5 +91,5 @@ jobs:
             gh release delete latest --repo "$REPO" --cleanup-tag --yes || true
             gh release create latest dist/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
               --title "SpeakUp 6M (최신 빌드)" \
-              --notes "main 브랜치 최신 커밋 ${GITHUB_SHA::7} 의 자동 빌드입니다. macOS(Apple Silicon) / Windows / Linux."
+              --notes "main 브랜치 최신 커밋 ${GITHUB_SHA::7} 의 자동 빌드입니다. macOS(Apple Silicon) / Windows."
           fi

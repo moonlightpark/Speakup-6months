@@ -10,3 +10,4 @@ pub mod speed;
 pub mod history;
 pub mod library;
 pub mod writing;
+pub mod translator;

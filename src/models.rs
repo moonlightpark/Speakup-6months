@@ -30,6 +30,8 @@ pub struct Settings {
     /// Speak with the natural neural voice (Kokoro) when its model is installed.
     pub neural_tts: bool,
     pub neural_voice: String,
+    /// Multilingual whisper model for Korean speech (translator): "small" or "base".
+    pub korean_model: String,
 }
 
 impl Default for Settings {
@@ -52,6 +54,7 @@ impl Default for Settings {
             output_device: String::new(),
             neural_tts: true,
             neural_voice: "af_heart".into(),
+            korean_model: "small".into(),
         }
     }
 }

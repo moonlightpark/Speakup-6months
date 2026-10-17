@@ -320,6 +320,21 @@ impl Claude {
         self.call(user, schema, "low")
     }
 
+    /// Korean → English at three levels (easy / intermediate / advanced) for the translator.
+    pub fn translate_levels(&self, korean: &str) -> Result<Translation> {
+        let version = obj(json!({"level_ko": s(), "english": s(), "note_ko": s()}));
+        let schema = obj(json!({"versions": arr(version), "meaning_ko": s()}));
+        let user = format!(
+            "A Korean learner wants to say this in English: \"{korean}\"\n\n\
+             Give exactly 3 versions in natural, spoken English as natives really say it, in this order: \
+             level_ko \"쉽게\" (short, simple words a beginner can say right away), \"중간\" (everyday native style with common phrasal verbs/idioms), \
+             \"고급\" (fluent, nuanced, polished — still natural speech, not stiff). \
+             note_ko: one short Korean tip about the key expression or nuance of that version. \
+             meaning_ko: how you understood the Korean (one short line), in case it was ambiguous or the speech recognition was off."
+        );
+        self.call(user, schema, "low")
+    }
+
     /// Meaning of a word as used in a sentence.
     pub fn word_in_context(&self, word: &str, sentence: &str) -> Result<WordMeaning> {
         let schema = obj(json!({"meaning_ko": s(), "note_ko": s(), "example": s(), "example_ko": s()}));
@@ -574,4 +589,17 @@ pub struct WordMeaning {
     pub note_ko: String,
     pub example: String,
     pub example_ko: String,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct TranslationVersion {
+    pub level_ko: String,
+    pub english: String,
+    pub note_ko: String,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct Translation {
+    pub versions: Vec<TranslationVersion>,
+    pub meaning_ko: String,
 }

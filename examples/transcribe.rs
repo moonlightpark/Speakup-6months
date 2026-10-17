@@ -14,7 +14,8 @@ fn main() {
         let audio: Vec<f32> = (0..(raw.len() as f64 / ratio) as usize).map(|i| raw[((i as f64 * ratio) as usize).min(raw.len() - 1)]).collect();
         let mut st = ctx.create_state().unwrap();
         let mut p = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        p.set_language(Some("en"));
+        let lang = std::env::var("LANG_STT").unwrap_or_else(|_| "en".into());
+        p.set_language(Some(&lang));
         p.set_print_progress(false);
         st.full(p, &audio).unwrap();
         let text: String = (0..st.full_n_segments().unwrap()).map(|i| st.full_get_segment_text(i).unwrap()).collect();

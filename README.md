@@ -1,6 +1,6 @@
 # 🎤 SpeakUp 6M — 6개월 영어 듣기·말하기 완성
 
-**6개월 뒤, 영어로 듣고 말할 수 있게.** SpeakUp 6M은 소리로 알려 주고, 내 목소리를 듣고, 잘 따라 했는지 바로 알려 주는 **음성 중심 영어 학습 데스크톱 앱**입니다. macOS · Windows · Linux에서 동작하며 웹 브라우저가 아닌 네이티브 앱(Rust)입니다.
+**6개월 뒤, 영어로 듣고 말할 수 있게.** SpeakUp 6M은 소리로 알려 주고, 내 목소리를 듣고, 잘 따라 했는지 바로 알려 주는 **음성 중심 영어 학습 데스크톱 앱**입니다. macOS와 Windows에서 동작하며 웹 브라우저가 아닌 네이티브 앱(Rust)입니다.
 
 > 학습 비중은 **말하기 60 · 읽기 20 · 쓰기 20**. 말하기가 제일 중요합니다.
 
@@ -14,7 +14,6 @@
 |---|---|---|
 | macOS (Apple Silicon) | `SpeakUp6M-macos-arm64.zip` | 압축을 풀고 `SpeakUp 6M.app` 실행. 처음에 "확인되지 않은 개발자" 경고가 뜨면 앱을 **우클릭 → 열기** |
 | Windows | `SpeakUp6M-windows-x64.zip` | 압축을 푼 폴더에서 `speakup.exe` 실행 (같은 폴더의 `.dll` 파일을 지우지 마세요) |
-| Linux | `SpeakUp6M-linux-x64.tar.gz` | `tar xzf` 로 풀고 `SpeakUp6M/speakup` 실행 |
 
 ---
 
@@ -80,6 +79,18 @@ I  /  am  /  a  /  boy
 - **🔁 한→영 작문**: 한국어를 영어로. 모범 답안과 달라도 뜻이 같으면 AI가 맞다고 인정해요
 - **📝 영어 일기**: 짧은 글을 쓰면 AI가 교정하고 원어민 버전을 보여 줍니다. 교정된 글은 **소리 내어 읽어서** 말하기 연습으로 이어져요
 
+### 🌐 자동 번역기 — 한국어로 말하면 영어 3단계로
+하고 싶은 말을 **한국어로 마이크에 말하거나** 입력하면, 같은 뜻을 **쉽게 · 중간 · 고급** 세 가지 영어 표현으로 바꿔 보여 주고 원어민 음성으로 읽어 줍니다. 표현마다 핵심 팁이 붙고, **🎤 따라 말하기**로 바로 연습하거나 **⭐ 저장**해서 복습에 넣을 수 있어요.
+
+```
+🎤 "오늘 회의 좀 미룰 수 있을까요?"
+ 쉽게  Can we move the meeting?
+ 중간  Could we push the meeting back a bit?
+ 고급  Would it be possible to reschedule today's meeting?
+```
+
+한국어 음성 인식 모델(466MB 또는 142MB)은 처음 한 번만 받습니다.
+
 ### 💬 원어민 표현과 유행어
 교과서 문법 대신 원어민이 실제로 쓰는 문장으로 배웁니다. 매일 **예전부터 쓰던 표현**(my bad, rain check, as if! …) 하나와 **요즘 유행어**(no cap, low-key, it's giving… …) 하나를 배워요.
 
@@ -113,7 +124,6 @@ I  /  am  /  a  /  boy
 |---|---|
 | macOS | `~/Library/Application Support/com.SpeakUp.SpeakUp6M/` |
 | Windows | `%APPDATA%\SpeakUp\SpeakUp6M\data\` |
-| Linux | `~/.local/share/speakup6m/` |
 
 **태블릿에서도 쓸 수 있나요?**
 지금은 데스크톱 전용입니다. 학습 엔진은 Android/iOS로 옮길 수 있게 만들어져 있어, 나중에 iPad·안드로이드 패드처럼 큰 화면에서는 데스크톱과 같은 화면 구성으로 제공할 계획입니다.

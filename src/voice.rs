@@ -117,6 +117,8 @@ pub struct Voice {
     pub recorder: Recorder,
     pub player: Player,
     pub stt: Stt,
+    /// Korean speech recognition (multilingual whisper model) for the translator.
+    pub stt_ko: Stt,
     pub base_rate: f32,
     /// Last learner recording (16 kHz) for "listen to myself".
     pub last_recording: Vec<f32>,
