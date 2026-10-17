@@ -90,7 +90,10 @@ impl App {
             match r {
                 Ok(t) => {
                     if !t.meaning_ko.is_empty() {
-                        ui.label(RichText::new(format!("이해한 뜻: {}", t.meaning_ko)).color(MUTED));
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new("이해한 뜻:").color(MUTED));
+                            crate::grammar::ko_label(ui, &t.meaning_ko, 16.0, MUTED);
+                        });
                     }
                     let colors = [GOOD, ACCENT, crate::art::VIOLET];
                     for (i, v) in t.versions.iter().enumerate() {

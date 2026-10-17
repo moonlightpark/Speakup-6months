@@ -318,6 +318,13 @@ pub struct Attempt {
 
 pub const GLOSS: Color32 = Color32::from_rgb(255, 214, 120);
 
+/// Space between sentences of a passage, so each one stands apart (scaled by font size).
+fn sentence_gap(ui: &mut Ui, i: usize, size: f32) {
+    if i > 0 {
+        ui.add_space(size * 0.6);
+    }
+}
+
 /// 직독직해 view: English chunks separated by " / " with the Korean meaning under each.
 /// With `marks`, each chunk is coloured green/red by whether its words were recognized.
 /// True for a word that ends a sentence ("day.", "you?", "stop!\"").
@@ -327,21 +334,33 @@ fn ends_sentence(word: &str) -> bool {
 
 /// Word-by-word feedback with each sentence on its own line.
 pub fn word_feedback_lines(ui: &mut Ui, r: &ScoreResult, size: f32) {
-    let mut start = 0;
+    let (mut start, mut n) = (0, 0);
     for (i, m) in r.marks.iter().enumerate() {
         if ends_sentence(&m.word) || i + 1 == r.marks.len() {
+            sentence_gap(ui, n, size);
+            n += 1;
             word_feedback(ui, &ScoreResult { score: r.score, marks: r.marks[start..=i].to_vec() }, size);
             start = i + 1;
         }
     }
 }
 
+/// Colour key above a 직독직해 view whose chunks carry grammatical roles.
+pub fn role_legend(ui: &mut Ui, chunks: &[Chunk]) {
+    if chunks.iter().any(|c| !c.role.is_empty()) {
+        crate::grammar::legend(ui);
+    }
+}
+
 /// 직독직해 with each sentence on its own line; `marks` (one per word) color the chunks.
 pub fn chunk_view_lines(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, size: f32) {
-    let (mut start, mut word) = (0, 0);
+    role_legend(ui, chunks);
+    let (mut start, mut word, mut n) = (0, 0, 0);
     for (i, c) in chunks.iter().enumerate() {
         let last_word = c.en.split_whitespace().last().unwrap_or("");
         if ends_sentence(last_word) || i + 1 == chunks.len() {
+            sentence_gap(ui, n, size);
+            n += 1;
             let words: usize = chunks[start..=i].iter().map(|c| c.en.split_whitespace().count()).sum();
             let m = marks.and_then(|m| m.get(word..word + words));
             chunk_view(ui, &chunks[start..=i], m, size);
@@ -351,10 +370,11 @@ pub fn chunk_view_lines(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]
     }
 }
 
-/// Plain text with each sentence on its own line.
+/// Plain text with each sentence on its own line (Korean coloured by grammatical role).
 pub fn sentence_lines(ui: &mut Ui, text: &str, size: f32, color: Color32) {
-    for s in crate::neural_tts::sentences(text) {
-        ui.label(RichText::new(s).size(size).color(color));
+    for (i, s) in crate::neural_tts::sentences(text).iter().enumerate() {
+        sentence_gap(ui, i, size);
+        crate::grammar::ko_label(ui, s, size, color);
     }
 }
 
@@ -370,16 +390,18 @@ pub fn chunk_view(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, siz
                 });
             }
             let n = c.en.split_whitespace().count();
+            // Before scoring the English shows the grammatical role; after, whether it was heard.
+            let role = crate::grammar::color(&c.role);
             let color = match marks {
                 Some(m) if k + n <= m.len() => {
                     if m[k..k + n].iter().all(|w| w.ok) { GOOD } else { BAD }
                 }
-                _ => Color32::WHITE,
+                _ => role.unwrap_or(Color32::WHITE),
             };
             k += n;
             ui.vertical(|ui| {
                 ui.label(RichText::new(&c.en).size(size).strong().color(color));
-                ui.label(RichText::new(&c.ko).size(size * 0.62).color(GLOSS));
+                ui.label(RichText::new(&c.ko).size(size * 0.62).strong().color(role.unwrap_or(GLOSS)));
             });
         }
     });
@@ -519,7 +541,7 @@ impl Drill {
         ui.vertical_centered(|ui| {
             if self.recall && !self.revealed {
                 ui.label(RichText::new("영어로 말해 보세요").color(MUTED));
-                ui.label(RichText::new(&self.ko).size(26.0).strong());
+                crate::grammar::ko_label(ui, &self.ko, 26.0, Color32::WHITE);
                 ui.add_space(6.0);
                 ui.label(RichText::new(self.hidden_text()).size(22.0).monospace().color(MUTED));
                 if !self.tip.is_empty() && self.hint > 0 {
@@ -539,6 +561,7 @@ impl Drill {
             } else {
                 let marks = self.last.as_ref().map(|(_, r)| r.marks.as_slice());
                 if self.show_gloss && !self.chunks.is_empty() {
+                    role_legend(ui, &self.chunks);
                     chunk_view(ui, &self.chunks, marks, 26.0);
                 } else {
                     match &self.last {
@@ -549,7 +572,7 @@ impl Drill {
                     }
                 }
                 if !self.ko.is_empty() {
-                    ui.label(RichText::new(&self.ko).color(MUTED));
+                    crate::grammar::ko_label(ui, &self.ko, 16.0, MUTED);
                 }
                 if !self.tip.is_empty() {
                     ui.label(RichText::new(format!("💡 {}", self.tip)).color(WARN));

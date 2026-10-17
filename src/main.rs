@@ -11,6 +11,7 @@ mod claude;
 mod content;
 mod curriculum;
 mod expressions;
+mod grammar;
 mod language;
 mod library;
 mod mic_permission;

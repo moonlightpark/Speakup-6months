@@ -273,7 +273,8 @@ impl App {
             for (pi, para) in paras.iter().enumerate() {
                 let sents = crate::neural_tts::sentences(para);
                 ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(5.0, 6.0);
+                    // Clear gaps between sentences (and lines) for easier reading.
+                    ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
                     for (si, s) in sents.iter().enumerate() {
                         let sel = r.selected == Some((pi, si));
                         let text = RichText::new(s).size(18.0).color(if sel { Color32::from_rgb(20, 40, 120) } else { Color32::from_rgb(40, 36, 30) });
@@ -321,6 +322,7 @@ impl App {
                             });
                             let chunks = self.store.gloss_for(&sentence);
                             if !chunks.is_empty() {
+                                role_legend(ui, &chunks);
                                 chunk_view(ui, &chunks, None, 17.0);
                             }
                             // Word lookup

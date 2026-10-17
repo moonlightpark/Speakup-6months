@@ -94,7 +94,7 @@ impl App {
                 speaker_button(ui, &mut self.voice, &se.question);
                 ui.label(RichText::new(&se.question).size(22.0).strong());
             });
-            ui.label(RichText::new(&se.question_ko).color(MUTED));
+            crate::grammar::ko_label(ui, &se.question_ko, 16.0, MUTED);
             if !se.useful_phrases.is_empty() {
                 ui.add_space(6.0);
                 ui.label(RichText::new("쓸 수 있는 표현").color(ACCENT));
@@ -102,7 +102,7 @@ impl App {
                     ui.horizontal(|ui| {
                         speaker_button(ui, &mut self.voice, &p.text);
                         ui.label(RichText::new(&p.text).strong());
-                        ui.label(RichText::new(&p.ko).color(MUTED));
+                        crate::grammar::ko_label(ui, &p.ko, 16.0, MUTED);
                     });
                 }
             }
@@ -316,7 +316,7 @@ impl App {
                     ui.horizontal(|ui| {
                         speaker_button(ui, &mut self.voice, &p.text);
                         ui.label(RichText::new(&p.text).strong());
-                        ui.label(RichText::new(&p.ko).color(MUTED));
+                        crate::grammar::ko_label(ui, &p.ko, 16.0, MUTED);
                     });
                 }
             }
@@ -365,7 +365,7 @@ impl App {
                         ui.label(RichText::new(&l.text).size(16.0));
                     });
                     if show_ko && !l.ko.is_empty() {
-                        ui.label(RichText::new(&l.ko).color(MUTED).small());
+                        crate::grammar::ko_label(ui, &l.ko, 12.5, MUTED);
                     }
                     if !l.correction.is_empty() {
                         ui.label(RichText::new(format!("✓ 더 자연스럽게: {}", l.correction)).color(Color32::from_rgb(150, 255, 190)));
@@ -408,7 +408,7 @@ impl App {
                 ui.horizontal(|ui| {
                     speaker_button(ui, &mut self.voice, &p.text);
                     ui.label(RichText::new(&p.text).strong());
-                    ui.label(RichText::new(&p.ko).color(MUTED));
+                    crate::grammar::ko_label(ui, &p.ko, 16.0, MUTED);
                 });
             }
         }

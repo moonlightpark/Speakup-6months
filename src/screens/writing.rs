@@ -141,7 +141,7 @@ impl App {
                 });
             } else {
                 ui.label(RichText::new("영어로 써 보세요.").color(MUTED));
-                ui.label(RichText::new(&ko).size(22.0).strong().color(GLOSS));
+                crate::grammar::ko_label(ui, &ko, 22.0, GLOSS);
             }
             ui.add_space(4.0);
             let resp = ui.add(egui::TextEdit::singleline(&mut st.input).desired_width(f32::INFINITY).font(egui::FontId::proportional(19.0)).hint_text("여기에 영어로 입력"));
@@ -241,7 +241,7 @@ impl App {
         let st = &mut self.writing;
         card(ui, |ui| {
             ui.label(RichText::new(prompt).size(19.0).strong());
-            ui.label(RichText::new(prompt_ko).color(MUTED));
+            crate::grammar::ko_label(ui, prompt_ko, 16.0, MUTED);
             ui.add(egui::TextEdit::multiline(&mut st.input).desired_rows(6).desired_width(f32::INFINITY).font(egui::FontId::proportional(18.0)).hint_text("영어로 3~5문장 써 보세요. 틀려도 괜찮아요!"));
             match &claude {
                 None => {
@@ -276,7 +276,7 @@ impl App {
                     ui.add_space(6.0);
                     ui.label(RichText::new("원어민 버전").strong());
                     ui.label(RichText::new(&f.natural_version).size(18.0));
-                    ui.label(RichText::new(&f.natural_version_ko).color(GLOSS));
+                    crate::grammar::ko_label(ui, &f.natural_version_ko, 16.0, GLOSS);
                     if ui.button("🔊 원어민 버전 듣기").clicked() {
                         self.voice.say(&f.natural_version);
                     }

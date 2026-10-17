@@ -1,6 +1,13 @@
+[build]
+# Cap parallel rustc jobs: building whisper.cpp + onnx + ~400 crates on all cores
+# exhausted memory on a 16 GB Mac (system slowed down and rebooted).
+jobs = 4
+
 [env]
 # whisper.cpp's CMakeLists still declares an old minimum; CMake 4.x needs this.
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+# Same cap for the C/C++ (CMake) builds of whisper.cpp.
+CMAKE_BUILD_PARALLEL_LEVEL = "4"
 
 # Linux loads the sherpa-onnx / onnxruntime shared libraries from the executable's folder.
 [target.x86_64-unknown-linux-gnu]

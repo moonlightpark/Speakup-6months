@@ -397,6 +397,9 @@ pub struct LessonWord {
 pub struct Chunk {
     pub en: String,
     pub ko: String,
+    /// Grammatical role (`grammar::ROLES`) for colouring; empty in glosses saved before roles.
+    #[serde(default)]
+    pub role: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

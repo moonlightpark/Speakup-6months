@@ -159,11 +159,15 @@ impl App {
         page_title(ui, title, desc);
         ui.add_space(8.0);
         card(ui, |ui| {
-            for (en, ko) in rows {
-                ui.horizontal(|ui| {
+            for (i, (en, ko)) in rows.iter().enumerate() {
+                if i > 0 {
+                    ui.add_space(8.0);
+                }
+                // Wrapped so a long sentence + translation stays inside the card.
+                ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, en);
                     ui.label(RichText::new(en).size(17.0).strong());
-                    ui.label(RichText::new(ko).color(MUTED));
+                    crate::grammar::ko_label(ui, ko, 16.0, MUTED);
                 });
             }
         });

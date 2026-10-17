@@ -156,6 +156,7 @@ impl App {
     /// Builds the app from an opened store and a voice bundle (tests pass simulated audio).
     pub fn new_with(cc: &eframe::CreationContext<'_>, store: Store, voice: Voice) -> Self {
         crate::theme::apply(&cc.egui_ctx);
+        crate::grammar::load(&cc.egui_ctx, &store.dir);
         let lang = language::by_code(&store.settings.target_language);
         let screen = if store.profile.placement_done { Screen::Home } else { Screen::Onboarding };
         let mut app = Self {
@@ -524,7 +525,7 @@ impl App {
             let t = ui.input(|i| i.time) as f32;
             crate::art::mascot(ui.painter(), r.center() - Vec2::new(0.0, 2.0), 28.0, crate::art::Mood::Happy, t);
             ui.vertical(|ui| {
-                ui.label(RichText::new("SpeakUp 6M").size(19.0).strong().color(Color32::WHITE));
+                ui.label(RichText::new("SpeakUp").size(19.0).strong().color(Color32::WHITE));
                 ui.label(RichText::new(format!("{} 듣기·말하기 6개월", self.lang.name_ko)).size(12.5).color(MUTED));
             });
         });
@@ -1129,6 +1130,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.roll_day();
         self.poll_jobs();
+        crate::grammar::pump(ctx, self.claude());
         self.prefetch_lesson();
         self.track_time(ctx);
         if self.lesson_job.running() || self.ytdlp_job.running() || self.voice.player.is_playing() {

@@ -111,8 +111,10 @@ impl Store {
         }
     }
 
+    /// A saved gloss; ones saved before grammatical roles existed count as missing so they are
+    /// fetched again with colours.
     pub fn gloss_for(&self, text: &str) -> Vec<Chunk> {
-        self.gloss.get(text.trim()).cloned().unwrap_or_default()
+        self.gloss.get(text.trim()).filter(|c| c.iter().any(|c| !c.role.is_empty())).cloned().unwrap_or_default()
     }
 
     pub fn save_library(&self) {
@@ -280,7 +282,7 @@ mod tests {
     use super::*;
 
     fn ch(en: &str, ko: &str) -> Chunk {
-        Chunk { en: en.into(), ko: ko.into() }
+        Chunk { en: en.into(), ko: ko.into(), role: "subject".into() }
     }
 
     #[test]

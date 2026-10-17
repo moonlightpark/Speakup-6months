@@ -274,7 +274,7 @@ impl App {
         let mut next = false;
         card(ui, |ui| {
             ui.vertical_centered(|ui| {
-                ui.label(RichText::new(&ko).size(28.0).strong());
+                crate::grammar::ko_label(ui, &ko, 28.0, egui::Color32::WHITE);
                 ui.add_space(6.0);
                 if self.speed.result.is_none() {
                     let el = shown.elapsed().as_secs_f32();

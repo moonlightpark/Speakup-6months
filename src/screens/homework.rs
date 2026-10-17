@@ -121,7 +121,7 @@ impl App {
                 card(ui, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.label(RichText::new(&task.text).size(30.0).strong());
-                        ui.label(RichText::new(&task.meaning_ko).color(MUTED));
+                        crate::grammar::ko_label(ui, &task.meaning_ko, 16.0, MUTED);
                         ui.add_space(8.0);
                         if self.homework.check.running() {
                             spinner_label(ui, "Claude가 확인 중…");

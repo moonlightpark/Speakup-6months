@@ -129,7 +129,7 @@ impl App {
             for i in &items {
                 speaker_button(ui, &mut self.voice, &i.text);
                 ui.label(RichText::new(&i.text).color(if i.weak { WARN } else { Color32::WHITE }));
-                ui.label(RichText::new(&i.meaning_ko).color(MUTED));
+                crate::grammar::ko_label(ui, &i.meaning_ko, 16.0, MUTED);
                 let due = if i.due <= t { "오늘".to_string() } else { format!("{} ({}일 뒤)", i.due, (i.due - t).num_days()) };
                 ui.label(format!("{due} · {:.0}점{}", i.last_score, if i.weak { " · 약점" } else { "" }));
                 if ui.small_button("🗑").on_hover_text("삭제").clicked() {

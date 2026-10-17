@@ -29,7 +29,27 @@ struct Mock {
 }
 
 fn ch(en: &str, ko: &str) -> Value {
-    json!({"en": en, "ko": ko})
+    json!({"en": en, "ko": ko, "role": "subject"})
+}
+
+/// Splits each numbered Korean text into words: first = subject, last = verb, rest = object.
+fn ko_roles_json(prompt: &str) -> Value {
+    let texts = prompt.rsplit("\n\n").next().unwrap_or("").lines().filter_map(|l| l.split_once(". ").map(|(_, t)| t));
+    let items: Vec<Value> = texts
+        .map(|t| {
+            let words: Vec<&str> = t.split(' ').collect();
+            let segs: Vec<Value> = words
+                .iter()
+                .enumerate()
+                .map(|(i, w)| {
+                    let role = if i == 0 { "subject" } else if i + 1 == words.len() { "verb" } else { "object" };
+                    json!({"text": if i + 1 < words.len() { format!("{w} ") } else { w.to_string() }, "role": role})
+                })
+                .collect();
+            json!({"segments": segs})
+        })
+        .collect();
+    json!({"items": items})
 }
 
 fn lesson_json() -> Value {
@@ -77,6 +97,8 @@ fn respond(body: &Value) -> Value {
     } else if prompt.starts_with("Sentence: \"") {
         let sentence = prompt.trim_start_matches("Sentence: \"").split("\"\n").next().unwrap_or("");
         json!({"chunks": sentence.split_whitespace().map(|w| ch(w, "뜻")).collect::<Vec<_>>()})
+    } else if prompt.starts_with("Korean grammar roles.") {
+        ko_roles_json(&prompt)
     } else if prompt.starts_with("Assess the learner") {
         json!({"level": 4.6, "summary_ko": "중급 수준입니다.", "strengths_ko": ["발음"], "weaknesses_ko": ["시제"], "focus_next_ko": "과거형"})
     } else if prompt.starts_with("Homework:") {
@@ -948,4 +970,29 @@ fn place_and_person_names_are_not_vocabulary() {
     let item = |text: &str, kind| StudyItem { kind, text: text.into(), ..Default::default() };
     let items = [item("Daegu", ItemKind::Word), item("Seoul", ItemKind::Word), item("be from", ItemKind::Word), item("I'm from Seoul.", ItemKind::Sentence)];
     assert_eq!(items.iter().filter(|i| i.is_vocab_word()).count(), 1);
+}
+
+#[test]
+fn ft25_korean_passages_and_gloss_are_coloured_by_role() {
+    let mut t = launch_at(temp_dir("roles"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.items.push(StudyItem { id: "s:1".into(), kind: ItemKind::Sentence, text: "I like coffee.".into(), meaning_ko: "나는 커피를 좋아해.".into(), ..Default::default() });
+    });
+    t.nav("✏  쓰기");
+    t.click("🔁 한→영 작문");
+    // The Korean prompt is annotated in the background and cached for next time.
+    let cache = t.dir.join("ko_roles.json");
+    t.wait("korean roles", |_| std::fs::read_to_string(&cache).is_ok_and(|c| c.contains("나는 커피를 좋아해.")));
+    let saved: Vec<(String, Vec<crate::grammar::KoSeg>)> = serde_json::from_str(&std::fs::read_to_string(&cache).unwrap()).unwrap();
+    let segs = &saved.iter().find(|(k, _)| k == "나는 커피를 좋아해.").unwrap().1;
+    assert_eq!(segs.iter().map(|s| s.role.as_str()).collect::<Vec<_>>(), ["subject", "object", "verb"]);
+    assert!(t.has("나는 커피를 좋아해."), "coloured text still reads as one sentence");
+    let req = t.mock.requests.lock().unwrap().iter().find(|r| r["messages"][0]["content"].as_str().unwrap_or("").starts_with("Korean grammar roles.")).cloned().unwrap();
+    let roles = &req["output_config"]["format"]["schema"]["properties"]["items"]["items"]["properties"]["segments"]["items"]["properties"]["role"]["enum"];
+    assert!(roles.as_array().unwrap().iter().any(|r| r == "complement"));
+    // 직독직해 requests ask for a role per chunk, and role-less old glosses are fetched again.
+    let mut store = Store::open_at(t.dir.clone()).unwrap();
+    store.gloss.insert("I am a boy.".into(), vec![Chunk { en: "I am a boy.".into(), ko: "나는 소년".into(), role: String::new() }]);
+    assert!(store.gloss_for("I am a boy.").is_empty());
 }

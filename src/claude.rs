@@ -40,8 +40,16 @@ fn s() -> Value {
 fn arr(items: Value) -> Value {
     json!({"type": "array", "items": items})
 }
+fn role() -> Value {
+    json!({"type": "string", "enum": crate::grammar::role_ids()})
+}
 fn phrase_chunk() -> Value {
-    obj(json!({"en": s(), "ko": s()}))
+    obj(json!({"en": s(), "ko": s(), "role": role()}))
+}
+
+/// The 직독직해 rule plus the grammatical role of each chunk (for colouring).
+fn chunk_rule() -> String {
+    format!("{CHUNK_RULE} For each chunk, {}", crate::grammar::ROLE_RULE)
 }
 
 const CHUNK_RULE: &str = "chunks = 직독직해 (direct reading) for Korean learners: split the sentence, in English word order, into the smallest \
@@ -162,7 +170,7 @@ impl Claude {
             weak = if req.weak.is_empty() { "(none)".into() } else { req.weak.join(" | ") },
             nw = req.n_words,
             ns = req.n_sentences,
-            chunk_rule = CHUNK_RULE,
+            chunk_rule = chunk_rule(),
             avoid_s = list_or_none(&req.avoid_sentences),
             avoid_q = list_or_none(&req.avoid_questions),
             avoid_r = list_or_none(&req.avoid_scenarios),
@@ -240,7 +248,7 @@ impl Claude {
             cefr = cefr_of(level),
             lang = self.lang.name,
             known = known.join(", "),
-            chunk_rule = CHUNK_RULE,
+            chunk_rule = chunk_rule(),
             avoid = list_or_none(avoid_titles),
         );
         self.call(user, schema, "low")
@@ -253,9 +261,33 @@ impl Claude {
             chunks: Vec<Chunk>,
         }
         let schema = obj(json!({"chunks": arr(phrase_chunk())}));
-        let user = format!("Sentence: \"{text}\"\n\n{CHUNK_RULE}");
+        let user = format!("Sentence: \"{text}\"\n\n{}", chunk_rule());
         let g: G = self.call(user, schema, "low")?;
         Ok(g.chunks)
+    }
+
+    /// Grammatical roles in Korean passages (translations, prompts) for colouring; one list of
+    /// segments per text, in order.
+    pub fn ko_roles(&self, texts: &[String]) -> Result<Vec<Vec<crate::grammar::KoSeg>>> {
+        #[derive(Deserialize)]
+        struct Item {
+            segments: Vec<crate::grammar::KoSeg>,
+        }
+        #[derive(Deserialize)]
+        struct R {
+            items: Vec<Item>,
+        }
+        let schema = obj(json!({"items": arr(obj(json!({"segments": arr(obj(json!({"text": s(), "role": role()})))})))}));
+        let list = texts.iter().enumerate().map(|(i, t)| format!("{}. {t}", i + 1)).collect::<Vec<_>>().join("\n");
+        let user = format!(
+            "Korean grammar roles. For each numbered Korean text below, return one item (same order) whose segments split the text \
+             into its words/phrases so that concatenating every segment's text reproduces the text exactly — spaces and punctuation \
+             included (put each space in the segment before it). Keep a particle or ending with its word (나는, 소년이다). \
+             Each segment's {}\n\n{list}",
+            crate::grammar::ROLE_RULE
+        );
+        let r: R = self.call(user, schema, "low")?;
+        Ok(r.items.into_iter().map(|i| i.segments).collect())
     }
 
     pub fn pronunciation_coach(&self, target: &str, transcript: &str, missed: &[String]) -> Result<CoachTip> {
@@ -522,6 +554,23 @@ mod tests {
 
     /// Every Claude feature against the real API (needs ANTHROPIC_API_KEY):
     /// cargo test real_api -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_api_grammar_roles() {
+        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let g = c.chunk_gloss("I am a boy.").expect("gloss");
+        println!("{}", g.iter().map(|c| format!("{}={}({})", c.en, c.ko, c.role)).collect::<Vec<_>>().join(" / "));
+        assert_eq!(g[0].role, "subject");
+        assert_eq!(g[1].role, "verb");
+        let texts = vec!["나는 커피를 좋아해.".to_string(), "제 일정을 확인해 볼게요.".to_string()];
+        let r = c.ko_roles(&texts).expect("ko roles");
+        for (t, segs) in texts.iter().zip(&r) {
+            println!("{t} → {}", segs.iter().map(|s| format!("[{}:{}]", s.text, s.role)).collect::<String>());
+            assert!(crate::grammar::segments_match(t, segs), "segments spell the text");
+        }
+    }
+
     #[test]
     #[ignore]
     fn real_api_all_features() {

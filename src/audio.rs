@@ -96,6 +96,9 @@ impl MicProblem {
     }
 }
 
+/// Longest recording kept; later samples are dropped.
+const MAX_REC_SECS: usize = 180;
+
 enum RecCmd {
     Start(String),
     Stop,
@@ -198,11 +201,15 @@ fn open_input(shared: &Arc<RecShared>, state: &Arc<Mutex<RecState>>, name: &str)
     fn push<T: Copy>(data: &[T], ch: usize, conv: impl Fn(T) -> f32, sh: &RecShared) {
         sh.callbacks.fetch_add(1, Ordering::Relaxed);
         let mut b = sh.buf.lock().unwrap();
+        // A recording left running must not grow without bound (96 kHz ≈ 23 MB per minute).
+        let cap = sh.rate.load(Ordering::Relaxed) as usize * MAX_REC_SECS;
         let mut peak = 0.0f32;
         for frame in data.chunks(ch) {
             let v = frame.iter().map(|s| conv(*s)).sum::<f32>() / ch as f32;
             peak = peak.max(v.abs());
-            b.push(v);
+            if b.len() < cap {
+                b.push(v);
+            }
         }
         if peak > 0.0 {
             sh.signal.store(true, Ordering::Relaxed);
