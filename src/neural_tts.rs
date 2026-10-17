@@ -222,10 +222,15 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<NeuralStatus>>, generation: Arc<A
             },
         };
         match job {
-            Job::Load(d) => match open_engine(&d, false) {
-                Ok(mut e) => {
+            Job::Load(d) => match {
+                let _guard = crate::stt::MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
+                open_engine(&d, false).map(|mut e| {
                     // The first inference is several times slower than the rest; pay it now.
                     let _ = e.create("Hello there.", VOICES[0].0, 1.0);
+                    e
+                })
+            } {
+                Ok(e) => {
                     engines.clear();
                     engines.insert(false, e);
                     dir = Some(d);
@@ -285,6 +290,7 @@ pub const SAMPLE_RATE: u32 = 24_000;
 fn synth(engines: &mut HashMap<bool, KokoroTts>, dir: Option<&Path>, text: &str, voice: &str, speed: f32) -> Option<Arc<Vec<f32>>> {
     let british = voice.starts_with('b');
     if !engines.contains_key(&british) {
+        let _guard = crate::stt::MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
         let e = open_engine(dir?, british).map_err(|e| eprintln!("tts: {e:#}")).ok()?;
         engines.insert(british, e);
     }

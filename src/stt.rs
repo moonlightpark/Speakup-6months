@@ -10,6 +10,10 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+/// Native model loading (whisper.cpp's Metal device setup, onnxruntime's first inference) is
+/// not safe to run on several threads at once; every model load takes this lock.
+pub static MODEL_LOAD: Mutex<()> = Mutex::new(());
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum SttStatus {
     Missing,
@@ -119,7 +123,11 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, language: &'static s
         match job {
             Job::Load(path) => {
                 let p = path.to_string_lossy().to_string();
-                match WhisperContext::new_with_params(&p, WhisperContextParameters::default()) {
+                let loaded = {
+                    let _guard = MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
+                    WhisperContext::new_with_params(&p, WhisperContextParameters::default())
+                };
+                match loaded {
                     Ok(c) => {
                         ctx = Some(c);
                         *status.lock().unwrap() = SttStatus::Ready;
