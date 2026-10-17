@@ -1,37 +1,23 @@
-//! Dark theme in the spirit of Speak, plus a system Korean font (egui's built-in fonts have
-//! no Hangul glyphs).
+//! Dark theme in the spirit of Speak, with the Pretendard font built in (SIL Open Font
+//! License, assets/fonts) so Hangul and symbols look the same on macOS, Windows and Linux.
 
 use egui::{Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 use std::sync::Arc;
 
-const KOREAN_FONTS: &[&str] = &[
-    // macOS
-    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-    "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
-    // Windows
-    "C:\\Windows\\Fonts\\malgun.ttf",
-    "C:\\Windows\\Fonts\\gulim.ttc",
-    // Linux
-    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansKR-Regular.otf",
-];
+const PRETENDARD: &[u8] = include_bytes!("../assets/fonts/Pretendard-Regular.ttf");
 
 pub fn apply(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
-    let custom = std::env::var("SPEAKUP_FONT").ok();
-    let path = custom.iter().map(String::as_str).chain(KOREAN_FONTS.iter().copied()).find(|p| std::path::Path::new(p).exists());
-    match path.and_then(|p| std::fs::read(p).ok()) {
-        Some(bytes) => {
-            fonts.font_data.insert("korean".into(), Arc::new(FontData::from_owned(bytes)));
-            for fam in [FontFamily::Proportional, FontFamily::Monospace] {
-                fonts.families.entry(fam).or_default().push("korean".into());
-            }
+    fonts.font_data.insert("pretendard".into(), Arc::new(FontData::from_static(PRETENDARD)));
+    // Pretendard first for text; egui's own fonts stay behind it for emoji and icons.
+    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "pretendard".into());
+    fonts.families.entry(FontFamily::Monospace).or_default().push("pretendard".into());
+    // Optional extra fallback for scripts Pretendard lacks.
+    if let Some(bytes) = std::env::var("SPEAKUP_FONT").ok().and_then(|p| std::fs::read(p).ok()) {
+        fonts.font_data.insert("custom".into(), Arc::new(FontData::from_owned(bytes)));
+        for fam in [FontFamily::Proportional, FontFamily::Monospace] {
+            fonts.families.entry(fam).or_default().push("custom".into());
         }
-        None => eprintln!("warning: no Korean font found; set SPEAKUP_FONT=/path/to/font.ttf"),
     }
     ctx.set_fonts(fonts);
 
