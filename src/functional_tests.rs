@@ -543,6 +543,13 @@ fn ft11_speed_reading_wpm_and_quick_response() {
     t.click("▶ 지문 받기");
     t.wait("passage", |a| a.speed.passage.is_some());
     assert!(t.has_exact("좋아한다"), "passage shown with 직독직해");
+    // Without the gloss, each sentence sits on its own line (Order.md), translation too.
+    t.click("📖 직독직해");
+    assert!(t.has_exact("I like coffee.") && t.has_exact("It is warm."), "one label per sentence");
+    t.click("해석");
+    assert!(t.has_exact("나는 커피를 좋아한다.") && t.has_exact("따뜻하다."));
+    t.click("해석");
+    t.click("📖 직독직해");
     // 6 words in 2.4 s of speech = 150 WPM
     t.say("I like coffee. It is warm.", 2.4);
     let first = t.app().store.profile.speed_history[0].wpm;

@@ -318,6 +318,44 @@ pub const GLOSS: Color32 = Color32::from_rgb(255, 214, 120);
 
 /// 직독직해 view: English chunks separated by " / " with the Korean meaning under each.
 /// With `marks`, each chunk is coloured green/red by whether its words were recognized.
+/// True for a word that ends a sentence ("day.", "you?", "stop!\"").
+fn ends_sentence(word: &str) -> bool {
+    word.trim_end_matches(['"', '\'', '”', '’', ')']).ends_with(['.', '!', '?'])
+}
+
+/// Word-by-word feedback with each sentence on its own line.
+pub fn word_feedback_lines(ui: &mut Ui, r: &ScoreResult, size: f32) {
+    let mut start = 0;
+    for (i, m) in r.marks.iter().enumerate() {
+        if ends_sentence(&m.word) || i + 1 == r.marks.len() {
+            word_feedback(ui, &ScoreResult { score: r.score, marks: r.marks[start..=i].to_vec() }, size);
+            start = i + 1;
+        }
+    }
+}
+
+/// 직독직해 with each sentence on its own line; `marks` (one per word) color the chunks.
+pub fn chunk_view_lines(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, size: f32) {
+    let (mut start, mut word) = (0, 0);
+    for (i, c) in chunks.iter().enumerate() {
+        let last_word = c.en.split_whitespace().last().unwrap_or("");
+        if ends_sentence(last_word) || i + 1 == chunks.len() {
+            let words: usize = chunks[start..=i].iter().map(|c| c.en.split_whitespace().count()).sum();
+            let m = marks.and_then(|m| m.get(word..word + words));
+            chunk_view(ui, &chunks[start..=i], m, size);
+            word += words;
+            start = i + 1;
+        }
+    }
+}
+
+/// Plain text with each sentence on its own line.
+pub fn sentence_lines(ui: &mut Ui, text: &str, size: f32, color: Color32) {
+    for s in crate::neural_tts::sentences(text) {
+        ui.label(RichText::new(s).size(size).color(color));
+    }
+}
+
 pub fn chunk_view(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, size: f32) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = Vec2::new(4.0, 10.0);
@@ -356,6 +394,12 @@ pub enum DrillEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sentence_end_detection() {
+        assert!(ends_sentence("day.") && ends_sentence("you?\"") && ends_sentence("stop!”"));
+        assert!(!ends_sentence("Mr") && !ends_sentence("well,"));
+    }
 
     #[test]
     fn hints_reveal_letters_gradually() {

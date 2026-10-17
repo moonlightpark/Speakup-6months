@@ -11,6 +11,11 @@ on:
 permissions:
   contents: write
 
+# A newer push supersedes a running build, so two runs never race to publish "latest".
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"

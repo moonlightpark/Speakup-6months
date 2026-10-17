@@ -143,18 +143,18 @@ impl App {
             });
             ui.add_space(4.0);
             let marks = self.speed.last.as_ref().map(|(_, r, _)| r.marks.as_slice());
+            // One sentence per line, so the eyes can run down the passage quickly.
             if self.speed.show_gloss && !p.chunks.is_empty() {
-                chunk_view(ui, &p.chunks, marks, 20.0);
+                chunk_view_lines(ui, &p.chunks, marks, 20.0);
             } else {
                 match &self.speed.last {
-                    Some((_, r, _)) => word_feedback(ui, r, 20.0),
-                    None => {
-                        ui.label(RichText::new(&p.passage).size(20.0));
-                    }
+                    Some((_, r, _)) => word_feedback_lines(ui, r, 20.0),
+                    None => sentence_lines(ui, &p.passage, 20.0, egui::Color32::WHITE),
                 }
             }
             if self.speed.show_ko {
-                ui.label(RichText::new(&p.passage_ko).color(MUTED));
+                ui.add_space(4.0);
+                sentence_lines(ui, &p.passage_ko, 16.0, MUTED);
             }
         });
         ui.add_space(6.0);
