@@ -1,0 +1,149 @@
+//! Study history: every day's record (history.json) as a 6-month calendar and a day list,
+//! so the learner (or anyone) can check what was actually studied and when.
+
+use crate::app::{App, STEPS};
+use crate::curriculum::TOTAL_DAYS;
+use crate::models::*;
+use crate::widgets::*;
+use chrono::Duration;
+use egui::{Color32, RichText, Sense, Stroke, Ui, Vec2};
+
+fn step_label(key: &str) -> &str {
+    STEPS.iter().find(|s| s.0 == key).map(|s| s.1).unwrap_or(key)
+}
+
+pub fn stat_tile(ui: &mut Ui, value: &str, label: &str, color: Color32) {
+    egui::Frame::new().fill(CARD).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0, BORDER)).show(ui, |ui| {
+        ui.set_min_width(130.0);
+        ui.label(RichText::new(value).size(26.0).strong().color(color));
+        ui.label(RichText::new(label).color(MUTED));
+    });
+}
+
+impl App {
+    pub fn history_ui(&mut self, ui: &mut Ui) {
+        self.update_history();
+        let hist = self.store.history.clone();
+        let p = self.store.profile.clone();
+        page_title(ui, "📅 학습 기록", "매일의 학습이 history.json 에 기록됩니다. 무엇을 언제 배웠는지 확인할 수 있어요.");
+
+        let total_min: u32 = hist.iter().map(|r| r.minutes).sum();
+        let total_attempts: u32 = hist.iter().map(|r| r.attempts).sum();
+        let words: usize = hist.iter().map(|r| r.new_words.len()).sum();
+        let week_ago = today() - Duration::days(7);
+        let recent: Vec<&DayRecord> = hist.iter().filter(|r| r.date.is_some_and(|d| d > week_ago) && r.attempts > 0).collect();
+        let recent_avg = if recent.is_empty() { 0.0 } else { recent.iter().map(|r| r.avg_score).sum::<f32>() / recent.len() as f32 };
+        ui.horizontal_wrapped(|ui| {
+            stat_tile(ui, &format!("{} / {TOTAL_DAYS}", hist.len()), "학습한 날", ACCENT);
+            stat_tile(ui, &format!("{}시간 {}분", total_min / 60, total_min % 60), "총 학습 시간", GOOD);
+            stat_tile(ui, &words.to_string(), "새로 배운 단어", WARN);
+            stat_tile(ui, &total_attempts.to_string(), "소리 내어 말한 횟수", Color32::from_rgb(190, 140, 255));
+            stat_tile(ui, &format!("{recent_avg:.0}점"), "최근 7일 평균", GOOD);
+        });
+        ui.add_space(10.0);
+
+        card(ui, |ui| {
+            ui.label(RichText::new("6개월 학습 달력").size(18.0).strong());
+            ui.label(RichText::new("칸 색이 진할수록 많이 학습한 날입니다. 마우스를 올리면 그날 기록이 보여요.").color(MUTED).small());
+            ui.add_space(6.0);
+            calendar(ui, p.start_date, &hist);
+        });
+        ui.add_space(10.0);
+
+        ui.label(RichText::new("일별 기록").size(18.0).strong());
+        if hist.is_empty() {
+            card(ui, |ui| {
+                ui.label(RichText::new("아직 기록이 없습니다. 오늘 학습을 시작해 보세요!").color(MUTED));
+            });
+        }
+        for r in hist.iter().rev() {
+            let Some(date) = r.date else { continue };
+            let title = format!(
+                "{date} · Day {} · {}  —  {}분 · {}회 발화 · 평균 {:.0}점 · 단계 {}/{}",
+                r.program_day,
+                r.theme,
+                r.minutes,
+                r.attempts,
+                r.avg_score,
+                r.steps.len(),
+                STEPS.len()
+            );
+            egui::Frame::new().fill(CARD).corner_radius(12.0).inner_margin(12.0).stroke(Stroke::new(1.0, BORDER)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                egui::CollapsingHeader::new(RichText::new(title).size(15.0)).id_salt(date).default_open(date == today()).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for s in &r.steps {
+                            chip(ui, step_label(s), GOOD);
+                        }
+                    });
+                    if !r.new_words.is_empty() {
+                        ui.label(RichText::new(format!("📚 새 단어 {}개: {}", r.new_words.len(), r.new_words.join(", "))));
+                    }
+                    if r.new_sentences > 0 {
+                        ui.label(format!("📖 새 문장 {}개", r.new_sentences));
+                    }
+                    if !r.question.is_empty() {
+                        ui.label(format!("💬 자기 표현 질문: {}", r.question));
+                    }
+                    if !r.scenario.is_empty() {
+                        ui.label(format!("💼 회화 상황: {}", r.scenario));
+                    }
+                    if r.best_wpm > 0.0 {
+                        ui.label(format!("⚡ 스피드 리딩 최고 {:.0} WPM", r.best_wpm));
+                    }
+                    ui.label(RichText::new(format!("레벨 {:.2} ({})", r.level, cefr_of(r.level))).color(MUTED));
+                });
+            });
+            ui.add_space(4.0);
+        }
+        ui.add_space(6.0);
+        if ui.button("📂 기록 파일 폴더 열기 (history.json · attempts.jsonl · level_log.csv)").clicked() {
+            let _ = open::that(&self.store.dir);
+        }
+    }
+}
+
+/// A GitHub-style heatmap: 26 week columns × 7 day rows from the program start date.
+fn calendar(ui: &mut Ui, start: chrono::NaiveDate, hist: &[DayRecord]) {
+    let cell = 16.0;
+    let gap = 4.0;
+    let size = Vec2::new(26.0 * (cell + gap), 7.0 * (cell + gap));
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
+    let p = ui.painter();
+    let mut hovered: Option<(chrono::NaiveDate, Option<&DayRecord>)> = None;
+    for day in 0..TOTAL_DAYS {
+        let date = start + Duration::days(day);
+        let (col, row) = ((day / 7) as f32, (day % 7) as f32);
+        let r = egui::Rect::from_min_size(rect.min + Vec2::new(col * (cell + gap), row * (cell + gap)), Vec2::splat(cell));
+        let rec = hist.iter().find(|h| h.date == Some(date));
+        let intensity = rec.map(|h| (h.minutes as f32 / 30.0).max(h.steps.len() as f32 / STEPS.len() as f32).min(1.0)).unwrap_or(0.0);
+        let fill = if rec.is_some() {
+            Color32::from_rgb(30, 50, 90).lerp_to_gamma(ACCENT, 0.25 + 0.75 * intensity)
+        } else if date > today() {
+            Color32::from_rgb(20, 25, 38)
+        } else {
+            Color32::from_rgb(32, 39, 58)
+        };
+        p.rect_filled(r, 4.0, fill);
+        if date == today() {
+            p.rect_stroke(r.expand(1.5), 5.0, Stroke::new(2.0, WARN), egui::StrokeKind::Outside);
+        }
+        if resp.hover_pos().is_some_and(|h| r.contains(h)) {
+            hovered = Some((date, rec));
+        }
+    }
+    if let Some((date, rec)) = hovered {
+        resp.on_hover_ui_at_pointer(|ui| {
+            ui.label(RichText::new(date.to_string()).strong());
+            match rec {
+                Some(r) => {
+                    ui.label(format!("{}분 · {}회 발화 · 평균 {:.0}점", r.minutes, r.attempts, r.avg_score));
+                    ui.label(format!("완료 단계 {}/{}", r.steps.len(), STEPS.len()));
+                }
+                None => {
+                    ui.label("기록 없음");
+                }
+            }
+        });
+    }
+}

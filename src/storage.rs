@@ -1,0 +1,295 @@
+//! JSON-file storage in the per-user data directory.
+//!
+//! Layout:
+//!   settings.json      app settings (API key, model, thresholds)
+//!   profile.json       user level, level history, streak, study time
+//!   level_log.csv      human-readable level history (one line per change)
+//!   items.json         spaced-repetition items (learned words / sentences)
+//!   homework.json      assigned homework and its check results
+//!   attempts.jsonl     every spoken attempt (target, transcript, score)
+//!   lessons/DATE.json  the generated lesson for each day
+//!   models/            whisper speech-recognition models
+//!   youtube/ID/        downloaded YouTube audio + English subtitles
+
+use crate::models::*;
+use anyhow::{Context, Result};
+use chrono::NaiveDate;
+use serde::{Serialize, de::DeserializeOwned};
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+
+pub struct Store {
+    pub dir: PathBuf,
+    pub settings: Settings,
+    pub profile: Profile,
+    pub items: Vec<StudyItem>,
+    pub homework: Vec<Homework>,
+    pub mistakes: Vec<Mistake>,
+    pub corrections: Vec<CorrectionRecord>,
+    /// 직독직해 glosses by sentence text.
+    pub gloss: std::collections::HashMap<String, Vec<Chunk>>,
+    pub history: Vec<DayRecord>,
+}
+
+fn load_json<T: DeserializeOwned + Default>(path: &Path) -> T {
+    match fs::read_to_string(path) {
+        Ok(s) => serde_json::from_str(&s).unwrap_or_else(|e| {
+            eprintln!("warning: could not parse {}: {e}", path.display());
+            // Keep the unreadable file so the user's data is never silently lost.
+            let _ = fs::copy(path, path.with_extension("json.broken"));
+            T::default()
+        }),
+        Err(_) => T::default(),
+    }
+}
+
+fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_string_pretty(value)?)?;
+    fs::rename(&tmp, path).with_context(|| format!("saving {}", path.display()))?;
+    Ok(())
+}
+
+pub fn data_dir() -> PathBuf {
+    if let Ok(d) = std::env::var("SPEAKUP_DATA_DIR") {
+        return PathBuf::from(d);
+    }
+    directories::ProjectDirs::from("com", "SpeakUp", "SpeakUp6M")
+        .map(|p| p.data_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("speakup-data"))
+}
+
+impl Store {
+    pub fn open() -> Result<Self> {
+        Self::open_at(data_dir())
+    }
+
+    pub fn open_at(dir: PathBuf) -> Result<Self> {
+        for sub in ["", "lessons", "models", "youtube", "bin"] {
+            fs::create_dir_all(dir.join(sub))?;
+        }
+        Ok(Self {
+            settings: load_json(&dir.join("settings.json")),
+            profile: load_json(&dir.join("profile.json")),
+            items: load_json(&dir.join("items.json")),
+            homework: load_json(&dir.join("homework.json")),
+            mistakes: load_json(&dir.join("mistakes.json")),
+            corrections: load_json(&dir.join("corrections.json")),
+            gloss: load_json(&dir.join("gloss.json")),
+            history: load_json(&dir.join("history.json")),
+            dir,
+        })
+    }
+
+    pub fn save_settings(&self) {
+        log_err(save_json(&self.dir.join("settings.json"), &self.settings));
+    }
+    pub fn save_profile(&self) {
+        log_err(save_json(&self.dir.join("profile.json"), &self.profile));
+    }
+    pub fn save_items(&self) {
+        log_err(save_json(&self.dir.join("items.json"), &self.items));
+    }
+    pub fn save_homework(&self) {
+        log_err(save_json(&self.dir.join("homework.json"), &self.homework));
+    }
+
+    /// Stores a gloss if its chunks really spell out the sentence (otherwise word colouring
+    /// would misalign).
+    pub fn put_gloss(&mut self, text: &str, chunks: &[Chunk]) {
+        if chunks_match(text, chunks) {
+            self.gloss.insert(text.trim().to_string(), chunks.to_vec());
+            log_err(save_json(&self.dir.join("gloss.json"), &self.gloss));
+        }
+    }
+
+    pub fn gloss_for(&self, text: &str) -> Vec<Chunk> {
+        self.gloss.get(text.trim()).cloned().unwrap_or_default()
+    }
+
+    pub fn save_history(&self) {
+        log_err(save_json(&self.dir.join("history.json"), &self.history));
+    }
+
+    /// Inserts or replaces the record for `rec.date`.
+    pub fn upsert_day(&mut self, rec: DayRecord) {
+        match self.history.iter_mut().find(|r| r.date == rec.date) {
+            Some(r) => *r = rec,
+            None => {
+                self.history.push(rec);
+                self.history.sort_by_key(|r| r.date);
+            }
+        }
+        self.save_history();
+    }
+
+    /// Lessons from earlier days, newest first (used so new lessons don't repeat them).
+    pub fn past_lessons(&self, limit: usize) -> Vec<Lesson> {
+        let mut files: Vec<_> = std::fs::read_dir(self.dir.join("lessons"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "json") && !p.ends_with(format!("{}.json", today())))
+            .collect();
+        files.sort();
+        files.reverse();
+        files
+            .into_iter()
+            .take(limit)
+            .filter_map(|p| serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok())
+            .collect()
+    }
+
+    pub fn save_mistakes(&self) {
+        log_err(save_json(&self.dir.join("mistakes.json"), &self.mistakes));
+    }
+    pub fn save_corrections(&self) {
+        log_err(save_json(&self.dir.join("corrections.json"), &self.corrections));
+    }
+
+    /// Counts words the recognizer didn't hear correctly (likely pronunciation problems).
+    pub fn add_mistakes(&mut self, words: &[String]) {
+        if words.is_empty() {
+            return;
+        }
+        for w in words {
+            let w: String = w.chars().filter(|c| c.is_alphanumeric() || *c == '\'' || *c == '’').collect::<String>().to_lowercase();
+            if w.chars().count() < 3 {
+                continue; // tiny function words are mostly recognizer noise
+            }
+            match self.mistakes.iter_mut().find(|m| m.word == w) {
+                Some(m) => {
+                    m.count += 1;
+                    m.last = today();
+                    m.fixed_streak = 0;
+                }
+                None => self.mistakes.push(Mistake { word: w, count: 1, last: today(), fixed_streak: 0 }),
+            }
+        }
+        self.save_mistakes();
+    }
+
+    pub fn add_correction(&mut self, source: &str, original: &str, corrected: &str, explanation_ko: &str) {
+        if corrected.trim().is_empty() || corrected.trim().eq_ignore_ascii_case(original.trim()) {
+            return;
+        }
+        self.corrections.push(CorrectionRecord {
+            date: today(),
+            source: source.into(),
+            original: original.into(),
+            corrected: corrected.into(),
+            explanation_ko: explanation_ko.into(),
+            practiced: false,
+        });
+        self.save_corrections();
+    }
+
+    pub fn lesson_path(&self, date: NaiveDate) -> PathBuf {
+        self.dir.join("lessons").join(format!("{date}.json"))
+    }
+
+    pub fn load_lesson(&self, date: NaiveDate) -> Option<Lesson> {
+        let s = fs::read_to_string(self.lesson_path(date)).ok()?;
+        serde_json::from_str(&s).ok()
+    }
+
+    pub fn save_lesson(&self, lesson: &Lesson) {
+        if let Some(d) = lesson.date {
+            log_err(save_json(&self.lesson_path(d), lesson));
+        }
+    }
+
+    pub fn models_dir(&self) -> PathBuf {
+        self.dir.join("models")
+    }
+
+    pub fn youtube_dir(&self) -> PathBuf {
+        self.dir.join("youtube")
+    }
+
+    /// Record a level change both in profile.json and in the plain-text level_log.csv.
+    pub fn record_level(&mut self, level: f32, reason: &str) {
+        let level = level.clamp(1.0, 10.0);
+        self.profile.level = level;
+        let rec = LevelRecord {
+            date: today(),
+            level,
+            cefr: cefr_of(level).to_string(),
+            reason: reason.to_string(),
+        };
+        let path = self.dir.join("level_log.csv");
+        let new_file = !path.exists();
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+            if new_file {
+                let _ = writeln!(f, "date,level,cefr,reason");
+            }
+            let _ = writeln!(f, "{},{:.2},{},\"{}\"", rec.date, rec.level, rec.cefr, rec.reason.replace('"', "'"));
+        }
+        self.profile.level_history.push(rec);
+        self.save_profile();
+    }
+
+    pub fn log_attempt(&self, category: &str, target: &str, transcript: &str, score: f32) {
+        let line = serde_json::json!({
+            "time": chrono::Local::now().to_rfc3339(),
+            "category": category,
+            "target": target,
+            "transcript": transcript,
+            "score": score,
+        });
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(self.dir.join("attempts.jsonl")) {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
+
+pub fn chunks_match(text: &str, chunks: &[Chunk]) -> bool {
+    let joined: Vec<String> = chunks.iter().map(|c| c.en.clone()).collect();
+    !chunks.is_empty()
+        && text.split_whitespace().count() == joined.join(" ").split_whitespace().count()
+        && crate::scoring::normalize(text) == crate::scoring::normalize(&joined.join(" "))
+}
+
+fn log_err(r: Result<()>) {
+    if let Err(e) = r {
+        eprintln!("save error: {e:#}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ch(en: &str, ko: &str) -> Chunk {
+        Chunk { en: en.into(), ko: ko.into() }
+    }
+
+    #[test]
+    fn gloss_must_spell_the_sentence() {
+        let good = vec![ch("I", "나"), ch("am", "이다"), ch("a", "한"), ch("boy.", "소년")];
+        assert!(chunks_match("I am a boy.", &good));
+        let phrase = vec![ch("I", "나는"), ch("wake up", "일어난다"), ch("early.", "일찍")];
+        assert!(chunks_match("I wake up early.", &phrase));
+        let wrong = vec![ch("I", "나"), ch("am", "이다"), ch("boy", "소년")];
+        assert!(!chunks_match("I am a boy.", &wrong));
+        assert!(!chunks_match("I am a boy.", &[]));
+    }
+
+    #[test]
+    fn mistakes_and_gloss_persist() {
+        let dir = std::env::temp_dir().join(format!("speakup-test-{}", std::process::id()));
+        let mut s = Store::open_at(dir.clone()).unwrap();
+        s.add_mistakes(&["Think".into(), "a".into(), "think".into()]);
+        s.put_gloss("I am a boy.", &[ch("I", "나"), ch("am", "이다"), ch("a", "한"), ch("boy.", "소년")]);
+        s.record_level(4.2, "test");
+        let s2 = Store::open_at(dir.clone()).unwrap();
+        assert_eq!(s2.mistakes.len(), 1);
+        assert_eq!(s2.mistakes[0].count, 2);
+        assert_eq!(s2.gloss_for("I am a boy.").len(), 4);
+        assert_eq!(s2.profile.level, 4.2);
+        assert!(std::fs::read_to_string(dir.join("level_log.csv")).unwrap().contains("4.20,B1"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

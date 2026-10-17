@@ -1,0 +1,47 @@
+[package]
+name = "speakup"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.86"
+description = "6개월 영어 듣기·말하기 완성 – 음성 지원 영어 학습 데스크톱 앱 (Claude API)"
+license = "MIT"
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+egui = "0.31"
+cpal = "0.15"
+rodio = { version = "0.20", default-features = false, features = ["symphonia-all"] }
+tts = "0.26"
+whisper-rs = "0.14"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+directories = "6"
+anyhow = "1"
+rand = "0.9"
+open = "5"
+
+[dev-dependencies]
+egui_kittest = { version = "0.31", features = ["eframe"] }
+hound = "3.5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+objc2-foundation = "0.3"
+whisper-rs = { version = "0.14", features = ["metal"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[package.metadata.bundle]
+name = "SpeakUp 6M"
+identifier = "com.speakup.sixmonths"
+category = "Education"
+short_description = "6개월 영어 듣기·말하기 완성"

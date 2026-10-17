@@ -1,0 +1,3 @@
+[env]
+# whisper.cpp's CMakeLists still declares an old minimum; CMake 4.x needs this.
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"

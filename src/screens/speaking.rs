@@ -1,0 +1,455 @@
+//! Speaking: self-expression (answer a question about yourself → Claude feedback → read the
+//! natural version aloud) and conversation (business role-play or free talk with Claude).
+
+use crate::app::App;
+use crate::claude::{RoleplayTurn, SpeechFeedback};
+use crate::curriculum;
+use crate::models::*;
+use crate::widgets::*;
+use egui::{Color32, RichText, Ui, Vec2};
+
+#[derive(Default)]
+pub struct SelfExprState {
+    pub capture: Capture,
+    pub answer: Option<String>,
+    pub job: Pending<SpeechFeedback>,
+    pub feedback: Option<SpeechFeedback>,
+    pub error: Option<String>,
+    pub show_model: bool,
+}
+
+pub struct ChatLine {
+    pub user: bool,
+    pub text: String,
+    pub ko: String,
+    pub correction: String,
+    pub correction_ko: String,
+}
+
+#[derive(Default)]
+pub struct RoleplayState {
+    /// 0 = today's business role-play, 1 = free talk, 2 = scene collection, 3 = my own scene
+    pub mode: usize,
+    pub collection: usize,
+    pub custom: (String, String, String),
+    pub started: bool,
+    pub lines: Vec<ChatLine>,
+    pub capture: Capture,
+    pub job: Pending<RoleplayTurn>,
+    pub suggestions: Vec<Phrase>,
+    pub finished: bool,
+    pub summary: String,
+    pub error: Option<String>,
+    pub show_ko: bool,
+    pub scenario: Option<BusinessScenario>,
+}
+
+/// Splits a paragraph into sentences for read-aloud drills.
+pub fn split_sentences(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for c in text.chars() {
+        cur.push(c);
+        if matches!(c, '.' | '?' | '!') && cur.trim().split_whitespace().count() >= 3 {
+            out.push(cur.trim().to_string());
+            cur.clear();
+        }
+    }
+    if !cur.trim().is_empty() {
+        if cur.trim().split_whitespace().count() < 3 && !out.is_empty() {
+            let last = out.pop().unwrap();
+            out.push(format!("{last} {}", cur.trim()));
+        } else {
+            out.push(cur.trim().to_string());
+        }
+    }
+    out
+}
+
+impl App {
+    pub fn self_expression_ui(&mut self, ui: &mut Ui) {
+        if self.run_queue_ui(ui) || !self.lesson_ready_ui(ui) {
+            return;
+        }
+        let se = self.lesson.as_ref().map(|l| l.self_expression.clone()).unwrap_or_default();
+        let claude = self.claude();
+        if let Some(r) = self.selfx.job.poll() {
+            match r {
+                Ok(f) => {
+                    let answer = self.selfx.answer.clone().unwrap_or_default();
+                    self.record_score("self-expression", &se.question, &answer, f.overall as f32);
+                    for c in &f.corrections {
+                        self.store.add_correction("자기 표현", &c.original, &c.corrected, &c.explanation_ko);
+                    }
+                    self.selfx.feedback = Some(f);
+                }
+                Err(e) => self.selfx.error = Some(format!("{e:#}")),
+            }
+        }
+
+        page_title(ui, "💬 자기 표현", "질문에 30~60초 동안 내 이야기를 영어로 말해 보세요. 완벽하지 않아도 괜찮아요 — 말한 뒤 더 자연스러운 표현으로 다시 읽습니다.");
+        ui.add_space(8.0);
+        card(ui, |ui| {
+            ui.horizontal(|ui| {
+                speaker_button(ui, &mut self.voice, &se.question);
+                ui.label(RichText::new(&se.question).size(22.0).strong());
+            });
+            ui.label(RichText::new(&se.question_ko).color(MUTED));
+            if !se.useful_phrases.is_empty() {
+                ui.add_space(6.0);
+                ui.label(RichText::new("쓸 수 있는 표현").color(ACCENT));
+                for p in &se.useful_phrases {
+                    ui.horizontal(|ui| {
+                        speaker_button(ui, &mut self.voice, &p.text);
+                        ui.label(RichText::new(&p.text).strong());
+                        ui.label(RichText::new(&p.ko).color(MUTED));
+                    });
+                }
+            }
+            ui.add_space(4.0);
+            ui.checkbox(&mut self.selfx.show_model, "모범 답안 보기");
+            if self.selfx.show_model {
+                ui.horizontal_wrapped(|ui| {
+                    speaker_button(ui, &mut self.voice, &se.model_answer);
+                    ui.label(RichText::new(&se.model_answer).italics());
+                });
+            }
+        });
+        ui.add_space(8.0);
+
+        card(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                if self.selfx.job.running() {
+                    spinner_label(ui, "Claude가 답변을 분석하고 있어요…");
+                } else if let Some(t) = self.selfx.capture.ui(ui, &mut self.voice, 90.0) {
+                    self.selfx.answer = Some(t.clone());
+                    self.selfx.feedback = None;
+                    self.selfx.error = None;
+                    match &claude {
+                        Some(c) => {
+                            let (c, q, lvl) = (c.clone(), se.question.clone(), self.store.profile.level);
+                            self.selfx.job.spawn(move || c.speech_feedback(&q, &t, lvl));
+                        }
+                        None => {
+                            self.store.log_attempt("self-expression", &se.question, &t, 0.0);
+                            self.selfx.error = Some("Claude API 키가 없어 AI 피드백을 받을 수 없어요. 모범 답안을 따라 읽어 보세요.".into());
+                        }
+                    }
+                }
+                if let Some(a) = &self.selfx.answer {
+                    ui.label(RichText::new(format!("내가 한 말: \"{a}\"")).color(MUTED));
+                }
+                if let Some(e) = &self.selfx.error {
+                    error_label(ui, e);
+                }
+            });
+        });
+
+        let mut drill_text: Option<(String, Vec<Phrase>)> = None;
+        if let Some(f) = self.selfx.feedback.clone() {
+            ui.add_space(8.0);
+            card(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (label, v) in [("종합", f.overall), ("유창성", f.fluency), ("문법", f.grammar), ("어휘", f.vocabulary)] {
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new(format!("{v}")).size(26.0).strong().color(if v >= 70 { GOOD } else { WARN }));
+                            ui.label(RichText::new(label).color(MUTED));
+                        });
+                        ui.add_space(14.0);
+                    }
+                });
+                ui.label(RichText::new(&f.feedback_ko).size(16.0));
+                if !f.corrections.is_empty() {
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("교정").color(ACCENT));
+                    for c in &f.corrections {
+                        ui.label(RichText::new(format!("✖ {}", c.original)).color(BAD));
+                        ui.label(RichText::new(format!("✓ {}", c.corrected)).color(GOOD));
+                        ui.label(RichText::new(&c.explanation_ko).color(MUTED).small());
+                    }
+                }
+                ui.add_space(6.0);
+                ui.label(RichText::new("원어민처럼 말하면").color(ACCENT));
+                ui.horizontal_wrapped(|ui| {
+                    speaker_button(ui, &mut self.voice, &f.natural_version);
+                    ui.label(RichText::new(&f.natural_version).size(17.0));
+                });
+            });
+            ui.add_space(8.0);
+            if ui.add(egui::Button::new(RichText::new("▶ 자연스러운 버전 소리 내어 읽기").size(17.0)).fill(ACCENT).min_size(Vec2::new(0.0, 42.0))).clicked() {
+                drill_text = Some((f.natural_version.clone(), f.new_expressions.clone()));
+            }
+        } else if self.selfx.error.is_some() && claude.is_none() && !se.model_answer.is_empty() {
+            if ui.button("▶ 모범 답안 소리 내어 읽기").clicked() {
+                drill_text = Some((se.model_answer.clone(), Vec::new()));
+            }
+        }
+        if let Some((text, expressions)) = drill_text {
+            let mut phrases: Vec<Phrase> = split_sentences(&text).into_iter().map(|s| Phrase { text: s, ko: String::new() }).collect();
+            phrases.extend(expressions);
+            self.start_phrase_queue("자기 표현 · 다시 말하기", "self-expression", &phrases);
+            if let Some(q) = self.queue.as_mut() {
+                q.step = "speaking";
+            }
+            self.selfx = SelfExprState::default();
+        }
+    }
+
+    fn scenario(&self) -> BusinessScenario {
+        if self.roleplay.mode == 2 {
+            let (title, ko, ai, usr) = crate::content::ROLEPLAYS[self.roleplay.collection.min(crate::content::ROLEPLAYS.len() - 1)];
+            return BusinessScenario { title: title.into(), scenario_ko: ko.into(), ai_role: ai.into(), user_role: usr.into(), ..Default::default() };
+        }
+        if self.roleplay.mode == 3 {
+            let (sit, ai, usr) = &self.roleplay.custom;
+            return BusinessScenario {
+                title: "My scene".into(),
+                scenario_ko: sit.clone(),
+                ai_role: if ai.trim().is_empty() { "a conversation partner".into() } else { ai.clone() },
+                user_role: if usr.trim().is_empty() { "myself".into() } else { usr.clone() },
+                ..Default::default()
+            };
+        }
+        if self.roleplay.mode == 1 {
+            let wk = curriculum::week(curriculum::week_number(&self.store.profile));
+            BusinessScenario {
+                title: format!("Free talk: {}", wk.theme),
+                scenario_ko: format!("'{}' 주제로 원어민 친구와 자유롭게 대화합니다.", wk.theme_ko),
+                ai_role: "Alex, a friendly native English-speaking friend".into(),
+                user_role: "themselves".into(),
+                opening_line: format!("Hey! Good to see you. So, I wanted to ask you — {}?", wk.theme.to_lowercase()),
+                key_phrases: Vec::new(),
+            }
+        } else {
+            self.lesson.as_ref().map(|l| l.business.clone()).unwrap_or_default()
+        }
+    }
+
+    fn reset_roleplay(&mut self) {
+        let old = std::mem::take(&mut self.roleplay);
+        self.roleplay = RoleplayState { mode: old.mode, collection: old.collection, custom: old.custom, ..Default::default() };
+    }
+
+    pub fn business_ui(&mut self, ui: &mut Ui) {
+        if self.run_queue_ui(ui) || !self.lesson_ready_ui(ui) {
+            return;
+        }
+        let claude = self.claude();
+        let level = self.store.profile.level;
+        if let Some(r) = self.roleplay.job.poll() {
+            match r {
+                Ok(t) => {
+                    if let Some(last) = self.roleplay.lines.iter_mut().rev().find(|l| l.user) {
+                        last.correction = t.correction.clone();
+                        last.correction_ko = t.correction_ko.clone();
+                        let original = last.text.clone();
+                        self.store.add_correction("회화", &original, &t.correction, &t.correction_ko);
+                    }
+                    self.voice.say(&t.reply);
+                    self.roleplay.lines.push(ChatLine { user: false, text: t.reply, ko: t.reply_ko, correction: String::new(), correction_ko: String::new() });
+                    self.roleplay.suggestions = t.suggestions;
+                    if t.finished {
+                        self.roleplay.finished = true;
+                        self.roleplay.summary = t.summary_ko;
+                    }
+                    let user_turns = self.roleplay.lines.iter().filter(|l| l.user).count();
+                    if (self.roleplay.finished || user_turns >= 4) && !self.step_done("business") {
+                        self.complete_step("business");
+                    }
+                }
+                Err(e) => self.roleplay.error = Some(format!("{e:#}")),
+            }
+        }
+
+        page_title(ui, "💼 회화 · 비즈니스 영어", "");
+        ui.horizontal_wrapped(|ui| {
+            let was = self.roleplay.mode;
+            ui.selectable_value(&mut self.roleplay.mode, 0, "💼 오늘의 비즈니스");
+            ui.selectable_value(&mut self.roleplay.mode, 1, "☕ 자유 회화");
+            ui.selectable_value(&mut self.roleplay.mode, 2, "🎭 상황 모음");
+            ui.selectable_value(&mut self.roleplay.mode, 3, "✏ 나만의 상황");
+            if was != self.roleplay.mode {
+                self.reset_roleplay();
+            }
+        });
+        if !self.roleplay.started && self.roleplay.mode == 2 {
+            let mut pick = None;
+            ui.horizontal_wrapped(|ui| {
+                for (i, (title, ko, _, _)) in crate::content::ROLEPLAYS.iter().enumerate() {
+                    if ui.selectable_label(self.roleplay.collection == i, *title).on_hover_text(*ko).clicked() {
+                        pick = Some(i);
+                    }
+                }
+                if ui.button("🎲 랜덤").clicked() {
+                    pick = Some(rand::random_range(0..crate::content::ROLEPLAYS.len()));
+                }
+            });
+            if let Some(i) = pick {
+                self.roleplay.collection = i;
+            }
+        }
+        if !self.roleplay.started && self.roleplay.mode == 3 {
+            card(ui, |ui| {
+                ui.label("연습하고 싶은 상황을 적어 주세요 (한국어/영어 모두 가능)");
+                ui.add(egui::TextEdit::singleline(&mut self.roleplay.custom.0).hint_text("예: 해외 출장 중 호텔 예약이 누락되어 항의하기").desired_width(f32::INFINITY));
+                ui.horizontal(|ui| {
+                    ui.label("상대 역할");
+                    ui.add(egui::TextEdit::singleline(&mut self.roleplay.custom.1).hint_text("예: hotel manager"));
+                    ui.label("내 역할");
+                    ui.add(egui::TextEdit::singleline(&mut self.roleplay.custom.2).hint_text("예: business traveler"));
+                });
+            });
+            if self.roleplay.custom.0.trim().is_empty() {
+                return;
+            }
+        }
+        let sc = self.roleplay.scenario.clone().unwrap_or_else(|| self.scenario());
+        ui.add_space(6.0);
+        card(ui, |ui| {
+            ui.label(RichText::new(&sc.title).size(20.0).strong());
+            ui.label(RichText::new(&sc.scenario_ko).color(MUTED));
+            ui.label(RichText::new(format!("상대: {} · 나: {}", sc.ai_role, sc.user_role)).color(MUTED).small());
+            if !sc.key_phrases.is_empty() {
+                ui.add_space(6.0);
+                ui.label(RichText::new("핵심 표현").color(ACCENT));
+                for p in &sc.key_phrases {
+                    ui.horizontal(|ui| {
+                        speaker_button(ui, &mut self.voice, &p.text);
+                        ui.label(RichText::new(&p.text).strong());
+                        ui.label(RichText::new(&p.ko).color(MUTED));
+                    });
+                }
+            }
+        });
+        if !sc.key_phrases.is_empty() && !self.roleplay.started && ui.button("🔁 핵심 표현 먼저 따라 말하기").clicked() {
+            self.start_phrase_queue("핵심 표현 연습", "business", &sc.key_phrases);
+            return;
+        }
+
+        let Some(c) = claude else {
+            ui.add_space(8.0);
+            error_label(ui, "AI 회화 상대는 Claude API 키가 필요합니다. 설정에서 키를 입력하세요. (핵심 표현 연습은 가능해요)");
+            return;
+        };
+
+        if !self.roleplay.started {
+            ui.add_space(8.0);
+            if ui.add(egui::Button::new(RichText::new("▶ 대화 시작").size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 44.0))).clicked() {
+                self.roleplay.started = true;
+                self.roleplay.scenario = Some(sc.clone());
+                if sc.opening_line.trim().is_empty() {
+                    // The AI opens the scene itself.
+                    let scc = sc.clone();
+                    self.roleplay.job.spawn(move || c.roleplay_turn(&scc, &[], level));
+                } else {
+                    self.voice.say(&sc.opening_line);
+                    self.roleplay.lines.push(ChatLine { user: false, text: sc.opening_line.clone(), ko: String::new(), correction: String::new(), correction_ko: String::new() });
+                }
+            }
+            return;
+        }
+
+        ui.add_space(8.0);
+        ui.checkbox(&mut self.roleplay.show_ko, "번역 보기");
+        let show_ko = self.roleplay.show_ko;
+        let mut replay: Option<String> = None;
+        for l in &self.roleplay.lines {
+            let (fill, align) = if l.user { (ACCENT.gamma_multiply(0.5), egui::Align::Max) } else { (CARD, egui::Align::Min) };
+            ui.with_layout(egui::Layout::top_down(align), |ui| {
+                egui::Frame::new().fill(fill).corner_radius(12.0).inner_margin(10.0).show(ui, |ui| {
+                    ui.set_max_width(560.0);
+                    ui.horizontal_wrapped(|ui| {
+                        if !l.user && ui.small_button("🔊").clicked() {
+                            replay = Some(l.text.clone());
+                        }
+                        ui.label(RichText::new(&l.text).size(16.0));
+                    });
+                    if show_ko && !l.ko.is_empty() {
+                        ui.label(RichText::new(&l.ko).color(MUTED).small());
+                    }
+                    if !l.correction.is_empty() {
+                        ui.label(RichText::new(format!("✓ 더 자연스럽게: {}", l.correction)).color(Color32::from_rgb(150, 255, 190)));
+                        ui.label(RichText::new(&l.correction_ko).color(MUTED).small());
+                    }
+                });
+            });
+            ui.add_space(4.0);
+        }
+        if let Some(t) = replay {
+            self.voice.say(&t);
+        }
+
+        if self.roleplay.finished {
+            card(ui, |ui| {
+                ui.label(RichText::new("🎉 대화 완료!").size(20.0).strong());
+                ui.label(&self.roleplay.summary);
+            });
+            let corrections: Vec<Phrase> = self
+                .roleplay
+                .lines
+                .iter()
+                .filter(|l| l.user && !l.correction.is_empty())
+                .map(|l| Phrase { text: l.correction.clone(), ko: l.correction_ko.clone() })
+                .collect();
+            ui.horizontal(|ui| {
+                if !corrections.is_empty() && ui.button(format!("🔁 교정된 문장 {}개 따라 말하기", corrections.len())).clicked() {
+                    self.start_phrase_queue("교정 문장 연습", "business", &corrections);
+                }
+                if ui.button("↻ 새 대화").clicked() {
+                    self.reset_roleplay();
+                }
+            });
+            return;
+        }
+
+        if !self.roleplay.suggestions.is_empty() {
+            ui.label(RichText::new("💡 이렇게 말해 보세요").color(WARN));
+            for p in self.roleplay.suggestions.clone() {
+                ui.horizontal(|ui| {
+                    speaker_button(ui, &mut self.voice, &p.text);
+                    ui.label(RichText::new(&p.text).strong());
+                    ui.label(RichText::new(&p.ko).color(MUTED));
+                });
+            }
+        }
+        ui.vertical_centered(|ui| {
+            if self.roleplay.job.running() {
+                spinner_label(ui, "상대가 답하는 중…");
+            } else if let Some(t) = self.roleplay.capture.ui(ui, &mut self.voice, 45.0) {
+                self.store.log_attempt(["business", "free-talk", "roleplay", "custom-roleplay"][self.roleplay.mode.min(3)], "", &t, 0.0);
+                self.roleplay.lines.push(ChatLine { user: true, text: t, ko: String::new(), correction: String::new(), correction_ko: String::new() });
+                self.roleplay.error = None;
+                let history: Vec<(bool, String)> = self.roleplay.lines.iter().map(|l| (l.user, l.text.clone())).collect();
+                let scc = sc.clone();
+                self.roleplay.job.spawn(move || c.roleplay_turn(&scc, &history, level));
+            }
+            if let Some(e) = &self.roleplay.error {
+                error_label(ui, e);
+                if ui.button("다시 시도").clicked() {
+                    let history: Vec<(bool, String)> = self.roleplay.lines.iter().map(|l| (l.user, l.text.clone())).collect();
+                    let c2 = self.claude().unwrap();
+                    self.roleplay.job.spawn(move || c2.roleplay_turn(&sc, &history, level));
+                    self.roleplay.error = None;
+                }
+            }
+        });
+        if ui.small_button("대화 끝내기").clicked() {
+            self.roleplay.finished = true;
+            self.roleplay.summary = "대화를 직접 마쳤어요. 교정된 문장을 따라 말하며 정리해 보세요.".into();
+            if self.roleplay.lines.iter().filter(|l| l.user).count() >= 4 && !self.step_done("business") {
+                self.complete_step("business");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_paragraph() {
+        let s = split_sentences("I work at a bank. I love it! Do you? Yes.");
+        assert_eq!(s, vec!["I work at a bank.", "I love it!", "Do you? Yes."]);
+    }
+}

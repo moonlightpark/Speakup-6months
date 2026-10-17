@@ -1,0 +1,106 @@
+# Builds SpeakUp 6M for macOS, Windows and Linux on every push to main and publishes the
+# packages to the "latest" GitHub release. Pushing a tag like v1.2.0 also creates a versioned release.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos-arm64
+          - os: windows-latest
+            name: windows-x64
+          - os: ubuntu-22.04
+            name: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang libclang-dev libasound2-dev libspeechd-dev \
+            libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev
+
+      - name: Windows libclang
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "LIBCLANG_PATH=C:\\Program Files\\LLVM\\bin" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ./scripts/bundle_macos.sh
+          mkdir -p dist
+          ditto -c -k --keepParent "target/release/SpeakUp 6M.app" "dist/SpeakUp6M-${{ matrix.name }}.zip"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --release
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path target/release/speakup.exe -DestinationPath "dist/SpeakUp6M-${{ matrix.name }}.zip"
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo build --release
+          mkdir -p dist
+          tar -C target/release -czf "dist/SpeakUp6M-${{ matrix.name }}.tar.gz" speakup
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpeakUp6M-${{ matrix.name }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          ls -la dist
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            gh release create "$TAG" dist/* --repo "$REPO" --title "SpeakUp 6M $TAG" --generate-notes
+          else
+            # Rolling release that always holds the newest build of main.
+            gh release delete latest --repo "$REPO" --cleanup-tag --yes || true
+            gh release create latest dist/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
+              --title "SpeakUp 6M (최신 빌드)" \
+              --notes "main 브랜치 최신 커밋 ${GITHUB_SHA::7} 의 자동 빌드입니다. macOS(Apple Silicon) / Windows / Linux."
+          fi
