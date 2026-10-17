@@ -10,6 +10,8 @@ use egui::{RichText, Ui, Vec2};
 
 pub struct LevelTest {
     pub placement: bool,
+    /// Taken from the home screen to move to the level that fits now (replaces the level).
+    pub retest: bool,
     pub week: u32,
     pub idx: usize,
     pub drill: Drill,
@@ -26,6 +28,7 @@ impl LevelTest {
         let (t, ko) = content::PLACEMENT[0];
         Self {
             placement,
+            retest: false,
             week,
             idx: 0,
             drill: Drill::new(t, ko, "", 1, false, false).without_autoplay(),
@@ -36,6 +39,12 @@ impl LevelTest {
             result: None,
             error: None,
         }
+    }
+}
+
+impl LevelTest {
+    pub fn retest() -> Self {
+        Self { retest: true, ..Self::new(false, 0) }
     }
 }
 
@@ -57,7 +66,7 @@ impl App {
         };
         let pass = self.pass_score();
         let claude = self.claude();
-        let title = if t.placement { "레벨 테스트".to_string() } else { format!("{}주차 레벨 평가", t.week) };
+        let title = if t.placement || t.retest { "레벨 테스트".to_string() } else { format!("{}주차 레벨 평가", t.week) };
         ui.vertical_centered(|ui| {
             ui.add_space(10.0);
             ui.heading(title);
@@ -149,7 +158,11 @@ impl App {
                 card(ui, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.label(RichText::new("당신의 레벨").color(MUTED));
-                        ui.label(RichText::new(format!("{}  ({:.1}/10)", cefr_of(a.level), a.level)).size(40.0).strong().color(ACCENT));
+                        ui.label(RichText::new(format!("{} {}  ({:.1}/10)", level_name_of(a.level), cefr_of(a.level), a.level)).size(40.0).strong().color(ACCENT));
+                        if t.retest {
+                            let cur = self.store.profile.level;
+                            ui.label(RichText::new(format!("현재 {} {} ({cur:.1}) → 새 레벨 {} {} ({:.1})", level_name_of(cur), cefr_of(cur), level_name_of(a.level), cefr_of(a.level), a.level)).color(MUTED));
+                        }
                         ui.label(RichText::new(&a.summary_ko).size(16.0));
                     });
                     for s in &a.strengths_ko {
@@ -164,8 +177,12 @@ impl App {
                 });
                 ui.add_space(10.0);
                 ui.vertical_centered(|ui| {
-                    if ui.add(egui::Button::new(RichText::new("학습 시작하기 ▶").size(18.0)).fill(ACCENT).min_size(Vec2::new(220.0, 44.0))).clicked() {
-                        if t.placement {
+                    let go = if t.retest { "이 레벨로 이동 ▶" } else { "학습 시작하기 ▶" };
+                    if ui.add(egui::Button::new(RichText::new(go).size(18.0)).fill(ACCENT).min_size(Vec2::new(220.0, 44.0))).clicked() {
+                        if t.retest {
+                            // The learner asked to be placed by this result: use it as is.
+                            self.store.record_level(a.level, "레벨 테스트 (홈에서 재측정)");
+                        } else if t.placement {
                             self.store.profile.placement_done = true;
                             self.store.profile.start_date = today();
                             self.store.record_level(a.level, "레벨 테스트 (시작)");
@@ -182,7 +199,11 @@ impl App {
             }
         }
         if self.screen == Screen::LevelTest {
-            if !t.placement && ui.small_button("◀ 나중에 하기").clicked() {
+            if t.retest && t.result.is_some() && ui.small_button("지금 레벨 유지하기").clicked() {
+                self.screen = Screen::Home;
+                return;
+            }
+            if !t.placement && t.result.is_none() && ui.small_button("◀ 나중에 하기").clicked() {
                 self.screen = Screen::Home;
                 return;
             }

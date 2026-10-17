@@ -139,15 +139,30 @@ impl Default for Profile {
 }
 
 /// Level names used in the UI (the same 6-step ladder Learna uses).
+/// One table for every level label so the Korean name, CEFR grade and vocabulary target
+/// always agree: (upper bound of the 1–10 score, name, CEFR, words a learner at this level
+/// is expected to know — commonly cited CEFR vocabulary sizes).
+pub const LEVEL_BANDS: &[(f32, &str, &str, u32)] = &[
+    (2.0, "초급", "A1", 500),
+    (3.5, "초중급", "A2", 1000),
+    (5.0, "중급", "B1", 2000),
+    (6.5, "중상급", "B1+", 3000),
+    (8.0, "고급", "B2", 4000),
+    (9.0, "고급+", "B2+", 5000),
+    (f32::MAX, "능숙", "C1", 8000),
+];
+
+fn band(level: f32) -> &'static (f32, &'static str, &'static str, u32) {
+    LEVEL_BANDS.iter().find(|b| level < b.0).unwrap_or(&LEVEL_BANDS[LEVEL_BANDS.len() - 1])
+}
+
 pub fn level_name_of(level: f32) -> &'static str {
-    match level {
-        l if l < 2.0 => "초급",
-        l if l < 3.5 => "초중급",
-        l if l < 5.0 => "중급",
-        l if l < 6.5 => "중상급",
-        l if l < 8.5 => "고급",
-        _ => "능숙",
-    }
+    band(level).1
+}
+
+/// Vocabulary size expected at this level.
+pub fn level_words(level: f32) -> u32 {
+    band(level).3
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -219,15 +234,7 @@ pub struct CorrectionRecord {
 }
 
 pub fn cefr_of(level: f32) -> &'static str {
-    match level {
-        l if l < 2.0 => "A1",
-        l if l < 3.5 => "A2",
-        l if l < 5.0 => "B1",
-        l if l < 6.5 => "B1+",
-        l if l < 8.0 => "B2",
-        l if l < 9.0 => "B2+",
-        _ => "C1",
-    }
+    band(level).2
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

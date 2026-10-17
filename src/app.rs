@@ -672,12 +672,36 @@ impl App {
         // Stat tiles
         let goal = self.store.settings.daily_goal_minutes.max(1) as u64;
         let mins = p.today.study_seconds / 60;
-        ui.horizontal_wrapped(|ui| {
-            crate::screens::history::stat_tile(ui, &format!("🔥 {}일", p.streak), "연속 학습", WARN);
-            crate::screens::history::stat_tile(ui, &format!("{mins} / {goal}분"), "오늘 학습 시간", if mins >= goal { GOOD } else { Color32::WHITE });
-            crate::screens::history::stat_tile(ui, &format!("{} {}", level_name_of(p.level), cefr_of(p.level)), &format!("레벨 {:.1} / 10", p.level), ACCENT);
-            crate::screens::history::stat_tile(ui, &self.store.items.len().to_string(), "배운 단어·문장", Color32::from_rgb(190, 140, 255));
+        let total_mins = p.study_seconds / 60;
+        let program_mins = TOTAL_DAYS as u64 * goal;
+        let words = self.store.items.iter().filter(|i| i.kind == ItemKind::Word).count();
+        let sentences = self.store.items.len() - words;
+        let level_words = level_words(p.level);
+        let mut retest = false;
+        ui.horizontal_top(|ui| {
+            use crate::screens::history::stat_card;
+            let gap = ui.spacing().item_spacing.x;
+            // Five cards across the content column (each adds 32 px of margin + 2 px of border).
+            let w = ((ui.available_width().min(CONTENT_WIDTH) - gap * 4.0) / 5.0 - 34.0).max(100.0);
+            stat_card(ui, w, &format!("🔥 {}일", p.streak), "연속 학습", WARN, |_| {});
+            stat_card(ui, w, &fmt_minutes(total_mins), &format!("6개월 목표 {}분", thousands(program_mins)), Color32::from_rgb(110, 220, 200), |ui| {
+                let frac = total_mins as f32 / program_mins.max(1) as f32;
+                ui.add(egui::ProgressBar::new(frac.min(1.0)).desired_height(8.0).corner_radius(4.0).fill(Color32::from_rgb(110, 220, 200)));
+                ui.label(RichText::new(format!("{:.1}% 완료", frac * 100.0)).small().color(MUTED));
+            });
+            stat_card(ui, w, &format!("{mins} / {goal}분"), "오늘 학습 시간", if mins >= goal { GOOD } else { Color32::WHITE }, |_| {});
+            stat_card(ui, w, &format!("{} {}", level_name_of(p.level), cefr_of(p.level)), &format!("레벨 {:.1} / 10", p.level), ACCENT, |ui| {
+                retest = ui.add(egui::Button::new(RichText::new("📝 레벨 테스트").small()).corner_radius(8.0)).on_hover_text("지금 실력을 다시 측정해 맞는 레벨로 이동합니다").clicked();
+            });
+            stat_card(ui, w, &format!("{} / {}", words, thousands(level_words as u64)), &format!("배운 단어 / {} 필수", cefr_of(p.level)), Color32::from_rgb(190, 140, 255), |ui| {
+                ui.add(egui::ProgressBar::new((words as f32 / level_words as f32).min(1.0)).desired_height(8.0).corner_radius(4.0).fill(Color32::from_rgb(190, 140, 255)));
+                ui.label(RichText::new(format!("문장 {sentences}개")).small().color(MUTED));
+            });
         });
+        if retest {
+            self.test = Some(LevelTest::retest());
+            self.go(Screen::LevelTest);
+        }
         ui.add_space(12.0);
 
         // Skill balance: 말하기 60 · 읽기 20 · 쓰기 20 of the daily goal.
@@ -1185,5 +1209,35 @@ impl eframe::App for App {
         self.store.save_items();
         self.store.save_homework();
         self.store.save_settings();
+    }
+}
+
+/// "45분", "3시간 5분".
+fn fmt_minutes(m: u64) -> String {
+    if m < 60 { format!("{m}분") } else { format!("{}시간 {}분", m / 60, m % 60) }
+}
+
+/// 5460 → "5,460".
+fn thousands(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+#[cfg(test)]
+mod format_tests {
+    #[test]
+    fn formats_minutes_and_thousands() {
+        assert_eq!(super::fmt_minutes(45), "45분");
+        assert_eq!(super::fmt_minutes(185), "3시간 5분");
+        assert_eq!(super::thousands(5460), "5,460");
+        assert_eq!(super::thousands(999), "999");
+        assert_eq!(super::thousands(1234567), "1,234,567");
     }
 }

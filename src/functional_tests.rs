@@ -896,3 +896,42 @@ fn ft23_translator_korean_speech_to_three_levels() {
     t.wait("second translation", |a| a.translator.result.is_some());
     assert!(t.prompts().iter().any(|p| p.contains("배고파 죽겠어")));
 }
+
+#[test]
+fn ft24_home_total_time_words_and_level_retest() {
+    let mut t = launch_at(temp_dir("retest"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.record_level(3.0, "test setup");
+        s.profile.study_seconds = 125 * 60; // studied 2h 5m so far
+    });
+    // Total time against the whole program (182 days × 30 min = 5,460 min).
+    for text in ["2시간 5분", "6개월 목표 5,460분", "2.3% 완료", "초중급 A2", "레벨 3.0 / 10", "0 / 1,000", "배운 단어 / A2 필수"] {
+        assert!(t.has(text), "home should show {text:?}");
+    }
+    // Retest from the home screen moves straight to the assessed level.
+    t.click("📝 레벨 테스트");
+    assert_eq!(t.app().screen, Screen::LevelTest);
+    for (s, _) in crate::content::PLACEMENT.iter().take(4) {
+        t.say(s, 2.0);
+    }
+    t.click("모르겠어요 (건너뛰기)");
+    t.click("모르겠어요 (건너뛰기)");
+    t.say("I am a software engineer and I want to talk with foreign clients", 5.0);
+    t.wait("level assessment", |a| a.test.as_ref().is_some_and(|x| x.result.is_some()));
+    assert!(t.has("현재 초중급 A2 (3.0) → 새 레벨 중급 B1 (4.6)"));
+    t.click("이 레벨로 이동 ▶");
+    assert_eq!(t.app().screen, Screen::Home);
+    assert!((t.app().store.profile.level - 4.6).abs() < 0.01, "level replaced, not blended");
+    assert!(t.has("중급 B1") && t.has("0 / 2,000"));
+    let csv = std::fs::read_to_string(t.dir.join("level_log.csv")).unwrap();
+    assert!(csv.contains("4.60,B1,\"레벨 테스트 (홈에서 재측정)\""), "{csv}");
+}
+
+#[test]
+fn level_labels_agree() {
+    // Name, CEFR grade and vocabulary target come from one table.
+    assert_eq!((level_name_of(8.2), cefr_of(8.2), level_words(8.2)), ("고급+", "B2+", 5000));
+    assert_eq!((level_name_of(1.0), cefr_of(1.0), level_words(1.0)), ("초급", "A1", 500));
+    assert_eq!((level_name_of(10.0), cefr_of(10.0), level_words(10.0)), ("능숙", "C1", 8000));
+}

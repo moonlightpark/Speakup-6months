@@ -13,10 +13,21 @@ fn step_label(key: &str) -> &str {
 }
 
 pub fn stat_tile(ui: &mut Ui, value: &str, label: &str, color: Color32) {
+    stat_card(ui, 130.0, value, label, color, |_| {});
+}
+
+/// A stat tile of a fixed width with extra content under the label (progress bar, button…).
+pub fn stat_card(ui: &mut Ui, width: f32, value: &str, label: &str, color: Color32, extra: impl FnOnce(&mut Ui)) {
     egui::Frame::new().fill(CARD).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0_f32, BORDER)).show(ui, |ui| {
-        ui.set_min_width(130.0);
-        ui.label(RichText::new(value).size(26.0).strong().color(color));
-        ui.label(RichText::new(label).color(MUTED));
+        // Stack value, label and extras even when the tiles sit in a horizontal row.
+        ui.vertical(|ui| {
+            ui.set_width(width);
+            // Same height for every tile in a row, with or without extras.
+            ui.set_min_height(if width > 130.0 { 86.0 } else { 0.0 });
+            ui.label(RichText::new(value).size(24.0).strong().color(color));
+            ui.label(RichText::new(label).color(MUTED));
+            extra(ui);
+        });
     });
 }
 
