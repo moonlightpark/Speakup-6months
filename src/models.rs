@@ -90,9 +90,11 @@ pub struct DayProgress {
     pub speed_rounds: u32,
     pub study_seconds: u64,
     pub wrapped_up: bool,
-    /// Time per skill today (target split 말하기 60 : 읽기 20 : 쓰기 20).
+    /// Time per skill today (target split 말하기 40 : 듣기 30 : 읽기 15 : 쓰기 15).
     #[serde(default)]
     pub speaking_seconds: u64,
+    #[serde(default)]
+    pub listening_seconds: u64,
     #[serde(default)]
     pub reading_seconds: u64,
     #[serde(default)]
@@ -202,6 +204,8 @@ pub struct DayRecord {
     pub best_wpm: f32,
     #[serde(default)]
     pub speaking_minutes: u32,
+    #[serde(default)]
+    pub listening_minutes: u32,
     #[serde(default)]
     pub reading_minutes: u32,
     #[serde(default)]

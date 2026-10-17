@@ -58,14 +58,15 @@ pub const STEPS: &[(&str, &str, Screen)] = &[
     ("writing", "✏ 쓰기 (받아쓰기·작문)", Screen::Writing),
 ];
 
-/// Daily time split by skill (Order: 말하기 60 · 읽기 20 · 쓰기 20).
-pub const SKILL_WEIGHTS: [(&str, f32); 3] = [("🎤 말하기", 0.6), ("📘 읽기", 0.2), ("✏ 쓰기", 0.2)];
+/// Daily time split by skill (Order: 말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15).
+pub const SKILL_WEIGHTS: [(&str, f32); 4] = [("🎤 말하기", 0.4), ("🎧 듣기", 0.3), ("📘 읽기", 0.15), ("✏ 쓰기", 0.15)];
 
-/// Which skill a screen trains (None = not study time).
+/// Which skill a screen trains (index into `SKILL_WEIGHTS`; None = not study time).
 pub fn skill_of(s: Screen) -> Option<usize> {
     match s {
-        Screen::Library => Some(1),
-        Screen::Writing => Some(2),
+        Screen::Listening => Some(1),
+        Screen::Library => Some(2),
+        Screen::Writing => Some(3),
         Screen::Settings | Screen::Onboarding | Screen::Progress | Screen::History | Screen::Vocabulary => None,
         _ => Some(0),
     }
@@ -268,6 +269,7 @@ impl App {
             scenario: lesson.map(|l| l.business.title.clone()).unwrap_or_default(),
             best_wpm: p.speed_history.iter().filter(|r| r.date == date && r.kind == "reading").map(|r| r.wpm).fold(0.0, f32::max),
             speaking_minutes: (p.today.speaking_seconds / 60) as u32,
+            listening_minutes: (p.today.listening_seconds / 60) as u32,
             reading_minutes: (p.today.reading_seconds / 60) as u32,
             writing_minutes: (p.today.writing_seconds / 60) as u32,
             reading: self
@@ -704,16 +706,16 @@ impl App {
         }
         ui.add_space(12.0);
 
-        // Skill balance: 말하기 60 · 읽기 20 · 쓰기 20 of the daily goal.
+        // Skill balance: 말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15 of the daily goal.
         card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("오늘의 학습 비중").size(17.0).strong());
-                ui.label(RichText::new("말하기 60 · 읽기 20 · 쓰기 20 — 말하기가 제일 중요해요").color(MUTED));
+                ui.label(RichText::new("말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15 — 말은 들은 만큼 나와요").color(MUTED));
             });
             let t = &p.today;
-            let secs = [t.speaking_seconds, t.reading_seconds, t.writing_seconds];
-            let colors = [crate::art::PINK, crate::art::CYAN, WARN];
-            ui.columns(3, |cols| {
+            let secs = [t.speaking_seconds, t.listening_seconds, t.reading_seconds, t.writing_seconds];
+            let colors = [crate::art::PINK, GOOD, crate::art::CYAN, WARN];
+            ui.columns(4, |cols| {
                 for (i, col) in cols.iter_mut().enumerate() {
                     let (label, w) = SKILL_WEIGHTS[i];
                     let target = (goal as f32 * w).round().max(1.0);
@@ -1113,8 +1115,9 @@ impl App {
                 self.store.profile.study_seconds += secs;
                 t.study_seconds += secs;
                 match skill_of(self.screen) {
-                    Some(1) => t.reading_seconds += secs,
-                    Some(2) => t.writing_seconds += secs,
+                    Some(1) => t.listening_seconds += secs,
+                    Some(2) => t.reading_seconds += secs,
+                    Some(3) => t.writing_seconds += secs,
                     Some(_) => t.speaking_seconds += secs,
                     None => {}
                 }

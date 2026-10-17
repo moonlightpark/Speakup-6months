@@ -878,12 +878,14 @@ fn t_done(a: &App) -> bool {
 #[test]
 fn ft22_study_time_is_split_by_skill() {
     let t = launch("skills");
-    assert!(t.has("오늘의 학습 비중") && t.has("🎤 말하기") && t.has("📘 읽기") && t.has("✏ 쓰기"));
-    assert_eq!(crate::app::skill_of(Screen::Library), Some(1));
-    assert_eq!(crate::app::skill_of(Screen::Writing), Some(2));
+    assert!(t.has("오늘의 학습 비중") && t.has("🎤 말하기") && t.has("🎧 듣기") && t.has("📘 읽기") && t.has("✏ 쓰기"));
+    assert_eq!(crate::app::skill_of(Screen::Listening), Some(1));
+    assert_eq!(crate::app::skill_of(Screen::Library), Some(2));
+    assert_eq!(crate::app::skill_of(Screen::Writing), Some(3));
     assert_eq!(crate::app::skill_of(Screen::Business), Some(0));
     let w: f32 = crate::app::SKILL_WEIGHTS.iter().map(|s| s.1).sum();
-    assert!((w - 1.0).abs() < 1e-6 && crate::app::SKILL_WEIGHTS[0].1 == 0.6);
+    let weights: Vec<f32> = crate::app::SKILL_WEIGHTS.iter().map(|s| s.1).collect();
+    assert!((w - 1.0).abs() < 1e-6 && weights == [0.4, 0.3, 0.15, 0.15]);
     // The routine has a reading and a writing step.
     assert!(t.has("📘 리딩 (동화·소설)") && t.has("✏ 쓰기 (받아쓰기·작문)"));
 }
