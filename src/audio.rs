@@ -180,7 +180,7 @@ impl Recorder {
             for cmd in rx {
                 match cmd {
                     RecCmd::Start(name) => {
-                        stream = None;
+                        close_input(&mut stream);
                         match open_input(&shared, &state, &name) {
                             Ok(s) => {
                                 stream = Some(s);
@@ -193,12 +193,21 @@ impl Recorder {
                             Err(e) => *state.lock().unwrap() = RecState::Failed(format!("{e:#}")),
                         }
                     }
-                    RecCmd::Stop => stream = None,
+                    RecCmd::Stop => close_input(&mut stream),
                 }
             }
-            drop(stream);
+            close_input(&mut stream);
         });
         r
+    }
+}
+
+/// Stops the mic stream before dropping it. On macOS, cpal 0.15.3 keeps a clone of the stream
+/// inside its own device-disconnect listener, so dropping alone never stops it: every old
+/// recording kept running and mixing into the next one (3rd try → unrecognizable audio).
+fn close_input(stream: &mut Option<cpal::Stream>) {
+    if let Some(s) = stream.take() {
+        let _ = s.pause();
     }
 }
 
@@ -823,6 +832,38 @@ mod tests {
         let audio = r.stop();
         println!("device={} state_problem={problem:?} samples={} rms={:.5}", r.active_device(), audio.len(), rms(&audio));
         assert!(!audio.is_empty(), "the stream delivered audio");
+    }
+
+    /// Real microphone: opens and closes the mic several times in a row, like repeated drill tries.
+    #[test]
+    #[ignore]
+    fn real_mic_repeated_recordings() {
+        let mut r = Recorder::new(std::env::var("SPEAKUP_TEST_MIC").unwrap_or_default());
+        let rss = || {
+            let out = std::process::Command::new("ps").args(["-o", "rss=", "-p", &std::process::id().to_string()]).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().unwrap_or(0)
+        };
+        let n: usize = std::env::var("SPEAKUP_TEST_TRIES").ok().and_then(|v| v.parse().ok()).unwrap_or(5);
+        let rss0 = rss();
+        for i in 1..=n {
+            r.start();
+            let t0 = Instant::now();
+            while r.state() == RecState::Starting && t0.elapsed() < Duration::from_secs(10) {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let open = t0.elapsed().as_secs_f32();
+            let state = r.state();
+            std::thread::sleep(Duration::from_millis(1500));
+            let problem = r.problem();
+            let audio = r.stop();
+            let cb = r.shared.callbacks.load(Ordering::Relaxed);
+            std::thread::sleep(Duration::from_millis(300));
+            let after = r.shared.callbacks.load(Ordering::Relaxed) - cb;
+            println!("try {i}: open {open:.2}s state={state:?} problem={problem:?} rate={} samples={} rms={:.5} callbacks_after_stop={after}", r.shared.rate.load(Ordering::Relaxed), audio.len(), rms(&audio));
+            assert!(after <= 2, "the previous stream must stop");
+            assert!(audio.len() < 16_000 * 2, "one recording's worth of audio");
+        }
+        println!("rss growth over {n} recordings: {} KB", rss() as i64 - rss0 as i64);
     }
 
     #[test]
