@@ -172,9 +172,9 @@ pub fn journey(rect: Rect, progress: f32) -> Shape {
     // Path
     let path_at = |t: f32| pos2(rect.left() + 20.0 + (rect.width() - 60.0) * t, base - 18.0 - (t * PI * 1.0).sin() * rect.height() * 0.28 - t * rect.height() * 0.3);
     let pts: Vec<Pos2> = (0..=40).map(|i| path_at(i as f32 / 40.0)).collect();
-    out.extend(Shape::dashed_line(&pts, Stroke::new(2.0, Color32::from_white_alpha(70)), 6.0, 5.0));
+    out.extend(Shape::dashed_line(&pts, Stroke::new(2.0_f32, Color32::from_white_alpha(70)), 6.0, 5.0));
     let done: Vec<Pos2> = (0..=40).map(|i| path_at(progress.clamp(0.0, 1.0) * i as f32 / 40.0)).collect();
-    out.push(Shape::line(done, Stroke::new(3.5, CYAN)));
+    out.push(Shape::line(done, Stroke::new(3.5_f32, CYAN)));
     // Month dots
     for m in 0..=6 {
         let q = path_at(m as f32 / 6.0);
@@ -183,7 +183,7 @@ pub fn journey(rect: Rect, progress: f32) -> Shape {
     }
     // Flag
     let f = path_at(1.0);
-    out.push(Shape::line_segment([f, f - vec2(0.0, 30.0)], Stroke::new(2.5, Color32::WHITE)));
+    out.push(Shape::line_segment([f, f - vec2(0.0, 30.0)], Stroke::new(2.5_f32, Color32::WHITE)));
     out.push(Shape::convex_polygon(vec![f - vec2(0.0, 30.0), f - vec2(-20.0, 24.0), f - vec2(0.0, 18.0)], WARN, Stroke::NONE));
     // Marker
     let me = path_at(progress.clamp(0.0, 1.0));
@@ -220,7 +220,7 @@ pub fn onboarding_hero(ui: &mut Ui) {
         let galley = p.layout_no_wrap(txt.to_string(), egui::FontId::proportional(15.0), Color32::WHITE);
         let pill = Rect::from_min_size(pos2(x, rect.top() + 140.0), galley.size() + vec2(24.0, 12.0));
         p.rect_filled(pill, 16.0, col.gamma_multiply(0.35));
-        p.rect_stroke(pill, 16.0, Stroke::new(1.0, col.gamma_multiply(0.8)), egui::StrokeKind::Inside);
+        p.rect_stroke(pill, 16.0, Stroke::new(1.0_f32, col.gamma_multiply(0.8)), egui::StrokeKind::Inside);
         p.galley(pill.min + vec2(12.0, 6.0), galley, Color32::WHITE);
         x = pill.right() + 10.0;
     }

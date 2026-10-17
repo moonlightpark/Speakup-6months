@@ -47,7 +47,7 @@ impl AudioCheckState {
     /// Re-reads the OS permission every few seconds (the user may change it in System Settings).
     /// Runs off the UI thread: device enumeration and `ioreg` take a few milliseconds.
     pub fn refresh(&mut self, chosen_mic: &str) {
-        if self.checked_at.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
+        if !cfg!(test) && self.checked_at.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
             self.checked_at = Some(Instant::now());
             let (perm, off, mic) = (self.permission.clone(), self.builtin_mic_off.clone(), chosen_mic.to_string());
             std::thread::spawn(move || {
@@ -110,7 +110,8 @@ impl App {
     pub fn audio_check_ui(&mut self, ui: &mut Ui) -> bool {
         let mut changed = false;
         let st = &mut self.audio_check;
-        if st.inputs.is_empty() && st.outputs.is_empty() {
+        // Tests never touch real audio devices (enumerating WASAPI devices from test threads crashes on Windows).
+        if st.inputs.is_empty() && st.outputs.is_empty() && !cfg!(test) {
             st.inputs = audio::input_devices();
             st.outputs = audio::output_devices();
         }

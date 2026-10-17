@@ -924,7 +924,7 @@ impl eframe::App for App {
             egui::SidePanel::left("nav")
                 .exact_width(232.0)
                 .resizable(false)
-                .frame(egui::Frame::new().fill(SIDEBAR).inner_margin(egui::Margin::symmetric(14, 0)).stroke(egui::Stroke::new(1.0, BORDER)))
+                .frame(egui::Frame::new().fill(SIDEBAR).inner_margin(egui::Margin::symmetric(14, 0)).stroke(egui::Stroke::new(1.0_f32, BORDER)))
                 .show(ctx, |ui| self.nav_ui(ui));
         }
         self.mic_permission_banner(ctx);

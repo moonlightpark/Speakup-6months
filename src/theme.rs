@@ -60,8 +60,8 @@ pub fn apply(ctx: &egui::Context) {
     v.window_fill = Color32::from_rgb(18, 23, 36);
     v.window_corner_radius = 14.0.into();
     v.extreme_bg_color = Color32::from_rgb(17, 22, 36);
-    v.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, crate::widgets::BORDER);
-    v.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, Color32::from_rgb(48, 60, 90));
+    v.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, crate::widgets::BORDER);
+    v.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, Color32::from_rgb(48, 60, 90));
     v.selection.bg_fill = crate::widgets::ACCENT;
     v.hyperlink_color = Color32::from_rgb(140, 180, 255);
     v.widgets.inactive.weak_bg_fill = Color32::from_rgb(30, 38, 58);

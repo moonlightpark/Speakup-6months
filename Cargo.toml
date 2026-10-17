@@ -7,7 +7,7 @@ description = "6개월 영어 듣기·말하기 완성 – 음성 지원 영어 
 license = "MIT"
 
 [dependencies]
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "persistence", "x11", "wayland"] }
 egui = "0.31"
 cpal = "0.15"
 rodio = { version = "0.20", default-features = false, features = ["symphonia-all"] }

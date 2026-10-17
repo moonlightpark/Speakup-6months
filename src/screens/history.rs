@@ -13,7 +13,7 @@ fn step_label(key: &str) -> &str {
 }
 
 pub fn stat_tile(ui: &mut Ui, value: &str, label: &str, color: Color32) {
-    egui::Frame::new().fill(CARD).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0, BORDER)).show(ui, |ui| {
+    egui::Frame::new().fill(CARD).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0_f32, BORDER)).show(ui, |ui| {
         ui.set_min_width(130.0);
         ui.label(RichText::new(value).size(26.0).strong().color(color));
         ui.label(RichText::new(label).color(MUTED));
@@ -68,7 +68,7 @@ impl App {
                 r.steps.len(),
                 STEPS.len()
             );
-            egui::Frame::new().fill(CARD).corner_radius(12.0).inner_margin(12.0).stroke(Stroke::new(1.0, BORDER)).show(ui, |ui| {
+            egui::Frame::new().fill(CARD).corner_radius(12.0).inner_margin(12.0).stroke(Stroke::new(1.0_f32, BORDER)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 egui::CollapsingHeader::new(RichText::new(title).size(15.0)).id_salt(date).default_open(date == today()).show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
@@ -126,7 +126,7 @@ fn calendar(ui: &mut Ui, start: chrono::NaiveDate, hist: &[DayRecord]) {
         };
         p.rect_filled(r, 4.0, fill);
         if date == today() {
-            p.rect_stroke(r.expand(1.5), 5.0, Stroke::new(2.0, WARN), egui::StrokeKind::Outside);
+            p.rect_stroke(r.expand(1.5), 5.0, Stroke::new(2.0_f32, WARN), egui::StrokeKind::Outside);
         }
         if resp.hover_pos().is_some_and(|h| r.contains(h)) {
             hovered = Some((date, rec));

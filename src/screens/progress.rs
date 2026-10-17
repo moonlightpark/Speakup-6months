@@ -153,7 +153,7 @@ fn level_chart(ui: &mut Ui, history: &[LevelRecord], start: chrono::NaiveDate) {
     let y_of = |l: f32| rect.bottom() - 16.0 - (rect.height() - 30.0) * ((l - 1.0) / 9.0);
     for (l, name) in [(2.0, "A2"), (3.5, "B1"), (6.5, "B2"), (9.0, "C1")] {
         let y = y_of(l);
-        p.line_segment([Pos2::new(rect.left() + 28.0, y), Pos2::new(rect.right() - 8.0, y)], Stroke::new(1.0, Color32::from_rgb(40, 48, 70)));
+        p.line_segment([Pos2::new(rect.left() + 28.0, y), Pos2::new(rect.right() - 8.0, y)], Stroke::new(1.0_f32, Color32::from_rgb(40, 48, 70)));
         p.text(Pos2::new(rect.left() + 4.0, y), egui::Align2::LEFT_CENTER, name, egui::FontId::proportional(11.0), MUTED);
     }
     // Pace line toward B2 by the end of the program.
@@ -161,12 +161,12 @@ fn level_chart(ui: &mut Ui, history: &[LevelRecord], start: chrono::NaiveDate) {
         let goal = curriculum::target_level_for_day(TOTAL_DAYS, first.level);
         p.line_segment(
             [Pos2::new(x_of(start), y_of(first.level)), Pos2::new(x_of(start + chrono::Duration::days(TOTAL_DAYS)), y_of(goal))],
-            Stroke::new(1.5, WARN.gamma_multiply(0.5)),
+            Stroke::new(1.5_f32, WARN.gamma_multiply(0.5)),
         );
     }
     let pts: Vec<Pos2> = history.iter().map(|r| Pos2::new(x_of(r.date), y_of(r.level))).collect();
     if pts.len() > 1 {
-        p.add(egui::Shape::line(pts.clone(), Stroke::new(2.5, ACCENT)));
+        p.add(egui::Shape::line(pts.clone(), Stroke::new(2.5_f32, ACCENT)));
     }
     for pt in pts {
         p.circle_filled(pt, 3.5, ACCENT);

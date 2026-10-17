@@ -744,7 +744,7 @@ fn ft19_saved_name_and_key_are_not_asked_again() {
         t.app_mut().store.settings.api_key = "sk-ant-test".into();
         t.app_mut().store.save_profile();
         t.app_mut().store.save_settings();
-        std::mem::forget(t); // keep the data folder
+        t.dir = temp_dir("remember-scratch"); // keep the real data folder when `t` is dropped
     }
     let store = Store::open_at(dir.clone()).unwrap();
     assert_eq!(store.profile.name, "Tyler");

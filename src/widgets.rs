@@ -67,7 +67,7 @@ pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
         .fill(CARD)
         .corner_radius(16.0)
         .inner_margin(20.0)
-        .stroke(Stroke::new(1.0, BORDER))
+        .stroke(Stroke::new(1.0_f32, BORDER))
         .shadow(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(70) })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -271,7 +271,7 @@ impl Capture {
 fn draw_mic_icon(p: &egui::Painter, c: egui::Pos2) {
     let w = Color32::WHITE;
     p.rect_filled(egui::Rect::from_center_size(c - Vec2::new(0.0, 6.0), Vec2::new(16.0, 26.0)), 8.0, w);
-    let s = Stroke::new(3.0, w);
+    let s = Stroke::new(3.0_f32, w);
     let pts: Vec<egui::Pos2> = (0..=12)
         .map(|i| {
             let a = std::f32::consts::PI * (i as f32 / 12.0);
@@ -620,7 +620,7 @@ pub fn reps_dots(ui: &mut Ui, passed: u32, needed: u32) {
             if i < passed {
                 ui.painter().circle_filled(c, r, GOOD);
             } else {
-                ui.painter().circle_stroke(c, r, Stroke::new(2.0, MUTED));
+                ui.painter().circle_stroke(c, r, Stroke::new(2.0_f32, MUTED));
             }
         }
     });
@@ -632,7 +632,7 @@ pub fn ring(ui: &mut Ui, frac: f32, label: &str, size: f32) {
     let c = rect.center();
     let rad = size / 2.0 - 6.0;
     let p = ui.painter();
-    p.circle_stroke(c, rad, Stroke::new(9.0, Color32::from_rgb(40, 48, 70)));
+    p.circle_stroke(c, rad, Stroke::new(9.0_f32, Color32::from_rgb(40, 48, 70)));
     let n = 64;
     let pts: Vec<egui::Pos2> = (0..=((n as f32 * frac.clamp(0.0, 1.0)) as usize))
         .map(|i| {
@@ -641,7 +641,7 @@ pub fn ring(ui: &mut Ui, frac: f32, label: &str, size: f32) {
         })
         .collect();
     if pts.len() > 1 {
-        p.add(egui::Shape::line(pts, Stroke::new(9.0, ACCENT)));
+        p.add(egui::Shape::line(pts, Stroke::new(9.0_f32, ACCENT)));
     }
     p.text(c, Align2::CENTER_CENTER, label, FontId::proportional(size * 0.2), Color32::WHITE);
 }
