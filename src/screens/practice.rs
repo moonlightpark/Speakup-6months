@@ -43,6 +43,21 @@ impl DrillQueue {
     }
 }
 
+/// Korean shown, English said from memory (once) — retrieval practice at the end of a set.
+fn recall_spec(target: &str, ko: &str) -> Spec {
+    Spec {
+        item_id: None,
+        new_item: None,
+        target: target.to_string(),
+        ko: ko.to_string(),
+        tip: "💡 한국어만 보고 영어로 말해 보세요".into(),
+        reps: 1,
+        recall: true,
+        is_word: false,
+        chunks: Vec::new(),
+    }
+}
+
 fn make_drill(s: &Spec) -> Drill {
     Drill::new(&s.target, &s.ko, &s.tip, s.reps, s.recall, s.is_word).with_chunks(s.chunks.clone())
 }
@@ -167,7 +182,12 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, en);
                     ui.label(RichText::new(en).size(17.0).strong());
-                    crate::grammar::ko_label(ui, ko, 16.0, MUTED);
+                    // Months 5-6: English only; the Korean is a hover away.
+                    if support_stage(ui.ctx()) < 2 {
+                        crate::grammar::ko_label(ui, ko, 16.0, MUTED);
+                    } else {
+                        ui.label(RichText::new("뜻").small().color(MUTED)).on_hover_text(ko);
+                    }
                 });
             }
         });
@@ -270,6 +290,8 @@ impl App {
                     chunks: self.store.gloss_for(&w.example),
                 });
             }
+            // Then each chunk once more from the Korean alone.
+            specs.extend(lesson.phrases.iter().map(|w| recall_spec(&w.word, &w.meaning_ko)));
             self.queue = Some(DrillQueue::new("words", "vocab", "새 단어", specs));
         }
     }
@@ -288,7 +310,7 @@ impl App {
             &rows,
             "reading",
         ) {
-            let specs = lesson
+            let mut specs: Vec<Spec> = lesson
                 .sentences
                 .iter()
                 .map(|s| Spec {
@@ -309,6 +331,8 @@ impl App {
                     chunks: self.store.gloss_for(&s.text),
                 })
                 .collect();
+            // Finally say each sentence again from the Korean only (기억해서 말하기).
+            specs.extend(lesson.sentences.iter().filter(|s| !s.ko.is_empty()).map(|s| recall_spec(&s.text, &s.ko)));
             self.queue = Some(DrillQueue::new("reading", "reading", "문장 읽기", specs));
         }
     }

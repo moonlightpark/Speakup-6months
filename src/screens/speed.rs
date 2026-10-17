@@ -47,7 +47,7 @@ fn time_limit(target: &str) -> f32 {
 }
 
 impl App {
-    fn speed_round_done(&mut self) {
+    pub fn speed_round_done(&mut self) {
         self.store.profile.today.speed_rounds += 1;
         self.store.save_profile();
         if self.store.profile.today.speed_rounds >= 3 && !self.step_done("speed") {
@@ -60,10 +60,15 @@ impl App {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.speed.tab, 0, "📖 스피드 리딩 (WPM)");
             ui.selectable_value(&mut self.speed.tab, 1, "💨 순발력 말하기");
+            ui.selectable_value(&mut self.speed.tab, 2, "⏱ 4/3/2 말하기");
             ui.label(RichText::new(format!("오늘 {}/3 라운드", self.store.profile.today.speed_rounds.min(3))).color(MUTED));
         });
         ui.add_space(6.0);
-        if self.speed.tab == 0 { self.speed_reading_ui(ui) } else { self.quick_response_ui(ui) }
+        match self.speed.tab {
+            0 => self.speed_reading_ui(ui),
+            1 => self.quick_response_ui(ui),
+            _ => self.four_three_two_ui(ui),
+        }
     }
 
     fn new_passage(&mut self) {
@@ -99,7 +104,7 @@ impl App {
                 Ok(mut p) => {
                     self.store.put_gloss(&p.passage, &p.chunks);
                     p.chunks = self.store.gloss_for(&p.passage);
-                    self.speed.show_gloss = !p.chunks.is_empty();
+                    self.speed.show_gloss = !p.chunks.is_empty() && support_stage(ui.ctx()) == 0;
                     self.speed.passage = Some(p);
                 }
                 Err(e) => self.speed.error = Some(format!("{e:#}")),

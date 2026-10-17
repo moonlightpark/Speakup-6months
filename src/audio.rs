@@ -96,8 +96,24 @@ impl MicProblem {
     }
 }
 
-/// Longest recording kept; later samples are dropped.
-const MAX_REC_SECS: usize = 180;
+/// Adds one input sample, averaging `step` input samples into each stored one (box-filter
+/// decimation to 16 kHz); `step <= 1` stores samples as they are.
+fn decimate_push(out: &mut Vec<f32>, dec: &mut (f32, f32, f64), v: f32, step: f64) {
+    if step <= 1.0 {
+        out.push(v);
+        return;
+    }
+    dec.0 += v;
+    dec.1 += 1.0;
+    dec.2 += 1.0;
+    if dec.2 >= step {
+        out.push(dec.0 / dec.1);
+        *dec = (0.0, 0.0, dec.2 - step);
+    }
+}
+
+/// Longest recording kept (4/3/2 speaking needs 4 minutes); later samples are dropped.
+const MAX_REC_SECS: usize = 260;
 
 enum RecCmd {
     Start(String),
@@ -107,7 +123,10 @@ enum RecCmd {
 /// Shared between the UI and the audio thread.
 #[derive(Default)]
 struct RecShared {
+    /// Mono samples, already reduced to 16 kHz when the mic runs faster (6× less memory at 96 kHz).
     buf: Mutex<Vec<f32>>,
+    /// Box-filter decimator state: (sum, count, position in the current output sample).
+    dec: Mutex<(f32, f32, f64)>,
     level: Mutex<f32>,
     rate: AtomicU32,
     callbacks: AtomicUsize,
@@ -201,15 +220,19 @@ fn open_input(shared: &Arc<RecShared>, state: &Arc<Mutex<RecState>>, name: &str)
     fn push<T: Copy>(data: &[T], ch: usize, conv: impl Fn(T) -> f32, sh: &RecShared) {
         sh.callbacks.fetch_add(1, Ordering::Relaxed);
         let mut b = sh.buf.lock().unwrap();
-        // A recording left running must not grow without bound (96 kHz ≈ 23 MB per minute).
-        let cap = sh.rate.load(Ordering::Relaxed) as usize * MAX_REC_SECS;
+        let rate = sh.rate.load(Ordering::Relaxed);
+        // Faster mics are averaged down to 16 kHz as samples arrive; slower ones are kept as is.
+        let step = rate as f64 / STT_RATE as f64;
+        let cap = rate.min(STT_RATE) as usize * MAX_REC_SECS;
+        let mut dec = sh.dec.lock().unwrap();
         let mut peak = 0.0f32;
         for frame in data.chunks(ch) {
             let v = frame.iter().map(|s| conv(*s)).sum::<f32>() / ch as f32;
             peak = peak.max(v.abs());
-            if b.len() < cap {
-                b.push(v);
+            if b.len() >= cap {
+                continue;
             }
+            decimate_push(&mut b, &mut dec, v, step);
         }
         if peak > 0.0 {
             sh.signal.store(true, Ordering::Relaxed);
@@ -278,6 +301,7 @@ impl Recorder {
     /// Asks the audio thread to open the mic. Poll `state()` for Recording / Failed.
     pub fn start(&mut self) {
         self.shared.buf.lock().unwrap().clear();
+        *self.shared.dec.lock().unwrap() = (0.0, 0.0, 0.0);
         *self.shared.level.lock().unwrap() = 0.0;
         self.shared.callbacks.store(0, Ordering::Relaxed);
         self.shared.signal.store(false, Ordering::Relaxed);
@@ -308,7 +332,9 @@ impl Recorder {
         self.started = None;
         *self.shared.level.lock().unwrap() = 0.0;
         let raw = std::mem::take(&mut *self.shared.buf.lock().unwrap());
-        resample(&raw, self.shared.rate.load(Ordering::Relaxed), STT_RATE)
+        // Already 16 kHz unless the mic itself runs slower (e.g. a Bluetooth headset at 8 kHz).
+        let rate = self.shared.rate.load(Ordering::Relaxed);
+        if rate > STT_RATE { raw } else { resample(&raw, rate, STT_RATE) }
     }
 
     /// Clears a failed state after the error has been shown.
@@ -698,6 +724,29 @@ impl PlayerHandle {
 }
 
 /// Decodes `[start, end)` seconds of an audio file into mono samples.
+/// Saves mono audio as 16-bit PCM WAV (weekly recordings; ~1.9 MB per minute at 16 kHz).
+pub fn write_wav(path: &Path, samples: &[f32], rate: u32) -> Result<()> {
+    let data_len = (samples.len() * 2) as u32;
+    let mut out = Vec::with_capacity(44 + data_len as usize);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36 + data_len).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    out.extend_from_slice(&1u16.to_le_bytes()); // mono
+    out.extend_from_slice(&rate.to_le_bytes());
+    out.extend_from_slice(&(rate * 2).to_le_bytes());
+    out.extend_from_slice(&2u16.to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data_len.to_le_bytes());
+    for s in samples {
+        out.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+    }
+    std::fs::write(path, out).context("녹음 파일을 저장할 수 없습니다")?;
+    Ok(())
+}
+
 pub fn decode_segment(path: &Path, start: f32, end: f32) -> Result<(Vec<f32>, u32)> {
     let file = std::io::BufReader::new(std::fs::File::open(path)?);
     let mut dec = rodio::Decoder::new(file).context("오디오 파일을 열 수 없습니다")?;
@@ -732,6 +781,25 @@ pub fn decode_segment(path: &Path, start: f32, end: f32) -> Result<(Vec<f32>, u3
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mic_input_is_reduced_to_16k_as_it_arrives() {
+        for rate in [44_100u32, 48_000, 96_000] {
+            let (mut out, mut dec) = (Vec::new(), (0.0f32, 0.0f32, 0.0f64));
+            let step = rate as f64 / STT_RATE as f64;
+            // 1 s of a 440 Hz tone.
+            for i in 0..rate {
+                decimate_push(&mut out, &mut dec, (i as f32 * 440.0 * std::f32::consts::TAU / rate as f32).sin() * 0.5, step);
+            }
+            assert!((out.len() as i64 - STT_RATE as i64).abs() <= 1, "{rate}: {} samples", out.len());
+            let peak = out.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+            assert!(peak > 0.45 && peak <= 0.5, "{rate}: speech-band tone kept ({peak})");
+        }
+        // Slower mics (Bluetooth 8 kHz) are stored untouched.
+        let (mut out, mut dec) = (Vec::new(), (0.0f32, 0.0f32, 0.0f64));
+        decimate_push(&mut out, &mut dec, 0.3, 0.5);
+        assert_eq!(out, vec![0.3]);
+    }
 
     #[test]
     fn voiced_span_ignores_silence() {

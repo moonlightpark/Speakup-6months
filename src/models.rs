@@ -34,6 +34,11 @@ pub struct Settings {
     pub korean_model: String,
     /// Colour Korean passages by grammatical role (주어·동사·…). 직독직해 keeps its colours.
     pub ko_role_colors: bool,
+    /// The 30 → 60 minute default change has been applied (missing in older settings files).
+    #[serde(default)]
+    pub goal_60_applied: bool,
+    /// From month 3 the Korean colours were switched off once (the learner may turn them back on).
+    pub ko_colors_faded: bool,
 }
 
 impl Default for Settings {
@@ -51,13 +56,16 @@ impl Default for Settings {
             reps_weak: 5,
             new_words_per_day: 0, // 0 = follow the curriculum phase
             ytdlp_path: String::new(),
-            daily_goal_minutes: 30,
+            // 60 min in the app (+30 min of podcasts/YouTube) ≈ 200-300 h in 6 months.
+            daily_goal_minutes: 60,
             input_device: String::new(),
             output_device: String::new(),
             neural_tts: true,
             neural_voice: "af_heart".into(),
             korean_model: "small".into(),
             ko_role_colors: true,
+            goal_60_applied: true,
+            ko_colors_faded: false,
         }
     }
 }
@@ -122,6 +130,34 @@ pub struct Profile {
     pub today: DayProgress,
     pub last_checkpoint_week: u32,
     pub speed_history: Vec<SpeedRecord>,
+    /// One answer to the same question each week, to hear progress (주간 녹음 비교).
+    pub weekly_recordings: Vec<WeeklyRecording>,
+    /// Days with a lesson from a human tutor (e.g. italki), logged by the learner.
+    pub tutor_sessions: Vec<NaiveDate>,
+    /// Mock OPIc / TOEIC Speaking results, logged by the learner every two weeks.
+    pub external_tests: Vec<ExternalTest>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct WeeklyRecording {
+    pub week: u32,
+    pub date: Option<NaiveDate>,
+    /// WAV file name in the `recordings` folder.
+    pub file: String,
+    pub transcript: String,
+    pub words: u32,
+    pub wpm: f32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct ExternalTest {
+    pub date: Option<NaiveDate>,
+    /// "OPIc" or "TOEIC Speaking"
+    pub test: String,
+    /// Grade or score as the learner got it (e.g. "IM2", "130").
+    pub result: String,
 }
 
 impl Default for Profile {
@@ -139,6 +175,9 @@ impl Default for Profile {
             today: DayProgress::default(),
             last_checkpoint_week: 0,
             speed_history: Vec::new(),
+            weekly_recordings: Vec::new(),
+            tutor_sessions: Vec::new(),
+            external_tests: Vec::new(),
         }
     }
 }

@@ -12,6 +12,8 @@ use crate::youtube::{self, Video};
 use egui::{RichText, Ui};
 
 pub struct ListeningState {
+    /// 0 = YouTube shadowing, 1 = listen and respond.
+    pub tab: usize,
     pub url: String,
     pub fetch: Pending<Video>,
     pub video: Option<Video>,
@@ -30,6 +32,7 @@ pub struct ListeningState {
 impl Default for ListeningState {
     fn default() -> Self {
         Self {
+            tab: 0,
             url: String::new(),
             fetch: Pending::default(),
             video: None,
@@ -101,7 +104,15 @@ impl App {
         }
 
         page_title(ui, "🎧 리스닝 랩 · 구간반복", "유튜브 원어민 영상을 자막 문장 단위로 반복해서 듣고, 바로 따라 말하세요(쉐도잉). 오늘 목표: 쉐도잉 5문장 통과.");
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.listening.tab, 0, "📺 유튜브 구간반복");
+            ui.selectable_value(&mut self.listening.tab, 1, "👂 듣고 대답하기");
+        });
         ui.add_space(6.0);
+        if self.listening.tab == 1 {
+            self.listen_respond_ui(ui);
+            return;
+        }
 
         let ytdlp = youtube::find_ytdlp(&self.store.settings.ytdlp_path, &self.store.dir.join("bin"));
         card(ui, |ui| {

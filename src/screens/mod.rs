@@ -1,4 +1,5 @@
 pub mod audio_check;
+pub mod coach;
 pub mod homework;
 pub mod listening;
 pub mod practice;

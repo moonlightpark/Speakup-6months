@@ -309,6 +309,43 @@ impl Claude {
         Ok(r.items.into_iter().map(|i| i.segments).collect())
     }
 
+    /// Spoken questions for "listen and respond": heard only (no text), answered out loud.
+    pub fn listen_questions(&self, level: f32, theme: &str, avoid: &[String]) -> Result<Vec<ListenQuestion>> {
+        #[derive(Deserialize)]
+        struct R {
+            questions: Vec<ListenQuestion>,
+        }
+        let schema = obj(json!({"questions": arr(obj(json!({"question": s(), "question_ko": s(), "sample_answer": s()})))}));
+        let user = format!(
+            "Listen-and-respond practice. Write exactly 6 short questions or remarks a native speaker would say to the learner \
+             in real conversation (theme: {theme}), at the learner's listening level {level:.1}/10 (CEFR {cefr}) — natural speed \
+             and wording, contractions included. The learner only HEARS each one and must answer out loud. Mix question types \
+             (yes/no, wh-, opinion, follow-up). question_ko: Korean translation (shown only after answering); \
+             sample_answer: a natural 1-2 sentence answer at the learner's level. Do not repeat: {avoid}",
+            cefr = cefr_of(level),
+            avoid = list_or_none(avoid),
+        );
+        let r: R = self.call(user, schema, "low")?;
+        Ok(r.questions)
+    }
+
+    /// Did the learner understand the heard question, and was the spoken answer a fitting reply?
+    pub fn judge_answer(&self, question: &str, transcript: &str, level: f32) -> Result<AnswerJudgement> {
+        let schema = obj(json!({
+            "understood": {"type": "boolean"}, "score": {"type": "integer"},
+            "feedback_ko": s(), "better_answer": s(),
+        }));
+        let user = format!(
+            "Listen-and-respond check. The learner (level {level:.1}/10) heard this question without seeing it: \"{question}\"\n\
+             Their spoken answer (speech recognition transcript): \"{transcript}\"\n\n\
+             understood: did the answer show they understood the question? score 0-100: how well it works as a reply \
+             (understanding and fit first, then naturalness; small grammar slips matter little). feedback_ko: 1-2 encouraging \
+             sentences in Korean — if they misunderstood, say what the question actually asked. better_answer: a natural reply \
+             a native speaker might give, keeping the learner's idea if it fits, at most one level above theirs."
+        );
+        self.call(user, schema, "low")
+    }
+
     pub fn pronunciation_coach(&self, target: &str, transcript: &str, missed: &[String]) -> Result<CoachTip> {
         let schema = obj(json!({"tip_ko": s(), "focus_words": arr(s())}));
         let user = format!(
@@ -439,6 +476,21 @@ pub struct LessonRequest {
     pub avoid_sentences: Vec<String>,
     pub avoid_questions: Vec<String>,
     pub avoid_scenarios: Vec<String>,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct ListenQuestion {
+    pub question: String,
+    pub question_ko: String,
+    pub sample_answer: String,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct AnswerJudgement {
+    pub understood: bool,
+    pub score: i32,
+    pub feedback_ko: String,
+    pub better_answer: String,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -575,6 +627,22 @@ mod tests {
 
     /// Every Claude feature against the real API (needs ANTHROPIC_API_KEY):
     /// cargo test real_api -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_api_listen_and_respond() {
+        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let qs = c.listen_questions(3.0, "Shopping and money", &[]).expect("questions");
+        for q in &qs {
+            println!("Q: {} / {} / {}", q.question, q.question_ko, q.sample_answer);
+        }
+        assert_eq!(qs.len(), 6);
+        let good = c.judge_answer("How was your weekend?", "it was good I went to the park with my family", 3.0).expect("judge");
+        let bad = c.judge_answer("How was your weekend?", "I am thirty years old", 3.0).expect("judge");
+        println!("good: {good:?}\nbad: {bad:?}");
+        assert!(good.understood && !bad.understood);
+    }
+
     #[test]
     #[ignore]
     fn real_api_lesson_chunks() {

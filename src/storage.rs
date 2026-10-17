@@ -71,7 +71,7 @@ impl Store {
     }
 
     pub fn open_at(dir: PathBuf) -> Result<Self> {
-        for sub in ["", "lessons", "models", "youtube", "bin", "library"] {
+        for sub in ["", "lessons", "models", "youtube", "bin", "library", "recordings"] {
             fs::create_dir_all(dir.join(sub))?;
         }
         Ok(Self {
@@ -115,6 +115,11 @@ impl Store {
     /// fetched again with colours.
     pub fn gloss_for(&self, text: &str) -> Vec<Chunk> {
         self.gloss.get(text.trim()).filter(|c| c.iter().any(|c| !c.role.is_empty())).cloned().unwrap_or_default()
+    }
+
+    /// Weekly speaking recordings (WAV).
+    pub fn recordings_dir(&self) -> PathBuf {
+        self.dir.join("recordings")
     }
 
     pub fn save_library(&self) {

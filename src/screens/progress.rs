@@ -21,6 +21,8 @@ impl App {
             level_chart(ui, &p.level_history, p.start_date);
         });
         ui.add_space(6.0);
+        self.coach_progress_ui(ui);
+        ui.add_space(6.0);
         let words = self.store.items.iter().filter(|i| i.is_vocab_word()).count();
         let sents = self.store.items.iter().filter(|i| i.kind == ItemKind::Sentence).count();
         let mastered = self.store.items.iter().filter(|i| i.interval_days >= 21).count();

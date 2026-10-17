@@ -91,6 +91,7 @@ pub struct App {
     pub library: LibraryState,
     pub writing: WritingState,
     pub translator: TranslatorState,
+    pub coach: crate::screens::coach::CoachState,
     pub test: Option<LevelTest>,
     pub toast: Option<(String, Instant)>,
     pub vocab_filter: String,
@@ -155,8 +156,16 @@ impl App {
     }
 
     /// Builds the app from an opened store and a voice bundle (tests pass simulated audio).
-    pub fn new_with(cc: &eframe::CreationContext<'_>, store: Store, voice: Voice) -> Self {
+    pub fn new_with(cc: &eframe::CreationContext<'_>, mut store: Store, voice: Voice) -> Self {
         crate::theme::apply(&cc.egui_ctx);
+        // The daily goal default went from 30 to 60 minutes; move learners still on the old default.
+        if !store.settings.goal_60_applied {
+            if store.settings.daily_goal_minutes == 30 {
+                store.settings.daily_goal_minutes = 60;
+            }
+            store.settings.goal_60_applied = true;
+            store.save_settings();
+        }
         crate::grammar::load(&cc.egui_ctx, &store.dir);
         let lang = language::by_code(&store.settings.target_language);
         let screen = if store.profile.placement_done { Screen::Home } else { Screen::Onboarding };
@@ -179,6 +188,7 @@ impl App {
             library: LibraryState::default(),
             writing: WritingState::default(),
             translator: TranslatorState::default(),
+            coach: Default::default(),
             test: None,
             toast: None,
             vocab_filter: String::new(),
@@ -203,6 +213,20 @@ impl App {
 
     pub fn claude(&self) -> Option<Claude> {
         self.store.settings.effective_api_key().map(|k| Claude { url: self.api_url.clone(), api_key: k, model: self.store.settings.model.clone(), lang: self.lang })
+    }
+
+    /// Korean support fades over the program (see `curriculum::support_stage`).
+    fn apply_support_stage(&mut self, ctx: &egui::Context) {
+        let stage = curriculum::support_stage(curriculum::day_number(&self.store.profile));
+        crate::widgets::set_support_stage(ctx, stage);
+        if stage >= 1 && !self.store.settings.ko_colors_faded {
+            self.store.settings.ko_colors_faded = true;
+            if self.store.settings.ko_role_colors {
+                self.store.settings.ko_role_colors = false;
+                self.toast("3개월 차부터는 직독직해와 한글 색상을 기본으로 꺼요. 필요할 때만 켜세요 (설정에서 다시 켤 수 있어요).");
+            }
+            self.store.save_settings();
+        }
     }
 
     pub fn toast(&mut self, msg: impl Into<String>) {
@@ -714,6 +738,11 @@ impl App {
                 ui.label(RichText::new("오늘의 학습 비중").size(17.0).strong());
                 ui.label(RichText::new("말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15 — 말은 들은 만큼 나와요").color(MUTED));
             });
+            ui.label(
+                RichText::new("🎯 6개월 목표: B1 — 일상·업무 주제로 10분 동안 막히지 않고 대화하기 · 하루 권장: 앱 60분 + 유튜브·팟캐스트 듣기 30분")
+                    .small()
+                    .color(MUTED),
+            );
             let t = &p.today;
             let secs = [t.speaking_seconds, t.listening_seconds, t.reading_seconds, t.writing_seconds];
             let colors = [crate::art::PINK, GOOD, crate::art::CYAN, WARN];
@@ -728,6 +757,8 @@ impl App {
             });
         });
         ui.add_space(12.0);
+
+        self.coach_reminders_ui(ui);
 
         // Today's routine
         let mut next: Option<Screen> = None;
@@ -1137,6 +1168,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.roll_day();
         self.poll_jobs();
+        self.apply_support_stage(ctx);
         crate::grammar::pump(ctx, self.claude(), self.store.settings.ko_role_colors);
         self.prefetch_lesson();
         self.track_time(ctx);

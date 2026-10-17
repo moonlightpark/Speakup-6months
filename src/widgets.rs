@@ -19,6 +19,15 @@ pub const BORDER: Color32 = Color32::from_rgb(40, 50, 76);
 pub const BG: Color32 = Color32::from_rgb(12, 16, 27);
 pub const SIDEBAR: Color32 = Color32::from_rgb(9, 12, 21);
 
+/// Korean-support stage for this window (`curriculum::support_stage`), set by the app each frame.
+pub fn support_stage(ctx: &egui::Context) -> u8 {
+    ctx.data(|d| d.get_temp::<u8>(egui::Id::new("support_stage"))).unwrap_or(0)
+}
+
+pub fn set_support_stage(ctx: &egui::Context, stage: u8) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("support_stage"), stage));
+}
+
 // ---------------------------------------------------------------- background jobs
 
 pub struct Pending<T>(Option<Receiver<Result<T>>>);
@@ -316,6 +325,9 @@ pub struct Attempt {
     pub missed: Vec<String>,
 }
 
+/// What the speaking score measures (Study.md: say so plainly).
+pub const SCORE_MEANING: &str = "점수는 음성 인식이 내 말을 얼마나 잘 알아들었는지(알아듣기 쉬운 정도)예요. 원어민처럼 들리는지는 재지 않아요.";
+
 pub const GLOSS: Color32 = Color32::from_rgb(255, 214, 120);
 
 /// Space between sentences of a passage, so each one stands apart (scaled by font size).
@@ -468,6 +480,10 @@ pub struct Drill {
     pub coach_tip: Option<Result<CoachTip, String>>,
     autoplayed: bool,
     done: bool,
+    /// The support stage has been applied to `show_gloss` (on first display).
+    staged: bool,
+    /// Months 5-6: the Korean meaning is shown only after an attempt or on request.
+    ko_shown: bool,
 }
 
 impl Drill {
@@ -523,6 +539,12 @@ impl Drill {
 
     pub fn ui(&mut self, ui: &mut Ui, voice: &mut Voice, pass: f32, claude: Option<&Claude>) -> DrillEvent {
         let mut event = DrillEvent::None;
+        let stage = support_stage(ui.ctx());
+        if !self.staged {
+            // 직독직해 is on by default only in months 1-2; later it's one click away.
+            self.staged = true;
+            self.show_gloss &= stage == 0;
+        }
         if !self.autoplayed && self.revealed {
             self.autoplayed = true;
             voice.say(&self.target);
@@ -572,7 +594,11 @@ impl Drill {
                     }
                 }
                 if !self.ko.is_empty() {
-                    crate::grammar::ko_label(ui, &self.ko, 16.0, MUTED);
+                    if stage < 2 || self.ko_shown || self.last.is_some() {
+                        crate::grammar::ko_label(ui, &self.ko, 16.0, MUTED);
+                    } else if ui.small_button("한국어 뜻 보기").on_hover_text("5~6개월 차: 영어만 보고, 한국어는 확인할 때만 봐요").clicked() {
+                        self.ko_shown = true;
+                    }
                 }
                 if !self.tip.is_empty() {
                     ui.label(RichText::new(format!("💡 {}", self.tip)).color(WARN));
@@ -640,8 +666,10 @@ impl Drill {
 
             if let Some((heard, r)) = &self.last {
                 let color = if r.score >= pass { GOOD } else if r.score >= pass - 20.0 { WARN } else { BAD };
-                ui.label(RichText::new(format!("{:.0}점", r.score)).size(30.0).strong().color(color));
+                ui.label(RichText::new(format!("{:.0}점", r.score)).size(30.0).strong().color(color))
+                    .on_hover_text(SCORE_MEANING);
                 ui.label(RichText::new(format!("들린 말: \"{heard}\"")).color(MUTED));
+                ui.label(RichText::new("점수 = 알아듣기 쉬운 정도 (원어민 발음과 비교한 점수가 아니에요)").small().color(MUTED)).on_hover_text(SCORE_MEANING);
                 if self.last_wpm > 0.0 && r.marks.len() >= 4 {
                     ui.label(RichText::new(format!("⚡ 말하기 속도 {:.0} WPM (원어민 대화 약 150)", self.last_wpm)).color(MUTED).small());
                 }

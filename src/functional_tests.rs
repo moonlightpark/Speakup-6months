@@ -105,6 +105,14 @@ fn respond(body: &Value) -> Value {
     } else if prompt.starts_with("Sentence: \"") {
         let sentence = prompt.trim_start_matches("Sentence: \"").split("\"\n").next().unwrap_or("");
         json!({"chunks": sentence.split_whitespace().map(|w| ch(w, "뜻")).collect::<Vec<_>>()})
+    } else if prompt.starts_with("Listen-and-respond practice.") {
+        let qs: Vec<Value> = (0..6)
+            .map(|i| json!({"question": format!("How was your weekend {i}?"), "question_ko": "주말 어땠어요?", "sample_answer": "It was great."}))
+            .collect();
+        json!({"questions": qs})
+    } else if prompt.starts_with("Listen-and-respond check.") {
+        let ok = prompt.contains("answer (speech recognition transcript): \"It was great");
+        json!({"understood": ok, "score": if ok { 85 } else { 20 }, "feedback_ko": if ok { "잘 이해했어요" } else { "주말이 어땠는지 물었어요" }, "better_answer": "It was great, thanks!"})
     } else if prompt.starts_with("Korean grammar roles.") {
         ko_roles_json(&prompt)
     } else if prompt.starts_with("Assess the learner") {
@@ -315,7 +323,7 @@ fn ft02_skip_placement_and_home_dashboard() {
     let mut t = launch_at(temp_dir("skip"), false, |_| {});
     t.click("테스트 없이 초급(A2)으로 시작");
     assert_eq!(t.app().screen, Screen::Home);
-    for text in ["Day 1 / 182", "1주차", "자기소개 · Introducing yourself", "📚 새 단어", "⚡ 스피드 리딩·말하기", "🎧 리스닝 · 구간반복", "초중급", "0 / 30분", "▶  오늘의 학습 시작", "Claude API 키가 없어"] {
+    for text in ["Day 1 / 182", "1주차", "자기소개 · Introducing yourself", "📚 새 단어", "⚡ 스피드 리딩·말하기", "🎧 리스닝 · 구간반복", "초중급", "0 / 60분", "▶  오늘의 학습 시작", "Claude API 키가 없어"] {
         assert!(t.has(text), "home should show {text:?}");
     }
     // Review/homework steps only appear when there is something to do.
@@ -405,6 +413,13 @@ fn ft05_reading_shows_direct_reading_and_failures_become_homework() {
     for _ in 0..3 {
         t.say("I wake up early.", 1.2);
     }
+    t.click("다음 ▶");
+    // Then each sentence once more from the Korean only.
+    assert!(t.has("영어로 말해 보세요") && t.has("나는 소년이다."));
+    t.say("I am a boy.", 1.0);
+    t.click("다음 ▶");
+    assert!(t.has("나는 일찍 일어난다."));
+    t.say("I wake up early.", 1.2);
     t.click("다음 ▶");
     assert!(t.has("어려웠던 항목"));
     let boy = t.app().store.items.iter().find(|i| i.text == "I am a boy.").unwrap().clone();
@@ -939,8 +954,8 @@ fn ft24_home_total_time_words_and_level_retest() {
         s.record_level(3.0, "test setup");
         s.profile.study_seconds = 125 * 60; // studied 2h 5m so far
     });
-    // Total time against the whole program (182 days × 30 min = 5,460 min).
-    for text in ["2시간 5분", "6개월 목표 5,460분", "2.3% 완료", "초중급 A2", "레벨 3.0 / 10", "0 / 1,000", "배운 단어 / A2 필수"] {
+    // Total time against the whole program (182 days × 60 min = 10,920 min).
+    for text in ["2시간 5분", "6개월 목표 10,920분", "1.1% 완료", "초중급 A2", "레벨 3.0 / 10", "0 / 1,000", "배운 단어 / A2 필수"] {
         assert!(t.has(text), "home should show {text:?}");
     }
     // Retest from the home screen moves straight to the assessed level.
@@ -1062,4 +1077,113 @@ fn ft27_chunks_first_high_frequency_words_and_one_expression_a_day() {
     assert!(t.has("deadline"));
     let item = t.app().store.items.iter().find(|i| i.text == "It depends on").cloned().expect("chunk saved for review");
     assert!(item.is_chunk() && !item.is_vocab_word() && item.kind == ItemKind::Sentence);
+}
+
+#[test]
+fn ft28_listen_and_respond() {
+    let mut t = launch("listenrespond");
+    t.nav("🎧  리스닝 랩");
+    t.click("👂 듣고 대답하기");
+    t.click("▶ 질문 6개 받기");
+    t.wait("questions", |a| a.coach.listen.questions.len() == 6);
+    // The question is only heard: no text until answering.
+    assert!(t.has("🙈 질문 글은 대답한 뒤에 보여요") && !t.has("How was your weekend 0?"));
+    t.say("It was great, I went hiking.", 2.0);
+    t.wait("judgement", |a| a.coach.listen.result.is_some());
+    assert!(t.has("✅ 질문을 이해했어요") && t.has("How was your weekend 0?") && t.has("It was great, thanks!"));
+    assert_eq!(t.app().store.profile.today.listening_passes, 1, "an understood answer counts toward listening");
+    t.click("다음 ▶");
+    t.say("I like pizza.", 1.0);
+    t.wait("judgement", |a| a.coach.listen.result.is_some());
+    assert!(t.has("❌ 질문을 다르게 이해했어요") && t.has("주말이 어땠는지 물었어요"));
+    assert_eq!(t.app().store.profile.today.listening_passes, 1);
+}
+
+#[test]
+fn ft29_four_three_two_speaking() {
+    let mut t = launch("ftt");
+    t.nav("⚡  스피드 트레이닝");
+    t.click("⏱ 4/3/2 말하기");
+    t.click("▶ 시작하기");
+    t.steps(3);
+    assert!(t.has("라운드 1/3 · 4분"));
+    t.say("I usually get up at seven and go to work by bus", 20.0);
+    assert!(t.has("라운드 2/3 · 3분"));
+    t.say("I usually get up at seven and go to work by bus", 12.0);
+    t.say("I usually get up at seven and go to work by bus", 8.0);
+    let r = &t.app().coach.ftt.results;
+    assert_eq!(r.len(), 3);
+    assert!(r[2].wpm > r[0].wpm, "same words in less time → faster");
+    assert!(t.has("말하기 속도"));
+    assert_eq!(t.app().store.profile.today.speed_rounds, 3);
+    assert!(t.app().step_done("speed"));
+}
+
+#[test]
+fn ft30_weekly_recording_tutor_and_mock_tests() {
+    let mut t = launch("weekly");
+    // Home lists this week's to-dos outside the routine.
+    assert!(t.has("이번 주 할 일") && t.has("📼 이번 주 1분 녹음을 아직 안 했어요"));
+    assert!(!t.has("🎓 이번 주 원어민 화상 수업 (주 1~2회 권장)"), "tutor lessons are suggested from month 3");
+    t.nav("📈  레벨 · 평가");
+    assert!(t.has("📼 주간 녹음 비교") && t.has("Tell me about yourself and what you did this week."));
+    t.say("Hi, I'm Minji. This week I studied English every day.", 30.0);
+    let rec = t.app().store.profile.weekly_recordings[0].clone();
+    assert_eq!((rec.week, rec.words), (1, 10));
+    let wav = t.dir.join("recordings").join(&rec.file);
+    let (samples, rate) = crate::audio::decode_segment(&wav, 0.0, 75.0).expect("recording saved as WAV");
+    assert_eq!(rate, 16_000);
+    assert!(samples.len() as f32 / 16_000.0 > 29.0);
+    // Re-recording in the same week replaces it.
+    t.say("This week I went to work and studied.", 20.0);
+    assert_eq!(t.app().store.profile.weekly_recordings.len(), 1);
+    t.click("✅ 오늘 수업했어요");
+    assert_eq!(t.app().store.profile.tutor_sessions, vec![today()]);
+    t.app_mut().coach.test_result = "IM2".into();
+    t.click("기록");
+    assert_eq!(t.app().store.profile.external_tests[0].result, "IM2");
+    assert!(t.has("다음 모의고사까지 14일"));
+    t.nav("🏠  홈");
+    assert!(!t.has("이번 주 할 일"), "nothing left this week");
+}
+
+#[test]
+fn ft31_korean_support_fades_over_the_months() {
+    // Month 4 (Day 100): 직독직해 off by default, Korean colours switched off once.
+    let mut t = launch_at(temp_dir("stage1"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today() - chrono::Duration::days(99);
+    });
+    t.steps(2);
+    assert!(!t.app().store.settings.ko_role_colors && t.app().store.settings.ko_colors_faded);
+    t.nav("📖  문장 읽기");
+    t.wait("lesson", |a| a.lesson.is_some());
+    t.click("▶ 시작하기");
+    assert!(!t.has_exact("/"), "no 직독직해 until asked");
+    assert!(t.has("나는 소년이다."), "Korean meaning still shown in months 3-4");
+    t.click("📖 직독직해");
+    assert!(t.has_exact("/"));
+    // Month 6 (Day 150): English only; Korean on request or after an attempt.
+    let mut t = launch_at(temp_dir("stage2"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today() - chrono::Duration::days(149);
+    });
+    t.nav("📖  문장 읽기");
+    t.wait("lesson", |a| a.lesson.is_some());
+    assert!(!t.has("나는 소년이다."), "list shows English only");
+    t.click("▶ 시작하기");
+    assert!(!t.has("나는 소년이다.") && t.has("한국어 뜻 보기"));
+    t.say("I am a boy.", 1.0);
+    assert!(t.has("나는 소년이다."), "Korean shown when checking the answer");
+    assert!(t.has("점수 = 알아듣기 쉬운 정도 (원어민 발음과 비교한 점수가 아니에요)"));
+}
+
+#[test]
+fn ft32_old_30_minute_goal_moves_to_60() {
+    let dir = temp_dir("goal60");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("settings.json"), r#"{"daily_goal_minutes": 30}"#).unwrap();
+    let t = launch_at(dir.clone(), true, |s| s.profile.placement_done = true);
+    assert_eq!(t.app().store.settings.daily_goal_minutes, 60);
+    assert!(t.has("0 / 60분") && t.has("6개월 목표: B1"));
 }

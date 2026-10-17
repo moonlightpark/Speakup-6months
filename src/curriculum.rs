@@ -75,6 +75,18 @@ pub fn day_number(p: &Profile) -> i64 {
     ((today() - p.start_date).num_days() + 1).clamp(1, TOTAL_DAYS)
 }
 
+/// How much Korean support the screens give, fading over the program so the learner stops
+/// translating in their head: 0 = months 1-2 (직독직해 and Korean always shown),
+/// 1 = months 3-4 (off by default, on demand), 2 = months 5-6 (English only; Korean when
+/// checking the answer).
+pub fn support_stage(day: i64) -> u8 {
+    match day {
+        ..=60 => 0,
+        61..=120 => 1,
+        _ => 2,
+    }
+}
+
 pub fn week_number(p: &Profile) -> u32 {
     (((day_number(p) - 1) / 7) as u32 + 1).min(TOTAL_WEEKS)
 }
