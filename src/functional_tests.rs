@@ -70,10 +70,18 @@ fn lesson_json() -> Value {
     })
 }
 
+/// A lesson with chunks and the day's expression (phrases come first on the words screen).
+fn lesson_with_chunks_json() -> Value {
+    let mut l = lesson_json();
+    l["phrases"] = json!([{"word": "It depends on", "meaning_ko": "~에 따라 달라요", "example": "It depends on the weather.", "example_ko": "날씨에 따라 달라요."}]);
+    l["expressions"] = json!([{"word": "my bad", "meaning_ko": "내 실수야", "example": "Oops, my bad.", "example_ko": "앗, 미안."}]);
+    l
+}
+
 fn respond(body: &Value) -> Value {
     let prompt = body["messages"][0]["content"].as_str().unwrap_or("").to_string();
     if prompt.starts_with("Create today's lesson") {
-        lesson_json()
+        if prompt.contains("chunks-test") { lesson_with_chunks_json() } else { lesson_json() }
     } else if prompt.contains("answered this question out loud") {
         json!({"fluency": 70, "grammar": 60, "vocabulary": 75, "overall": 68, "feedback_ko": "좋아요!",
             "corrections": [{"original": "I working designer", "corrected": "I work as a designer.", "explanation_ko": "동사 work + as"}],
@@ -473,6 +481,11 @@ fn ft07_review_recall_with_hint_then_repeat() {
     assert!(t.has_exact("🔁 복습 (배운 단어·문장)") && t.has_exact("2개"));
     t.nav("🔁  복습");
     t.click_contains("복습 시작");
+    // Sentences and chunks come before single words.
+    assert!(t.has("영어로 말해 보세요") && t.has("만나서 반가워요."));
+    t.say("Nice to meet you.", 1.0);
+    t.say("Nice to meet you.", 1.0);
+    t.click("다음 ▶");
     // Recall: Korean shown, English hidden.
     assert!(t.has("영어로 말해 보세요") && t.has("일정"));
     assert!(!t.has_exact("schedule"));
@@ -481,9 +494,6 @@ fn ft07_review_recall_with_hint_then_repeat() {
     t.say("I think it's schedule", 1.0); // said the word → recall success
     assert!(t.has("100점"));
     t.say("schedule", 0.8);
-    t.click("다음 ▶");
-    t.say("Nice to meet you.", 1.0);
-    t.say("Nice to meet you.", 1.0);
     t.click("다음 ▶");
     assert!(t.app().step_done("review"));
     let s = t.app().store.items.iter().find(|i| i.text == "schedule").unwrap();
@@ -1021,4 +1031,35 @@ fn ft26_korean_colours_can_be_switched_off() {
     t.click("🔁 한→영 작문");
     let cache = t.dir.join("ko_roles.json");
     t.wait("korean roles", |_| cache.exists());
+}
+
+#[test]
+fn ft27_chunks_first_high_frequency_words_and_one_expression_a_day() {
+    let mut t = launch_at(temp_dir("chunks"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        // A known word that makes the mock lesson include chunks; due later so it isn't reviewed.
+        s.items.push(StudyItem { id: "w:chunks-test".into(), kind: ItemKind::Word, text: "chunks-test".into(), due: today() + chrono::Duration::days(9), ..Default::default() });
+    });
+    t.nav("📚  새 단어");
+    t.wait("lesson", |a| a.lesson.is_some());
+    let req = t.mock.requests.lock().unwrap().iter().find(|r| r["messages"][0]["content"].as_str().unwrap_or("").starts_with("Create today's lesson")).cloned().unwrap();
+    let prompt = req["messages"][0]["content"].as_str().unwrap();
+    assert!(prompt.contains("phrases: exactly 4 high-frequency spoken chunks"));
+    assert!(prompt.contains("from the 2,000 most frequent words"), "beginners get the top-2,000 band");
+    assert!(prompt.contains("expressions: exactly 1 item"), "idioms/slang ≈ 5%: one a day");
+    assert!(req["output_config"]["format"]["schema"]["properties"]["phrases"].is_object());
+    assert!(t.has("🔗 It depends on"));
+    // The chunk is drilled first, then its example, then the words.
+    t.click("▶ 시작하기");
+    assert!(t.has("It depends on"));
+    for _ in 0..3 {
+        t.say("It depends on", 1.0);
+    }
+    t.click("다음 ▶");
+    t.say("It depends on the weather.", 1.5);
+    t.click("다음 ▶");
+    assert!(t.has("deadline"));
+    let item = t.app().store.items.iter().find(|i| i.text == "It depends on").cloned().expect("chunk saved for review");
+    assert!(item.is_chunk() && !item.is_vocab_word() && item.kind == ItemKind::Sentence);
 }

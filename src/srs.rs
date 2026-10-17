@@ -48,18 +48,28 @@ pub fn review(item: &mut StudyItem, score: f32, pass: f32) {
     item.due = today() + Duration::days(interval.max(1) as i64);
 }
 
-/// Due items first (most overdue first), then weak items that are not yet due.
+/// Most single words a review session holds when chunks/sentences are waiting: review is
+/// centred on whole expressions, which carry over to speaking much faster than single words.
+pub const MAX_WORD_SHARE: f32 = 0.4;
+
+/// Due items first (most overdue first), then weak items that are not yet due. Chunks and
+/// sentences go first; single words fill at most `MAX_WORD_SHARE` of the session unless there
+/// is nothing else to review.
 pub fn review_queue(items: &[StudyItem], limit: usize) -> Vec<String> {
     let t = today();
     let mut due: Vec<&StudyItem> = items.iter().filter(|i| i.due <= t).collect();
     due.sort_by_key(|i| (i.due, std::cmp::Reverse(i.lapses)));
-    let mut ids: Vec<String> = due.iter().map(|i| i.id.clone()).collect();
+    let mut ordered: Vec<&StudyItem> = due;
     for i in items.iter().filter(|i| i.weak && i.due > t) {
-        if !ids.contains(&i.id) {
-            ids.push(i.id.clone());
+        if !ordered.iter().any(|o| o.id == i.id) {
+            ordered.push(i);
         }
     }
-    ids.truncate(limit);
+    let (words, others): (Vec<&StudyItem>, Vec<&StudyItem>) = ordered.into_iter().partition(|i| i.kind == ItemKind::Word);
+    let word_cap = ((limit as f32 * MAX_WORD_SHARE).floor() as usize).max(limit.saturating_sub(others.len()));
+    let mut ids: Vec<String> = others.iter().map(|i| i.id.clone()).collect();
+    ids.truncate(limit.saturating_sub(words.len().min(word_cap)));
+    ids.extend(words.iter().take(word_cap.min(limit - ids.len())).map(|i| i.id.clone()));
     ids
 }
 
@@ -135,6 +145,21 @@ mod tests {
         assert!(i.weak);
         review(&mut i, 85.0, 80.0);
         assert!(!i.weak);
+    }
+
+    #[test]
+    fn review_centres_on_chunks_and_sentences() {
+        let mk = |kind, n: usize| StudyItem { id: format!("{kind:?}{n}"), kind, text: format!("t{n}"), due: today() - Duration::days(n as i64), ..Default::default() };
+        let words: Vec<StudyItem> = (0..10).map(|n| mk(ItemKind::Word, n)).collect();
+        let chunks: Vec<StudyItem> = (0..8).map(|n| mk(ItemKind::Sentence, n)).collect();
+        let all: Vec<StudyItem> = words.iter().chain(&chunks).cloned().collect();
+        let q = review_queue(&all, 10);
+        let n_words = q.iter().filter(|id| id.starts_with("Word")).count();
+        assert_eq!((q.len(), n_words), (10, 4), "words fill at most 40%");
+        assert!(q[0].starts_with("Sentence"), "chunks and sentences come first");
+        // With few chunks waiting, words fill the rest; with only words, all words.
+        assert_eq!(review_queue(&[words.clone(), chunks[..2].to_vec()].concat(), 10).len(), 10);
+        assert_eq!(review_queue(&words[..3], 10).len(), 3);
     }
 
     #[test]

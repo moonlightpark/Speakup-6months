@@ -61,7 +61,76 @@ pub const RECENT: &[Expr] = &[
     ("Stan", "열성 팬이다, 덕질하다", "I stan this band so hard.", "나 이 밴드 완전 덕질해."),
 ];
 
-/// One classic and one recent expression the learner hasn't saved yet.
-pub fn pick_for_today(knows: impl Fn(&str) -> bool) -> Vec<Expr> {
-    [CLASSIC, RECENT].iter().filter_map(|bank| bank.iter().find(|e| !knows(e.0)).copied()).collect()
+/// High-frequency spoken chunks (sentence frames) — learned whole, they make speaking fluent
+/// much faster than single words. No "…": the example sentence shows how each one continues.
+pub const CHUNKS: &[Expr] = &[
+    ("I was wondering if", "~해 주실 수 있을까 해서요 (정중한 부탁)", "I was wondering if you could help me with this.", "이것 좀 도와주실 수 있을까 해서요."),
+    ("It depends on", "~에 따라 달라요", "It depends on the weather.", "날씨에 따라 달라요."),
+    ("I'm thinking about", "~할까 생각 중이에요", "I'm thinking about changing jobs.", "이직할까 생각 중이에요."),
+    ("Do you mind if I", "제가 ~해도 될까요?", "Do you mind if I open the window?", "창문 좀 열어도 될까요?"),
+    ("I'm not sure if", "~인지 잘 모르겠어요", "I'm not sure if he's coming.", "그가 올지 잘 모르겠어요."),
+    ("How about", "~하는 건 어때요?", "How about grabbing lunch together?", "같이 점심 먹는 건 어때요?"),
+    ("I'm looking forward to", "~를 기대하고 있어요", "I'm looking forward to the weekend.", "주말이 기다려져요."),
+    ("I used to", "예전에는 ~했었어요", "I used to live in Busan.", "예전에 부산에 살았어요."),
+    ("I'm about to", "막 ~하려던 참이에요", "I'm about to leave the office.", "막 퇴근하려던 참이에요."),
+    ("Would you like to", "~하실래요?", "Would you like to join us for dinner?", "저녁 같이 하실래요?"),
+    ("I feel like", "~하고 싶어요 / ~인 것 같아요", "I feel like having pizza tonight.", "오늘 밤엔 피자가 당겨요."),
+    ("The thing is", "문제는요, 실은요", "The thing is, I don't have enough time.", "문제는 시간이 부족하다는 거예요."),
+    ("What I mean is", "제 말은요", "What I mean is, we need more people.", "제 말은 사람이 더 필요하다는 거예요."),
+    ("It's not that", "~라는 게 아니라", "It's not that I don't like it. It's just expensive.", "싫다는 게 아니라 그냥 비싸서요."),
+    ("I'm used to", "~에 익숙해요", "I'm used to waking up early.", "일찍 일어나는 게 익숙해요."),
+    ("I can't wait to", "빨리 ~하고 싶어요", "I can't wait to see you.", "빨리 보고 싶어요."),
+    ("Let me know if", "~하면 알려 주세요", "Let me know if you need anything.", "필요한 거 있으면 알려 주세요."),
+    ("Is it okay if", "~해도 괜찮을까요?", "Is it okay if I leave a little early?", "조금 일찍 가도 괜찮을까요?"),
+    ("I'd rather", "차라리 ~할래요", "I'd rather stay home tonight.", "오늘 밤은 차라리 집에 있을래요."),
+    ("You should", "~하는 게 좋겠어요", "You should try the pasta here.", "여기 파스타 꼭 먹어 봐요."),
+    ("I'm trying to", "~하려고 노력 중이에요", "I'm trying to eat healthier.", "건강하게 먹으려고 노력 중이에요."),
+    ("It's hard to", "~하기 어려워요", "It's hard to say no to my boss.", "상사한테 거절하기 어려워요."),
+    ("Thanks for", "~해 줘서 고마워요", "Thanks for waiting.", "기다려 줘서 고마워요."),
+    ("Sorry for", "~해서 미안해요", "Sorry for the late reply.", "답장이 늦어서 미안해요."),
+    ("What do you think about", "~에 대해 어떻게 생각해요?", "What do you think about the new plan?", "새 계획 어떻게 생각해요?"),
+    ("Have you ever", "~해 본 적 있어요?", "Have you ever been to Japan?", "일본에 가 본 적 있어요?"),
+    ("I've been meaning to", "진작 ~하려고 했어요", "I've been meaning to call you.", "진작 전화하려고 했어요."),
+    ("It turns out", "알고 보니", "It turns out the store was closed.", "알고 보니 가게가 문을 닫았더라고요."),
+    ("As far as I know", "제가 알기로는", "As far as I know, the meeting is at three.", "제가 알기로는 회의가 3시예요."),
+    ("To be honest", "솔직히 말하면", "To be honest, I didn't like the movie.", "솔직히 그 영화 별로였어요."),
+    ("I ended up", "결국 ~하게 됐어요", "I ended up staying until midnight.", "결국 자정까지 있게 됐어요."),
+    ("There's no way", "~할 리가 없어요", "There's no way we can finish by Friday.", "금요일까지 끝낼 수 있을 리가 없어요."),
+    ("I'm in the middle of", "~하는 중이에요", "I'm in the middle of a meeting.", "지금 회의 중이에요."),
+    ("Make sure you", "꼭 ~하세요", "Make sure you lock the door.", "문 꼭 잠그세요."),
+    ("Would it be possible to", "~하는 게 가능할까요?", "Would it be possible to change my seat?", "자리를 바꿀 수 있을까요?"),
+    ("I just wanted to", "그냥 ~하고 싶었어요", "I just wanted to say thank you.", "그냥 고맙다고 말하고 싶었어요."),
+    ("It's worth", "~할 가치가 있어요", "It's worth the wait.", "기다릴 만해요."),
+    ("No matter what", "무슨 일이 있어도", "No matter what happens, I'll be there.", "무슨 일이 있어도 갈게요."),
+    ("I'm supposed to", "~하기로 되어 있어요", "I'm supposed to meet him at six.", "6시에 그를 만나기로 했어요."),
+    ("What if", "~하면 어쩌죠? / ~하면 어때요?", "What if it rains tomorrow?", "내일 비 오면 어쩌죠?"),
+];
+
+/// Today's expression: one a day keeps idioms and slang at about 5% of new material.
+/// Classic expressions and recent slang take turns (odd days: recent slang).
+pub fn pick_for_today(day: i64, knows: impl Fn(&str) -> bool) -> Vec<Expr> {
+    let banks = if day % 2 == 1 { [RECENT, CLASSIC] } else { [CLASSIC, RECENT] };
+    banks.iter().flat_map(|bank| bank.iter()).find(|e| !knows(e.0)).copied().into_iter().collect()
+}
+
+/// The next `n` high-frequency chunks the learner hasn't saved yet.
+pub fn pick_chunks(n: usize, knows: impl Fn(&str) -> bool) -> Vec<Expr> {
+    CHUNKS.iter().filter(|e| !knows(e.0)).take(n).copied().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_expression_a_day_alternating() {
+        let none = |_: &str| false;
+        assert_eq!(pick_for_today(2, none), vec![CLASSIC[0]]);
+        assert_eq!(pick_for_today(3, none), vec![RECENT[0]]);
+        // Falls back to the other bank once one is used up.
+        let knows_recent = |t: &str| RECENT.iter().any(|e| e.0 == t);
+        assert_eq!(pick_for_today(3, knows_recent), vec![CLASSIC[0]]);
+        assert_eq!(pick_chunks(4, |t| t == CHUNKS[0].0)[0], CHUNKS[1]);
+        assert!(CHUNKS.iter().all(|c| !c.0.contains('…') && c.2.contains(c.0)), "examples use their chunk");
+    }
 }

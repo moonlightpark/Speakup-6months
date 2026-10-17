@@ -198,6 +198,9 @@ fn phase_index(week: u32) -> usize {
     }
 }
 
+/// High-frequency spoken chunks per lesson.
+pub const CHUNKS_PER_DAY: usize = 4;
+
 /// Builds an offline lesson for the given week, skipping words/sentences the learner already has.
 pub fn builtin_lesson(week: u32, day: i64, known: &[StudyItem], past: &[Lesson], n_words: usize, n_sent: usize) -> Lesson {
     let p = phase_index(week);
@@ -256,7 +259,11 @@ pub fn builtin_lesson(week: u32, day: i64, known: &[StudyItem], past: &[Lesson],
             search_queries: vec![wk.listening.into()],
             focus_ko: "자막 한 줄씩 듣고 바로 따라 말하세요(쉐도잉).".into(),
         },
-        expressions: crate::expressions::pick_for_today(knows)
+        expressions: crate::expressions::pick_for_today(day, knows)
+            .into_iter()
+            .map(|e| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() })
+            .collect(),
+        phrases: crate::expressions::pick_chunks(CHUNKS_PER_DAY, knows)
             .into_iter()
             .map(|e| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() })
             .collect(),

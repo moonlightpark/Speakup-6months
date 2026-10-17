@@ -187,15 +187,55 @@ impl App {
             return;
         }
         let lesson = self.lesson.clone().unwrap_or_default();
+        // Chunks first: whole spoken phrases pay off in conversation sooner than single words.
         let rows: Vec<(String, String)> = lesson
-            .words
+            .phrases
             .iter()
-            .map(|w| (w.word.clone(), format!("{} — {}", w.meaning_ko, w.example)))
+            .map(|w| (format!("🔗 {}", w.word), format!("{} — {}", w.meaning_ko, w.example)))
+            .chain(lesson.words.iter().map(|w| (w.word.clone(), format!("{} — {}", w.meaning_ko, w.example))))
             .chain(lesson.expressions.iter().map(|w| (format!("💬 {}", w.word), format!("{} — {}", w.meaning_ko, w.example))))
             .collect();
         let reps = self.store.settings.reps_new;
-        if self.intro_card(ui, "📚 오늘의 새 단어", &format!("듣고 → 소리 내어 {reps}번 → 예문까지 말하면 단어장에 저장되고 복습 일정이 잡힙니다."), &rows, "words") {
+        if self.intro_card(
+            ui,
+            "📚 오늘의 덩어리 표현 · 새 단어",
+            &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 예문까지 말하면 저장되고 복습 일정이 잡힙니다."),
+            &rows,
+            "words",
+        ) {
             let mut specs = Vec::new();
+            for w in &lesson.phrases {
+                specs.push(Spec {
+                    item_id: None,
+                    new_item: Some(StudyItem {
+                        kind: ItemKind::Sentence,
+                        text: w.word.clone(),
+                        meaning_ko: w.meaning_ko.clone(),
+                        example: w.example.clone(),
+                        example_ko: w.example_ko.clone(),
+                        category: "phrase".into(),
+                        ..Default::default()
+                    }),
+                    target: w.word.clone(),
+                    ko: w.meaning_ko.clone(),
+                    tip: "🔗 덩어리 표현 — 한 단어처럼 이어서 말하세요".into(),
+                    reps,
+                    recall: false,
+                    is_word: false,
+                    chunks: Vec::new(),
+                });
+                specs.push(Spec {
+                    item_id: None,
+                    new_item: None,
+                    target: w.example.clone(),
+                    ko: w.example_ko.clone(),
+                    tip: format!("예문으로 '{}' 익히기", w.word),
+                    reps: 1,
+                    recall: false,
+                    is_word: false,
+                    chunks: self.store.gloss_for(&w.example),
+                });
+            }
             let slang: Vec<&LessonWord> = lesson.expressions.iter().collect();
             // Names that slip into a lesson ("Seoul") are not drilled as vocabulary.
             for (w, is_expr) in lesson.words.iter().filter(|w| !is_proper_noun(&w.word, &w.meaning_ko)).map(|w| (w, false)).chain(slang.into_iter().map(|w| (w, true))) {

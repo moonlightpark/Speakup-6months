@@ -428,6 +428,7 @@ impl App {
                     grammar: wk.grammar.to_string(),
                     level: p.level,
                     known: self.store.items.iter().filter(|i| i.kind == ItemKind::Word).map(|i| i.text.clone()).collect(),
+                    known_phrases: self.store.items.iter().filter(|i| i.is_chunk()).map(|i| i.text.clone()).collect(),
                     weak: self.store.items.iter().filter(|i| i.weak).take(8).map(|i| i.text.clone()).collect(),
                     n_words,
                     n_sentences: phase.sentences,
@@ -677,7 +678,8 @@ impl App {
         let total_mins = p.study_seconds / 60;
         let program_mins = TOTAL_DAYS as u64 * goal;
         let words = self.store.items.iter().filter(|i| i.is_vocab_word()).count();
-        let sentences = self.store.items.iter().filter(|i| i.kind == ItemKind::Sentence).count();
+        let chunks = self.store.items.iter().filter(|i| i.is_chunk()).count();
+        let sentences = self.store.items.iter().filter(|i| i.kind == ItemKind::Sentence).count() - chunks;
         let level_words = level_words(p.level);
         let mut retest = false;
         ui.horizontal_top(|ui| {
@@ -697,7 +699,7 @@ impl App {
             });
             stat_card(ui, w, &format!("{} / {}", words, thousands(level_words as u64)), &format!("배운 단어 / {} 필수", cefr_of(p.level)), Color32::from_rgb(190, 140, 255), |ui| {
                 ui.add(egui::ProgressBar::new((words as f32 / level_words as f32).min(1.0)).desired_height(8.0).corner_radius(4.0).fill(Color32::from_rgb(190, 140, 255)));
-                ui.label(RichText::new(format!("문장 {sentences}개")).small().color(MUTED));
+                ui.label(RichText::new(format!("덩어리 표현 {chunks}개 · 문장 {sentences}개")).small().color(MUTED));
             });
         });
         if retest {
@@ -945,7 +947,7 @@ impl App {
         for s in &lesson.sentences {
             self.voice.speaker.prefetch(&s.text, r);
         }
-        for e in &lesson.expressions {
+        for e in lesson.expressions.iter().chain(&lesson.phrases) {
             self.voice.speaker.prefetch(&e.word, r);
             self.voice.speaker.prefetch(&e.example, r);
         }

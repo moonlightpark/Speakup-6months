@@ -276,6 +276,11 @@ impl StudyItem {
     pub fn is_vocab_word(&self) -> bool {
         self.kind == ItemKind::Word && !is_proper_noun(&self.text, &self.meaning_ko)
     }
+
+    /// A high-frequency spoken chunk ("It depends on"), saved as a sentence-type item.
+    pub fn is_chunk(&self) -> bool {
+        self.category == "phrase"
+    }
 }
 
 pub fn cefr_of(level: f32) -> &'static str {
@@ -297,7 +302,7 @@ pub struct StudyItem {
     pub meaning_ko: String,
     pub example: String,
     pub example_ko: String,
-    /// vocab | reading | self-expression | business | youtube | homework
+    /// vocab | phrase | expression | reading | self-expression | business | youtube | homework
     pub category: String,
     pub added: NaiveDate,
     pub due: NaiveDate,
@@ -459,9 +464,12 @@ pub struct Lesson {
     pub self_expression: SelfExpression,
     pub business: BusinessScenario,
     pub listening: ListeningPlan,
-    /// Everyday native expressions / slang of the day (one classic, one recent).
+    /// The day's native expression or slang (one a day, classic and recent in turn).
     #[serde(default)]
     pub expressions: Vec<LessonWord>,
+    /// High-frequency spoken chunks ("I was wondering if", "It depends on") — learned whole.
+    #[serde(default)]
+    pub phrases: Vec<LessonWord>,
 }
 
 /// Where the learner is in a library book.

@@ -134,13 +134,27 @@ impl Claude {
             })),
             "listening": obj(json!({"search_queries": arr(s()), "focus_ko": s()})),
             "expressions": arr(obj(json!({"word": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
+            "phrases": arr(obj(json!({"word": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
         }));
+        // Idioms/slang stay at ~5% of new material: one a day, classic and recent in turn.
+        let expression_kind = if req.day % 2 == 1 {
+            "one recent slang term (2010s-2020s social media, e.g. 'no cap', 'low-key')"
+        } else {
+            "one classic everyday expression (still common, may be from past decades, e.g. 'my bad', 'rain check')"
+        };
+        // The ~2,000 most frequent words cover 80-90% of everyday conversation; go beyond them after B1.
+        let frequency_band = if req.level < 5.0 {
+            "from the 2,000 most frequent words of everyday spoken English"
+        } else {
+            "from the next frequency band (roughly the 2,000th-5,000th most frequent words of spoken English)"
+        };
         let user = format!(
             "Create today's lesson.\n\
              Program day {day} of 182 (week {week}). Phase: {phase}.\n\
              Weekly theme: {theme}. Business focus: {business}. Background grammar (never teach it explicitly): {grammar}.\n\
              Learner level: {level:.1}/10 (CEFR {cefr}).\n\
              Words the learner already knows (do NOT repeat them): {known}\n\
+             Chunks the learner already knows (do NOT repeat them): {known_phrases}\n\
              Items the learner keeps getting wrong (reuse some of them inside the new example sentences so they get extra practice): {weak}\n\
              Already studied on earlier days — every part of today's lesson must be NEW, so do not repeat or closely paraphrase any of these:\n\
              - sentences: {avoid_s}\n\
@@ -149,13 +163,16 @@ impl Claude {
              Style: everyday English exactly as native speakers really say it — contractions, phrasal verbs, fillers, \
              natural reactions and idioms. Do not write textbook or grammar-drill sentences; the goal is listening and speaking, not grammar.\n\
              Requirements:\n\
-             - words: exactly {nw} new, high-frequency spoken words or short phrases for the theme, each with a short natural example sentence. \
+             - phrases: exactly {np} high-frequency spoken chunks / sentence frames that natives use all the time and the learner can reuse in many \
+             situations (e.g. 'I was wondering if', 'It depends on', 'I'm thinking about', 'The thing is'), fitting the theme where possible. \
+             Write the chunk itself without '...' (the example shows how it continues); meaning_ko: natural Korean meaning and when to use it; \
+             example: a short everyday sentence that contains the chunk exactly.\n\
+             - words: exactly {nw} new high-frequency words {frequency_band}, for the theme, each with a short natural example sentence. \
              Write them in lower case, and never use names of places, people or brands as words.\n\
              - sentences: exactly {ns} natural spoken sentences for reading aloud / shadowing, at or slightly above the learner's level; tip_ko is one pronunciation or linking tip. {chunk_rule}\n\
              - self_expression: one open question on the theme that makes the learner talk about their own life for 30-60 seconds; 4 useful_phrases; a model_answer of 3-5 sentences at the learner's level.\n\
              - business: a realistic role-play for the business focus; ai_role is who you will play; opening_line is your first line; 4 key_phrases the learner can use.\n\
-             - expressions: exactly 2 everyday native expressions or slang the learner hasn't seen: one classic expression \
-             (still common, may be from past decades, e.g. 'my bad', 'rain check') and one recent slang term (2010s-2020s social media, e.g. 'no cap', 'low-key'). \
+             - expressions: exactly 1 item the learner hasn't seen: {expression_kind}. \
              meaning_ko: natural Korean meaning plus when/where it's used (e.g. '(요즘 유행어) …', '(90년대) …'); example: a short real-life line using it.\n\
              - listening: 2-3 YouTube search queries that find real native-speaker videos (channels such as BBC Learning English, VOA Learning English, TED, Rachel's English) on this theme at a suitable level; focus_ko says what to listen for.",
             day = req.day,
@@ -167,6 +184,8 @@ impl Claude {
             level = req.level,
             cefr = cefr_of(req.level),
             known = if req.known.is_empty() { "(none yet)".into() } else { req.known.join(", ") },
+            known_phrases = list_or_none(&req.known_phrases),
+            np = crate::content::CHUNKS_PER_DAY,
             weak = if req.weak.is_empty() { "(none)".into() } else { req.weak.join(" | ") },
             nw = req.n_words,
             ns = req.n_sentences,
@@ -411,6 +430,8 @@ pub struct LessonRequest {
     pub grammar: String,
     pub level: f32,
     pub known: Vec<String>,
+    /// Chunks already saved (not to be repeated).
+    pub known_phrases: Vec<String>,
     pub weak: Vec<String>,
     pub n_words: u32,
     pub n_sentences: u32,
@@ -556,6 +577,28 @@ mod tests {
     /// cargo test real_api -- --ignored --nocapture
     #[test]
     #[ignore]
+    fn real_api_lesson_chunks() {
+        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let req = LessonRequest {
+            day: 4, week: 1, phase: "1단계".into(), theme: "Shopping and money".into(), business: "Prices".into(), grammar: "how much/many".into(),
+            level: 3.0, known: vec![], known_phrases: vec!["It depends on".into()], weak: vec![], n_words: 8, n_sentences: 5,
+            avoid_sentences: vec![], avoid_questions: vec![], avoid_scenarios: vec![],
+        };
+        let l = c.generate_lesson(&req).expect("lesson");
+        for p in &l.phrases {
+            println!("chunk: {} = {} | {}", p.word, p.meaning_ko, p.example);
+            assert!(p.example.to_lowercase().contains(&p.word.to_lowercase()), "example uses the chunk");
+        }
+        println!("words: {:?}", l.words.iter().map(|w| &w.word).collect::<Vec<_>>());
+        println!("expressions: {:?}", l.expressions.iter().map(|w| &w.word).collect::<Vec<_>>());
+        assert_eq!(l.phrases.len(), 4);
+        assert_eq!(l.expressions.len(), 1);
+        assert!(!l.phrases.iter().any(|p| p.word == "It depends on"));
+    }
+
+    #[test]
+    #[ignore]
     fn real_api_grammar_roles() {
         let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
         let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
@@ -580,7 +623,7 @@ mod tests {
         let req = LessonRequest {
             day: 3, week: 1, phase: "1단계".into(), theme: "Introducing yourself".into(),
             business: "Introducing yourself at work".into(), grammar: "be verbs".into(), level: 3.0,
-            known: vec!["introduce".into()], weak: vec!["Nice to meet you.".into()], n_words: 4, n_sentences: 3,
+            known: vec!["introduce".into()], known_phrases: vec!["It depends on".into()], weak: vec!["Nice to meet you.".into()], n_words: 4, n_sentences: 3,
             avoid_sentences: vec![], avoid_questions: vec!["Tell me about your typical day.".into()], avoid_scenarios: vec![],
         };
         let l = c.generate_lesson(&req).expect("lesson");
