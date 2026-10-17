@@ -193,7 +193,8 @@ impl App {
         if self.intro_card(ui, "📚 오늘의 새 단어", &format!("듣고 → 소리 내어 {reps}번 → 예문까지 말하면 단어장에 저장되고 복습 일정이 잡힙니다."), &rows, "words") {
             let mut specs = Vec::new();
             let slang: Vec<&LessonWord> = lesson.expressions.iter().collect();
-            for (w, is_expr) in lesson.words.iter().map(|w| (w, false)).chain(slang.into_iter().map(|w| (w, true))) {
+            // Names that slip into a lesson ("Seoul") are not drilled as vocabulary.
+            for (w, is_expr) in lesson.words.iter().filter(|w| !is_proper_noun(&w.word, &w.meaning_ko)).map(|w| (w, false)).chain(slang.into_iter().map(|w| (w, true))) {
                 specs.push(Spec {
                     item_id: None,
                     new_item: Some(StudyItem {

@@ -935,3 +935,17 @@ fn level_labels_agree() {
     assert_eq!((level_name_of(1.0), cefr_of(1.0), level_words(1.0)), ("초급", "A1", 500));
     assert_eq!((level_name_of(10.0), cefr_of(10.0), level_words(10.0)), ("능숙", "C1", 8000));
 }
+
+#[test]
+fn place_and_person_names_are_not_vocabulary() {
+    for name in ["Daegu", "Seoul", "seoul", "Minji", "New York", "Bank of America"] {
+        assert!(is_proper_noun(name, ""), "{name} is a name");
+    }
+    assert!(is_proper_noun("daegu", "대구 (도시)"));
+    for word in ["nice to meet you", "be from", "IT", "CEO", "I'm", "My bad", "Netflix and chill", "city"] {
+        assert!(!is_proper_noun(word, "도시"), "{word} is vocabulary");
+    }
+    let item = |text: &str, kind| StudyItem { kind, text: text.into(), ..Default::default() };
+    let items = [item("Daegu", ItemKind::Word), item("Seoul", ItemKind::Word), item("be from", ItemKind::Word), item("I'm from Seoul.", ItemKind::Sentence)];
+    assert_eq!(items.iter().filter(|i| i.is_vocab_word()).count(), 1);
+}

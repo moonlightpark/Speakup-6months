@@ -351,7 +351,9 @@ impl App {
                                             if !m.note_ko.is_empty() {
                                                 ui.label(RichText::new(&m.note_ko).color(MUTED).small());
                                             }
-                                            if ui.small_button("＋ 단어장").clicked() {
+                                            if m.proper_noun || is_proper_noun(w, &m.meaning_ko) {
+                                                ui.label(RichText::new("지명·이름 — 단어장에 넣지 않아요").color(MUTED).small());
+                                            } else if ui.small_button("＋ 단어장").clicked() {
                                                 save_word = Some((w.clone(), m.clone()));
                                             }
                                         });
@@ -420,7 +422,8 @@ impl App {
         if let Some((w, m)) = save_word {
             crate::srs::add_item(
                 &mut self.store.items,
-                StudyItem { kind: ItemKind::Word, text: w, meaning_ko: m.meaning_ko, example: m.example, example_ko: m.example_ko, category: "vocab".into(), ..Default::default() },
+                // Stored in lower case like lesson words ("The" at a sentence start is still "the").
+                StudyItem { kind: ItemKind::Word, text: w.to_lowercase(), meaning_ko: m.meaning_ko, example: m.example, example_ko: m.example_ko, category: "vocab".into(), ..Default::default() },
             );
             self.store.save_items();
             self.toast("📒 단어장에 추가했어요");

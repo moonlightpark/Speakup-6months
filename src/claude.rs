@@ -141,7 +141,8 @@ impl Claude {
              Style: everyday English exactly as native speakers really say it — contractions, phrasal verbs, fillers, \
              natural reactions and idioms. Do not write textbook or grammar-drill sentences; the goal is listening and speaking, not grammar.\n\
              Requirements:\n\
-             - words: exactly {nw} new, high-frequency spoken words or short phrases for the theme, each with a short natural example sentence.\n\
+             - words: exactly {nw} new, high-frequency spoken words or short phrases for the theme, each with a short natural example sentence. \
+             Write them in lower case, and never use names of places, people or brands as words.\n\
              - sentences: exactly {ns} natural spoken sentences for reading aloud / shadowing, at or slightly above the learner's level; tip_ko is one pronunciation or linking tip. {chunk_rule}\n\
              - self_expression: one open question on the theme that makes the learner talk about their own life for 30-60 seconds; 4 useful_phrases; a model_answer of 3-5 sentences at the learner's level.\n\
              - business: a realistic role-play for the business focus; ai_role is who you will play; opening_line is your first line; 4 key_phrases the learner can use.\n\
@@ -337,10 +338,11 @@ impl Claude {
 
     /// Meaning of a word as used in a sentence.
     pub fn word_in_context(&self, word: &str, sentence: &str) -> Result<WordMeaning> {
-        let schema = obj(json!({"meaning_ko": s(), "note_ko": s(), "example": s(), "example_ko": s()}));
+        let schema = obj(json!({"meaning_ko": s(), "note_ko": s(), "example": s(), "example_ko": s(), "proper_noun": json!({"type": "boolean"})}));
         let user = format!(
             "Word: \"{word}\"\nSentence: \"{sentence}\"\n\nmeaning_ko: its Korean meaning in this sentence (short). note_ko: one short note \
-             (base form, nuance, or if it's old-fashioned). example: a different, everyday example sentence. example_ko: its translation."
+             (base form, nuance, or if it's old-fashioned). example: a different, everyday example sentence. example_ko: its translation. \
+             proper_noun: true if it is a name here (a place, person, brand or organization), not an ordinary word."
         );
         self.call(user, schema, "low")
     }
@@ -506,6 +508,18 @@ mod tests {
         assert!(err.contains("API 키"), "{err}");
     }
 
+    /// cargo test real_api_proper_noun -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_api_proper_noun() {
+        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let name = c.word_in_context("Daegu", "I grew up in Daegu, but now I live in Seoul.").unwrap();
+        let word = c.word_in_context("grew", "I grew up in Daegu, but now I live in Seoul.").unwrap();
+        println!("Daegu → {name:?}\ngrew → {word:?}");
+        assert!(name.proper_noun && !word.proper_noun);
+    }
+
     /// Every Claude feature against the real API (needs ANTHROPIC_API_KEY):
     /// cargo test real_api -- --ignored --nocapture
     #[test]
@@ -589,6 +603,9 @@ pub struct WordMeaning {
     pub note_ko: String,
     pub example: String,
     pub example_ko: String,
+    /// A place/person name: shown, but not saved as vocabulary.
+    #[serde(default)]
+    pub proper_noun: bool,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]

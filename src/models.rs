@@ -233,6 +233,44 @@ pub struct CorrectionRecord {
     pub practiced: bool,
 }
 
+/// Place and person names are not vocabulary: "Seoul", "Daegu", "Minji", "New York".
+/// Lesson and dictionary words are stored in lower case, so a capitalized entry is a name
+/// (except "I"); well-known places are also caught in any case, and so are Korean meanings
+/// that say it's a name.
+pub fn is_proper_noun(text: &str, meaning_ko: &str) -> bool {
+    const PLACES: &[&str] = &[
+        "seoul", "busan", "daegu", "incheon", "gwangju", "daejeon", "ulsan", "sejong", "jeju", "suwon", "pohang", "gyeongju", "jeonju", "gangnam",
+        "gyeonggi", "gangwon", "korea", "japan", "tokyo", "osaka", "china", "beijing", "shanghai", "america", "usa", "london", "paris",
+        "new york", "los angeles", "california", "canada", "australia", "england", "france", "germany", "vietnam", "thailand",
+    ];
+    const NAME_MARKS: &[&str] = &["지명", "인명", "고유명사", "도시 이름", "나라 이름", "사람 이름", "(도시)", "(나라)", "(국가)", "(이름)", "(지역)", "(도시명)"];
+    let t = text.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let lower = t.to_lowercase();
+    if PLACES.contains(&lower.as_str()) || NAME_MARKS.iter().any(|m| meaning_ko.contains(m)) {
+        return true;
+    }
+    // Every word capitalized ("Daegu", "New York", "Bank of America"); a phrase that just
+    // starts with a capital ("My bad", "Netflix and chill") is an expression.
+    let small = ["of", "the", "and", "de"];
+    let words: Vec<&str> = t.split_whitespace().filter(|w| !small.contains(w)).collect();
+    words.iter().all(|w| {
+        let capitalized = w.chars().next().is_some_and(|c| c.is_uppercase());
+        // "IT", "CEO": acronyms are words; "I", "I'm" are not names.
+        let acronym = w.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase());
+        capitalized && !acronym && *w != "I" && !w.starts_with("I'")
+    }) && !words.is_empty()
+}
+
+impl StudyItem {
+    /// Counts toward the learner's vocabulary (a word or phrase, not a name).
+    pub fn is_vocab_word(&self) -> bool {
+        self.kind == ItemKind::Word && !is_proper_noun(&self.text, &self.meaning_ko)
+    }
+}
+
 pub fn cefr_of(level: f32) -> &'static str {
     band(level).2
 }

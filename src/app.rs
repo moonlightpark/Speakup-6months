@@ -260,7 +260,7 @@ impl App {
             avg_score: if scores.is_empty() { 0.0 } else { scores.iter().sum::<f32>() / scores.len() as f32 },
             level: p.level,
             theme: curriculum::week(curriculum::week_number(p)).theme_ko.to_string(),
-            new_words: added.iter().filter(|i| i.kind == ItemKind::Word).map(|i| i.text.clone()).collect(),
+            new_words: added.iter().filter(|i| i.is_vocab_word()).map(|i| i.text.clone()).collect(),
             new_sentences: added.iter().filter(|i| i.kind == ItemKind::Sentence).count() as u32,
             reviewed: self.store.items.iter().filter(|i| i.added < date && i.attempts > 0 && i.due > date).count() as u32,
             question: lesson.map(|l| l.self_expression.question.clone()).unwrap_or_default(),
@@ -674,8 +674,8 @@ impl App {
         let mins = p.today.study_seconds / 60;
         let total_mins = p.study_seconds / 60;
         let program_mins = TOTAL_DAYS as u64 * goal;
-        let words = self.store.items.iter().filter(|i| i.kind == ItemKind::Word).count();
-        let sentences = self.store.items.len() - words;
+        let words = self.store.items.iter().filter(|i| i.is_vocab_word()).count();
+        let sentences = self.store.items.iter().filter(|i| i.kind == ItemKind::Sentence).count();
         let level_words = level_words(p.level);
         let mut retest = false;
         ui.horizontal_top(|ui| {
