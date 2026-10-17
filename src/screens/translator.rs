@@ -189,7 +189,6 @@ impl App {
                 ui.add(egui::ProgressBar::new(d / t).text(format!("{:.0} / {:.0} MB", d / 1e6, t / 1e6)));
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
             }
-            SttStatus::Loading => spinner_label(ui, "모델 불러오는 중…"),
             status => {
                 if let SttStatus::Error(e) = status {
                     error_label(ui, &e);

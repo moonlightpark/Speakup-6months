@@ -172,6 +172,8 @@ impl Capture {
             voice.recorder.stop();
         }
         voice.recorder.start();
+        // The recognizer loads while the learner speaks, so the result is ready when they stop.
+        if self.korean { voice.stt_ko.warm() } else { voice.stt.warm() }
         self.recording = true;
     }
 

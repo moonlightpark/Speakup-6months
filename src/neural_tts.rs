@@ -132,7 +132,9 @@ impl NeuralTts {
     }
 }
 
-/// Splits text into sentences so long passages start playing quickly.
+/// Splits text into sentences so long passages start playing quickly. Sentences longer than
+/// `MAX_WORDS` are split again at commas/conjunctions: the speech engine's memory grows with
+/// the longest input it has seen (hundreds of MB for a 90-word sentence) and never shrinks.
 pub fn sentences(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -148,19 +150,41 @@ pub fn sentences(text: &str) -> Vec<String> {
     if !cur.trim().is_empty() {
         out.push(cur.trim().to_string());
     }
+    out.into_iter().flat_map(|s| split_long(&s)).collect()
+}
+
+const MAX_WORDS: usize = 20;
+
+/// Breaks a long sentence into pieces of at most `MAX_WORDS` words, preferring to cut after a
+/// comma, then before a conjunction, so each piece still sounds like a natural phrase.
+fn split_long(sentence: &str) -> Vec<String> {
+    let words: Vec<&str> = sentence.split_whitespace().collect();
+    if words.len() <= MAX_WORDS {
+        return vec![sentence.to_string()];
+    }
+    const JOIN: &[&str] = &["and", "but", "so", "because", "or", "which", "while", "when", "then", "that"];
+    let mut out = Vec::new();
+    let mut start = 0;
+    while words.len() - start > MAX_WORDS {
+        let window = start + 4..start + MAX_WORDS; // never leave a tiny piece
+        let cut = window.clone().rev().find(|&i| words[i - 1].ends_with(',')).or_else(|| window.clone().rev().find(|&i| JOIN.contains(&words[i].to_lowercase().as_str()))).unwrap_or(start + MAX_WORDS);
+        out.push(words[start..cut].join(" "));
+        start = cut;
+    }
+    out.push(words[start..].join(" "));
     out
 }
 
 type Key = (String, String, u32);
 
-/// Synthesized clips, most recently used last; bounded so memory stays small (~1 MB per sentence).
+/// Synthesized clips, most recently used last; bounded so memory stays small (≤ ~0.5 MB per sentence).
 struct Cache {
     map: HashMap<Key, Arc<Vec<f32>>>,
     order: VecDeque<Key>,
 }
 
 impl Cache {
-    const MAX: usize = 300;
+    const MAX: usize = 150;
     fn get(&mut self, k: &Key) -> Option<Arc<Vec<f32>>> {
         let v = self.map.get(k).cloned()?;
         self.order.retain(|x| x != k);
@@ -192,8 +216,10 @@ fn open_engine(dir: &Path, british: bool) -> Result<KokoroTts> {
         voices: p("voices.bin"),
         tokens: p("tokens.txt"),
         data_dir: p("espeak-ng-data"),
+        // The model insists on the dictionary folder, but the Chinese lexicon is left out:
+        // only English is spoken, and it would take ~400 MB of memory.
         dict_dir: p("dict"),
-        lexicon: format!("{},{}", p(lexicon), p("lexicon-zh.txt")),
+        lexicon: p(lexicon),
         length_scale: 1.0,
         // "en-gb" makes sherpa-onnx throw (and abort the process); the British lexicon with
         // the "en-us" fallback gives British pronunciation without that.
@@ -204,7 +230,7 @@ fn open_engine(dir: &Path, british: bool) -> Result<KokoroTts> {
 }
 
 fn worker(rx: Receiver<Job>, status: Arc<Mutex<NeuralStatus>>, generation: Arc<AtomicU64>, player: PlayerHandle) {
-    // One engine per accent (the lexicon differs); the British one is opened on first use.
+    // The engine for the current accent (the lexicon differs); switching accents reopens it.
     let mut dir: Option<PathBuf> = None;
     let mut engines: HashMap<bool, KokoroTts> = HashMap::new();
     let mut cache = Cache { map: HashMap::new(), order: VecDeque::new() };
@@ -358,6 +384,13 @@ mod tests {
         // Abbreviation-like one-word pieces stay attached; decimals don't split.
         assert_eq!(sentences("Mr. Smith paid 3.5 dollars."), vec!["Mr. Smith paid 3.5 dollars."]);
         assert_eq!(sentences("No punctuation"), vec!["No punctuation"]);
+        // A long sentence is cut at a comma / conjunction into pieces of at most MAX_WORDS.
+        let long = "I usually get up at seven, grab a quick coffee and check my messages, and then I head out to work because the traffic gets really bad after eight and I hate being late.";
+        let parts = sentences(long);
+        assert!(parts.len() >= 2, "{parts:?}");
+        assert!(parts.iter().all(|p| p.split_whitespace().count() <= MAX_WORDS), "{parts:?}");
+        assert_eq!(parts.join(" "), long);
+        assert!(parts[0].ends_with(','), "{parts:?}");
     }
 
     /// Downloads and installs the model into the app's real data folder (what the button does).
@@ -449,5 +482,69 @@ mod playback_quality {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod memory_probe {
+    use super::*;
+
+    fn rss_mb() -> u64 {
+        let out = std::process::Command::new("ps").args(["-o", "rss=", "-p", &std::process::id().to_string()]).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().unwrap_or(0) / 1024
+    }
+
+    /// Speech from the English-only lexicon is still recognized word for word.
+    /// SPEAKUP_TEST_KOKORO=<model dir> SPEAKUP_TEST_MODEL=<ggml-small.en.bin> cargo test --release roundtrip -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn roundtrip_through_whisper() {
+        let dir = PathBuf::from(std::env::var("SPEAKUP_TEST_KOKORO").expect("SPEAKUP_TEST_KOKORO"));
+        let stt = crate::stt::Stt::new("en");
+        stt.load(std::env::var("SPEAKUP_TEST_MODEL").expect("SPEAKUP_TEST_MODEL").into());
+        let mut engines = HashMap::new();
+        for (voice, text) in [
+            ("af_heart", "Could I get a glass of water, please?"),
+            ("af_heart", "I moved to Seoul in 2019, and honestly, I've never looked back."),
+            ("bm_george", "Let's grab a coffee after the meeting, shall we?"),
+        ] {
+            let clip = synth(&mut engines, Some(&dir), text, voice, 1.0).unwrap();
+            let audio = crate::audio::resample(&clip, SAMPLE_RATE, crate::audio::STT_RATE);
+            let heard = stt.transcribe(audio).recv().unwrap().unwrap();
+            let score = crate::scoring::score(text, &heard).score;
+            println!("{voice}: {heard:?} → {score:.0}");
+            assert!(score >= 90.0, "{text} / {heard}");
+        }
+    }
+
+    /// SPEAKUP_TEST_KOKORO=<model dir> cargo test --release memory_probe -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn tts_memory_by_sentence_length() {
+        let dir = PathBuf::from(std::env::var("SPEAKUP_TEST_KOKORO").expect("SPEAKUP_TEST_KOKORO"));
+        let mut engines = HashMap::new();
+        println!("start {} MB", rss_mb());
+        synth(&mut engines, Some(&dir), "Hello there.", "af_heart", 1.0);
+        println!("loaded {} MB", rss_mb());
+        let base = "I usually get up at seven, grab a quick coffee, and check my messages before I head out to work";
+        for n in [1, 2, 4, 6] {
+            let text = vec![base; n].join(", and then ") + ".";
+            for speed in [1.0, 1.3] {
+                // As the app speaks it: sentence by sentence, long ones split.
+                for piece in sentences(&text) {
+                    synth(&mut engines, Some(&dir), &piece, "af_heart", speed);
+                }
+            }
+            println!("{} words → {} MB", text.split_whitespace().count(), rss_mb());
+        }
+        engines.clear();
+        println!("engine released {} MB", rss_mb());
+        let t = std::time::Instant::now();
+        synth(&mut engines, Some(&dir), "Back again.", "af_heart", 1.0);
+        println!("reopen + first sentence {:?}, {} MB", t.elapsed(), rss_mb());
+        for _ in 0..5 {
+            synth(&mut engines, Some(&dir), "Short one again.", "af_heart", 1.0);
+        }
+        println!("after short ones {} MB", rss_mb());
     }
 }

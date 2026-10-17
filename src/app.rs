@@ -580,9 +580,8 @@ impl App {
         }
         ui.vertical(|ui| {
             let (txt, col) = match self.voice.stt.status() {
-                SttStatus::Ready => ("● 음성 인식 준비됨", GOOD),
+                SttStatus::Ready => (if self.voice.stt.loaded.load(std::sync::atomic::Ordering::Relaxed) { "● 음성 인식 준비됨" } else { "● 음성 인식 대기 (마이크 누르면 켜짐)" }, GOOD),
                 SttStatus::Downloading => ("● 음성 인식 모델 받는 중", WARN),
-                SttStatus::Loading => ("● 음성 인식 로딩 중", WARN),
                 SttStatus::Missing => ("● 음성 인식 모델 없음", BAD),
                 SttStatus::Error(_) => ("● 음성 인식 오류", BAD),
             };
@@ -967,7 +966,6 @@ impl App {
                 ui.add(egui::ProgressBar::new(d / t).text(format!("{:.0} / {:.0} MB", d / 1e6, t / 1e6)));
                 ui.ctx().request_repaint_after(Duration::from_millis(200));
             }
-            SttStatus::Loading => spinner_label(ui, "모델 로딩 중…"),
             SttStatus::Ready if path.exists() => {
                 ui.label(RichText::new("✅ 음성 인식 준비 완료").color(GOOD));
             }

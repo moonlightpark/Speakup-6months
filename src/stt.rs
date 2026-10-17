@@ -1,5 +1,8 @@
 //! Offline speech recognition with whisper.cpp (whisper-rs), running on a worker thread.
 //! The model file is downloaded once into the data directory.
+//!
+//! The model (~0.5 GB in memory) is only loaded when the learner presses a mic button — it
+//! loads while they are still speaking — and is released again after a few idle minutes.
 
 use crate::audio::{STT_RATE, rms};
 use anyhow::{Result, anyhow};
@@ -14,22 +17,29 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 /// not safe to run on several threads at once; every model load takes this lock.
 pub static MODEL_LOAD: Mutex<()> = Mutex::new(());
 
+/// Unused for this long, the model is released from memory (reloaded on the next mic press).
+const IDLE_UNLOAD: std::time::Duration = std::time::Duration::from_secs(180);
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum SttStatus {
     Missing,
     Downloading,
-    Loading,
     Ready,
     Error(String),
 }
 
 enum Job {
+    /// Use this model file; it is loaded on first need.
     Load(PathBuf),
+    /// Load now (the mic was just pressed) so recognition is instant afterwards.
+    Warm,
     Transcribe(Vec<f32>, Sender<Result<String>>),
 }
 
 pub struct Stt {
     pub status: Arc<Mutex<SttStatus>>,
+    /// The model is in memory right now (it can be Ready without being loaded).
+    pub loaded: Arc<std::sync::atomic::AtomicBool>,
     pub downloaded: Arc<AtomicU64>,
     pub total: Arc<AtomicU64>,
     tx: Sender<Job>,
@@ -45,9 +55,10 @@ impl Stt {
         whisper_rs::install_logging_hooks(); // routes whisper.cpp's verbose logs away from stderr
         let (tx, rx) = channel::<Job>();
         let status = Arc::new(Mutex::new(SttStatus::Missing));
-        let st = status.clone();
-        std::thread::spawn(move || worker(rx, st, language));
-        Self { status, downloaded: Arc::default(), total: Arc::default(), tx, script: None }
+        let loaded: Arc<std::sync::atomic::AtomicBool> = Arc::default();
+        let (st, ld) = (status.clone(), loaded.clone());
+        std::thread::spawn(move || worker(rx, st, ld, language));
+        Self { status, loaded, downloaded: Arc::default(), total: Arc::default(), tx, script: None }
     }
 
     /// A recognizer that returns scripted text instead of running whisper (automated tests).
@@ -56,6 +67,7 @@ impl Stt {
         let (tx, _rx) = channel::<Job>();
         Self {
             status: Arc::new(Mutex::new(SttStatus::Ready)),
+            loaded: Arc::default(),
             downloaded: Arc::default(),
             total: Arc::default(),
             tx,
@@ -71,9 +83,17 @@ impl Stt {
         self.status() == SttStatus::Ready
     }
 
+    /// Selects the model file. Nothing is loaded into memory until a mic button is pressed.
     pub fn load(&self, path: PathBuf) {
-        *self.status.lock().unwrap() = SttStatus::Loading;
+        *self.status.lock().unwrap() = if path.exists() { SttStatus::Ready } else { SttStatus::Missing };
         let _ = self.tx.send(Job::Load(path));
+    }
+
+    /// Starts loading the model in the background (called when recording starts).
+    pub fn warm(&self) {
+        if self.script.is_none() && self.is_ready() && !self.loaded.load(Ordering::Relaxed) {
+            let _ = self.tx.send(Job::Warm);
+        }
     }
 
     /// Downloads the model from Hugging Face (ggerganov/whisper.cpp), then loads it.
@@ -89,7 +109,7 @@ impl Stt {
                 &total,
             ) {
                 Ok(()) => {
-                    *status.lock().unwrap() = SttStatus::Loading;
+                    *status.lock().unwrap() = SttStatus::Ready;
                     let _ = tx.send(Job::Load(dest));
                 }
                 Err(e) => *status.lock().unwrap() = SttStatus::Error(format!("모델 다운로드 실패: {e}")),
@@ -116,27 +136,49 @@ impl Stt {
     }
 }
 
-fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, language: &'static str) {
+fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::sync::atomic::AtomicBool>, language: &'static str) {
+    let mut path: Option<PathBuf> = None;
     let mut ctx: Option<WhisperContext> = None;
     let threads = std::thread::available_parallelism().map(|n| n.get().min(8) as i32).unwrap_or(4);
-    for job in rx {
+    // Loads the model if it isn't in memory yet.
+    let ensure = |ctx: &mut Option<WhisperContext>, path: &Option<PathBuf>| -> Result<()> {
+        if ctx.is_some() {
+            return Ok(());
+        }
+        let p = path.as_ref().ok_or_else(|| anyhow!("모델이 선택되지 않았습니다"))?.to_string_lossy().to_string();
+        let _guard = MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
+        let c = WhisperContext::new_with_params(&p, WhisperContextParameters::default()).map_err(|e| anyhow!("모델 로드 실패: {e}"))?;
+        *ctx = Some(c);
+        loaded.store(true, Ordering::Relaxed);
+        Ok(())
+    };
+    loop {
+        let job = match rx.recv_timeout(IDLE_UNLOAD) {
+            Ok(j) => j,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Idle: give the memory back.
+                ctx = None;
+                loaded.store(false, Ordering::Relaxed);
+                continue;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        };
         match job {
-            Job::Load(path) => {
-                let p = path.to_string_lossy().to_string();
-                let loaded = {
-                    let _guard = MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
-                    WhisperContext::new_with_params(&p, WhisperContextParameters::default())
-                };
-                match loaded {
-                    Ok(c) => {
-                        ctx = Some(c);
-                        *status.lock().unwrap() = SttStatus::Ready;
-                    }
-                    Err(e) => *status.lock().unwrap() = SttStatus::Error(format!("모델 로드 실패: {e}")),
+            Job::Load(p) => {
+                if path.as_ref() != Some(&p) {
+                    ctx = None;
+                    loaded.store(false, Ordering::Relaxed);
+                }
+                path = Some(p);
+            }
+            Job::Warm => {
+                if let Err(e) = ensure(&mut ctx, &path) {
+                    *status.lock().unwrap() = SttStatus::Error(format!("{e:#}"));
                 }
             }
             Job::Transcribe(mut audio, reply) => {
                 let result = (|| -> Result<String> {
+                    ensure(&mut ctx, &path)?;
                     let ctx = ctx.as_ref().ok_or_else(|| anyhow!("모델이 로드되지 않았습니다"))?;
                     // whisper needs at least ~1 s of audio; pad short clips with silence.
                     let min = STT_RATE as usize * 11 / 10;
