@@ -281,7 +281,7 @@ impl App {
                         let text = if sel { text.background_color(Color32::from_rgb(255, 226, 140)) } else { text };
                         let resp = ui.add(egui::Label::new(text).sense(Sense::click()));
                         if resp.hovered() && !sel {
-                            ui.painter().rect_stroke(resp.rect.expand(1.0), 3.0, egui::Stroke::new(1.0, Color32::from_rgb(200, 180, 120)), egui::StrokeKind::Outside);
+                            ui.painter().rect_stroke(resp.rect.expand(1.0), 3.0_f32, egui::Stroke::new(1.0, Color32::from_rgb(200, 180, 120)), egui::StrokeKind::Outside);
                         }
                         if resp.clicked() {
                             clicked = Some((pi, si));

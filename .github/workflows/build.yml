@@ -63,7 +63,15 @@ jobs:
         run: echo "LIBCLANG_PATH=C:\\Program Files\\LLVM\\bin" >> "$GITHUB_ENV"
 
       - name: Test
-        run: cargo test --release
+        shell: bash
+        run: |
+          cargo test --release --no-run
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # The test binary in deps/ needs the sherpa-onnx DLLs beside it, and a cached
+            # target/ doesn't always have them (STATUS_DLL_NOT_FOUND).
+            find "$(cygpath "$LOCALAPPDATA")/sherpa-rs" -name '*.dll' -exec cp {} target/release/deps/ \; -exec cp {} target/release/ \;
+          fi
+          cargo test --release
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
