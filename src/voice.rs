@@ -4,7 +4,7 @@
 use crate::audio::{Player, Recorder};
 use crate::language::LanguagePack;
 use crate::stt::Stt;
-use crate::neural_tts::NeuralTts;
+use crate::neural_tts::{NeuralStatus, NeuralTts};
 use tts::Tts;
 
 pub struct Speaker {
@@ -57,6 +57,12 @@ impl Speaker {
         self.use_neural && self.neural.as_ref().is_some_and(|n| n.is_ready())
     }
 
+    /// True when speech should go to the neural voice: ready, or still loading at startup
+    /// (the request waits a moment instead of falling back to the robotic OS voice).
+    pub fn neural_wanted(&self) -> bool {
+        self.use_neural && self.neural.as_ref().is_some_and(|n| matches!(n.status(), NeuralStatus::Ready | NeuralStatus::Loading))
+    }
+
     /// No speech output (automated tests).
     #[cfg(test)]
     pub fn silent() -> Self {
@@ -74,7 +80,7 @@ impl Speaker {
 
     /// Speaks `text`, interrupting anything already playing. `speed` is relative (1.0 = normal).
     pub fn say(&mut self, text: &str, speed: f32) {
-        if self.neural_active() {
+        if self.neural_wanted() {
             if let Some(t) = &mut self.tts {
                 let _ = t.stop();
             }
@@ -132,12 +138,12 @@ impl Voice {
     }
     pub fn say_slow(&mut self, text: &str) {
         self.player.stop();
-        let r = self.base_rate * if self.speaker.neural_active() { 0.75 } else { 0.7 };
+        let r = self.base_rate * if self.speaker.neural_wanted() { 0.75 } else { 0.7 };
         self.speaker.say(text, r);
     }
     pub fn say_fast(&mut self, text: &str) {
         self.player.stop();
-        let r = self.base_rate * if self.speaker.neural_active() { 1.3 } else { 1.35 };
+        let r = self.base_rate * if self.speaker.neural_wanted() { 1.3 } else { 1.35 };
         self.speaker.say(text, r);
     }
     pub fn play_last_recording(&mut self) {

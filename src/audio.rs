@@ -28,6 +28,26 @@ pub fn output_devices() -> Vec<String> {
 }
 
 /// Name of the microphone a recording would use right now.
+/// True when `mic` is the microphone of a wireless headset that is also a speaker (e.g.
+/// "WH-1000XM3", AirPods, "Headset (… Hands-Free)"). Recording from it switches Bluetooth into
+/// telephone mode, which makes every sound — including the native voice — muffled.
+pub fn is_headset_mic(mic: &str, outputs: &[String]) -> bool {
+    if mic.is_empty() {
+        return false;
+    }
+    let l = mic.to_lowercase();
+    if ["macbook", "built-in", "내장", "microphone array"].iter().any(|b| l.contains(b)) {
+        return false;
+    }
+    l.contains("hands-free") || l.contains("airpods") || outputs.iter().any(|o| o == mic)
+}
+
+/// A microphone that is not part of a headset (the laptop's own mic first), if any.
+pub fn non_headset_mic(inputs: &[String], outputs: &[String]) -> Option<String> {
+    let builtin = |n: &&String| ["macbook", "built-in", "내장", "microphone array"].iter().any(|b| n.to_lowercase().contains(b));
+    inputs.iter().find(builtin).or_else(|| inputs.iter().find(|n| !is_headset_mic(n, outputs))).cloned()
+}
+
 pub fn current_input_name(preferred: &str) -> String {
     pick_device(preferred, true).and_then(|d| d.name().ok()).unwrap_or_default()
 }
@@ -309,6 +329,44 @@ pub fn resample(input: &[f32], from: u32, to: u32) -> Vec<f32> {
         .collect()
 }
 
+/// Band-limited (windowed-sinc) resampler for playback. Linear interpolation, which rodio
+/// uses internally, leaves metallic aliasing when 24 kHz speech is played on a 48/96 kHz
+/// speaker; this keeps the voice clean.
+pub fn resample_hq(input: &[f32], from: u32, to: u32) -> Vec<f32> {
+    if from == to || input.is_empty() || from == 0 || to == 0 {
+        return input.to_vec();
+    }
+    use std::f64::consts::PI;
+    let ratio = to as f64 / from as f64;
+    // Cutoff relative to the input rate's Nyquist; below 1 when downsampling.
+    let cutoff = ratio.min(1.0) * 0.95;
+    let half = 16.0 / cutoff; // window half-width in input samples (16 zero crossings)
+    // The kernel is tabulated once (512 steps per input sample) so each tap is a lookup.
+    const STEPS: f64 = 512.0;
+    let table: Vec<f32> = (0..=(half * STEPS) as usize + 1)
+        .map(|k| {
+            let x = k as f64 / STEPS;
+            let sinc = if x < 1e-9 { 1.0 } else { (PI * cutoff * x).sin() / (PI * cutoff * x) };
+            let w = if x >= half { 0.0 } else { 0.42 + 0.5 * (PI * x / half).cos() + 0.08 * (2.0 * PI * x / half).cos() };
+            (cutoff * sinc * w) as f32
+        })
+        .collect();
+    let out_len = (input.len() as f64 * ratio).round() as usize;
+    let last = input.len() as i64 - 1;
+    (0..out_len)
+        .map(|j| {
+            let t = j as f64 / ratio;
+            let (lo, hi) = (((t - half).ceil() as i64).max(0), ((t + half).floor() as i64).min(last));
+            let mut acc = 0.0f32;
+            for i in lo..=hi {
+                let k = ((t - i as f64).abs() * STEPS) as usize;
+                acc += input[i as usize] * table[k.min(table.len() - 1)];
+            }
+            acc
+        })
+        .collect()
+}
+
 pub fn rms(samples: &[f32]) -> f32 {
     if samples.is_empty() {
         return 0.0;
@@ -412,14 +470,26 @@ struct Output {
     _stream: OutputStream,
     handle: OutputStreamHandle,
     name: String,
+    /// The device's own sample rate; clips are converted to it with `resample_hq`.
+    rate: u32,
+}
+
+impl Output {
+    fn clip(&self, samples: Vec<f32>, rate: u32) -> rodio::buffer::SamplesBuffer<f32> {
+        if rate == self.rate || self.rate == 0 {
+            return rodio::buffer::SamplesBuffer::new(1, rate, samples);
+        }
+        rodio::buffer::SamplesBuffer::new(1, self.rate, resample_hq(&samples, rate, self.rate))
+    }
 }
 
 /// Opens the chosen speaker (or the system default).
 fn open_output(preferred: &str) -> Option<Output> {
     let device = pick_device(preferred, false)?;
     let name = device.name().unwrap_or_default();
+    let rate = device.default_output_config().map(|c| c.sample_rate().0).unwrap_or(0);
     match OutputStream::try_from_device(&device).or_else(|_| OutputStream::try_default()) {
-        Ok((stream, handle)) => Some(Output { _stream: stream, handle, name }),
+        Ok((stream, handle)) => Some(Output { _stream: stream, handle, name, rate }),
         Err(e) => {
             eprintln!("audio output unavailable: {e}");
             None
@@ -485,7 +555,7 @@ impl Player {
                         fl.store(out.is_none(), Ordering::Relaxed);
                         if let Some(o) = &out {
                             if let Ok(s) = Sink::try_new(&o.handle) {
-                                s.append(rodio::buffer::SamplesBuffer::new(1, rate, samples.clone()));
+                                s.append(o.clip(samples.clone(), rate));
                                 sink = Some(s);
                                 *cs.lock().unwrap() = Some(Instant::now());
                             }
@@ -493,9 +563,8 @@ impl Player {
                         looping = looped.then_some((samples, rate));
                     }
                     Ok(PlayCmd::Append(samples, rate)) => {
-                        let source = rodio::buffer::SamplesBuffer::new(1, rate, samples);
-                        match &sink {
-                            Some(s) if !s.empty() => s.append(source),
+                        match (&sink, &out) {
+                            (Some(s), Some(o)) if !s.empty() => s.append(o.clip(samples, rate)),
                             _ => {
                                 if out.is_none() {
                                     out = open_output(&preferred);
@@ -503,7 +572,7 @@ impl Player {
                                 }
                                 if let Some(o) = &out {
                                     if let Ok(s) = Sink::try_new(&o.handle) {
-                                        s.append(source);
+                                        s.append(o.clip(samples, rate));
                                         sink = Some(s);
                                         *cs.lock().unwrap() = Some(Instant::now());
                                     }
@@ -532,11 +601,11 @@ impl Player {
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 }
-                if let (Some(s), Some((samples, rate))) = (&sink, &looping) {
+                if let (Some(s), Some((samples, rate)), Some(o)) = (&sink, &looping, &out) {
                     if s.empty() {
                         let mut clip = vec![0.0; (*rate as f32 * 0.6) as usize];
                         clip.extend_from_slice(samples);
-                        s.append(rodio::buffer::SamplesBuffer::new(1, *rate, clip));
+                        s.append(o.clip(clip, *rate));
                         *cs.lock().unwrap() = Some(Instant::now() - Duration::from_millis(600));
                     }
                 }
@@ -685,6 +754,30 @@ mod tests {
     fn resample_halves_length() {
         let v: Vec<f32> = (0..32000).map(|i| (i as f32).sin()).collect();
         assert_eq!(resample(&v, 32000, 16000).len(), 16000);
+    }
+
+    #[test]
+    fn detects_headset_mics() {
+        let outs = vec!["MacBook Pro 스피커".to_string(), "WH-1000XM3".to_string()];
+        assert!(is_headset_mic("WH-1000XM3", &outs));
+        assert!(is_headset_mic("Headset (WH-1000XM3 Hands-Free)", &[]));
+        assert!(!is_headset_mic("MacBook Pro 마이크", &outs));
+        assert!(!is_headset_mic("", &outs));
+        let ins = vec!["WH-1000XM3".to_string(), "MacBook Pro 마이크".to_string()];
+        assert_eq!(non_headset_mic(&ins, &outs).as_deref(), Some("MacBook Pro 마이크"));
+    }
+
+    #[test]
+    fn hq_resample_keeps_tone_and_length() {
+        // A 1 kHz tone at 24 kHz → 96 kHz: same length in seconds, same amplitude, no aliasing.
+        let v: Vec<f32> = (0..24000).map(|i| (i as f32 * 1000.0 * std::f32::consts::TAU / 24000.0).sin() * 0.5).collect();
+        let out = resample_hq(&v, 24000, 96000);
+        assert_eq!(out.len(), 96000);
+        let ideal: Vec<f32> = (0..96000).map(|i| (i as f32 * 1000.0 * std::f32::consts::TAU / 96000.0).sin() * 0.5).collect();
+        let err = out[1000..95000].iter().zip(&ideal[1000..95000]).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+        assert!(err < 0.01, "max error {err}");
+        // Downsampling halves the length.
+        assert_eq!(resample_hq(&v, 24000, 12000).len(), 12000);
     }
 
     #[test]

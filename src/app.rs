@@ -129,6 +129,9 @@ impl App {
         let neural = crate::neural_tts::NeuralTts::new(player.handle());
         if crate::neural_tts::is_installed(&store.models_dir()) {
             neural.load(&store.models_dir());
+        } else if store.settings.neural_tts && !cfg!(test) {
+            // The natural voice matters most: fetch it once in the background on first run.
+            neural.download(store.models_dir());
         }
         speaker.neural = Some(neural);
         speaker.use_neural = store.settings.neural_tts;
@@ -571,7 +574,7 @@ impl App {
             ui.add_space(12.0);
         }
         // Status lines at the bottom, or right after the menu when the window is short.
-        let status_h = 52.0;
+        let status_h = 76.0;
         if ui.available_height() > status_h {
             ui.add_space(ui.available_height() - status_h);
         }
@@ -584,6 +587,18 @@ impl App {
                 SttStatus::Error(_) => ("● 음성 인식 오류", BAD),
             };
             ui.label(RichText::new(txt).color(col).size(12.5));
+            // Which voice is speaking: the natural neural one, or the OS fallback.
+            let neural = self.voice.speaker.neural.as_ref().map(|n| n.status());
+            let (vt, vc) = match neural {
+                _ if self.voice.speaker.neural_active() => ("● AI 원어민 음성 (Kokoro)".to_string(), GOOD),
+                Some(crate::neural_tts::NeuralStatus::Loading) => ("● AI 음성 불러오는 중".to_string(), WARN),
+                Some(crate::neural_tts::NeuralStatus::Downloading) => ("● AI 음성 받는 중".to_string(), WARN),
+                _ if !self.store.settings.neural_tts => ("● 시스템 음성 사용 중".to_string(), MUTED),
+                _ => ("● 시스템 음성 — AI 음성 받기 ›".to_string(), WARN),
+            };
+            if ui.add(egui::Label::new(RichText::new(vt).color(vc).size(12.5)).sense(egui::Sense::click())).on_hover_text("설정에서 원어민 음성을 고를 수 있어요").clicked() {
+                self.go(Screen::Settings);
+            }
             let api = if self.claude().is_some() { ("● Claude 연결됨", GOOD) } else { ("● Claude API 키 없음", BAD) };
             ui.label(RichText::new(api.0).color(api.1).size(12.5));
         });

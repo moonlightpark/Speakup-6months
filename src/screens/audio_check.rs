@@ -184,6 +184,16 @@ impl App {
             });
             ui.end_row();
         });
+        if audio::is_headset_mic(&self.store.settings.input_device, &outputs) {
+            ui.label(RichText::new("⚠ 블루투스 헤드폰의 마이크를 쓰면 헤드폰이 '통화 모드'로 바뀌어 원어민 음성이 전화처럼 뭉개져 들립니다. 소리는 헤드폰으로 듣고, 마이크는 노트북 내장 마이크를 쓰세요.").color(WARN));
+            if let Some(m) = audio::non_headset_mic(&inputs, &outputs) {
+                if ui.button(format!("🎤 마이크를 '{m}'(으)로 바꾸기")).clicked() {
+                    self.store.settings.input_device = m.clone();
+                    self.voice.recorder.device = m;
+                    changed = true;
+                }
+            }
+        }
         ui.horizontal(|ui| {
             if ui.small_button("↻ 장치 목록 새로고침").clicked() {
                 *st.devices.lock().unwrap() = None;

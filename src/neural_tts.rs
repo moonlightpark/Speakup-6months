@@ -414,3 +414,34 @@ mod tests {
         assert!(player.is_playing());
     }
 }
+
+#[cfg(test)]
+mod playback_quality {
+    use super::*;
+
+    /// Converts real speech to a 96 kHz speaker rate both ways and writes WAVs for comparison.
+    /// SPEAKUP_TEST_KOKORO=<model dir> cargo test --release alias -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn alias_energy_hq_vs_linear() {
+        let dir = PathBuf::from(std::env::var("SPEAKUP_TEST_KOKORO").expect("SPEAKUP_TEST_KOKORO"));
+        let mut engines = HashMap::new();
+        let clip = synth(&mut engines, Some(&dir), "Could I get a glass of water, please? Thanks so much, that's really kind of you.", "af_heart", 1.0).unwrap();
+        let peak = clip.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        let t = std::time::Instant::now();
+        let hq = crate::audio::resample_hq(&clip, SAMPLE_RATE, 96_000);
+        println!("{:.2}s clip, peak {peak:.2}, hq resample took {:?}", clip.len() as f32 / SAMPLE_RATE as f32, t.elapsed());
+        let lin = crate::audio::resample(&clip, SAMPLE_RATE, 96_000);
+        assert!(t.elapsed().as_millis() < 300, "fast enough to run before every clip");
+        // Spectrum check (numpy FFT on the WAVs): linear leaves aliasing at about -27 dB above
+        // 12 kHz, the band-limited resampler about -58 dB.
+        if let Ok(out) = std::env::var("SPEAKUP_TEST_WAV_DIR") {
+            for (name, v) in [("linear96k", &lin), ("hq96k", &hq)] {
+                let mut w = hound::WavWriter::create(format!("{out}/{name}.wav"), hound::WavSpec { channels: 1, sample_rate: 96_000, bits_per_sample: 16, sample_format: hound::SampleFormat::Int }).unwrap();
+                for s in v.iter() {
+                    w.write_sample((s.clamp(-1.0, 1.0) * 32767.0) as i16).unwrap();
+                }
+            }
+        }
+    }
+}

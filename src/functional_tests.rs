@@ -855,7 +855,7 @@ fn t_done(a: &App) -> bool {
 
 #[test]
 fn ft22_study_time_is_split_by_skill() {
-    let mut t = launch("skills");
+    let t = launch("skills");
     assert!(t.has("오늘의 학습 비중") && t.has("🎤 말하기") && t.has("📘 읽기") && t.has("✏ 쓰기"));
     assert_eq!(crate::app::skill_of(Screen::Library), Some(1));
     assert_eq!(crate::app::skill_of(Screen::Writing), Some(2));
