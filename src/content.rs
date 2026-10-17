@@ -256,6 +256,10 @@ pub fn builtin_lesson(week: u32, day: i64, known: &[StudyItem], past: &[Lesson],
             search_queries: vec![wk.listening.into()],
             focus_ko: "자막 한 줄씩 듣고 바로 따라 말하세요(쉐도잉).".into(),
         },
+        expressions: crate::expressions::pick_for_today(knows)
+            .into_iter()
+            .map(|e| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() })
+            .collect(),
     }
 }
 

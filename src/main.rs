@@ -10,6 +10,7 @@ mod audio;
 mod claude;
 mod content;
 mod curriculum;
+mod expressions;
 mod language;
 mod mic_permission;
 mod neural_tts;
@@ -28,11 +29,15 @@ mod youtube;
 mod functional_tests;
 
 fn main() -> eframe::Result<()> {
+    // Exactly sidebar + content column + margins (32 + 24) + scrollbar, so nothing is wasted.
+    let width = app::SIDEBAR_WIDTH + app::CONTENT_WIDTH + 32.0 + 24.0 + 12.0;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("SpeakUp 6M — 영어 6개월 완성")
-            .with_inner_size([1180.0, 820.0])
-            .with_min_inner_size([900.0, 640.0]),
+            .with_inner_size([width, 800.0])
+            .with_min_inner_size([width - 160.0, 600.0]),
+        // Always open at the fitted size instead of a size remembered from an earlier run.
+        persist_window: false,
         ..Default::default()
     };
     eframe::run_native("SpeakUp 6M", options, Box::new(|cc| Ok(Box::new(app::App::new(cc)))))

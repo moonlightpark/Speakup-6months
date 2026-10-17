@@ -65,7 +65,12 @@ jobs:
         run: |
           cargo build --release
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path target/release/speakup.exe -DestinationPath "dist/SpeakUp6M-${{ matrix.name }}.zip"
+          # The neural voice needs the sherpa-onnx / onnxruntime DLLs beside the .exe.
+          New-Item -ItemType Directory -Force pkg | Out-Null
+          Copy-Item target/release/speakup.exe pkg/
+          Copy-Item target/release/*.dll pkg/
+          Get-ChildItem pkg
+          Compress-Archive -Path pkg/* -DestinationPath "dist/SpeakUp6M-${{ matrix.name }}.zip"
 
       - name: Package (Linux)
         if: runner.os == 'Linux'

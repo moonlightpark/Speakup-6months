@@ -183,11 +183,17 @@ impl App {
             return;
         }
         let lesson = self.lesson.clone().unwrap_or_default();
-        let rows: Vec<(String, String)> = lesson.words.iter().map(|w| (w.word.clone(), format!("{} — {}", w.meaning_ko, w.example))).collect();
+        let rows: Vec<(String, String)> = lesson
+            .words
+            .iter()
+            .map(|w| (w.word.clone(), format!("{} — {}", w.meaning_ko, w.example)))
+            .chain(lesson.expressions.iter().map(|w| (format!("💬 {}", w.word), format!("{} — {}", w.meaning_ko, w.example))))
+            .collect();
         let reps = self.store.settings.reps_new;
         if self.intro_card(ui, "📚 오늘의 새 단어", &format!("듣고 → 소리 내어 {reps}번 → 예문까지 말하면 단어장에 저장되고 복습 일정이 잡힙니다."), &rows, "words") {
             let mut specs = Vec::new();
-            for w in &lesson.words {
+            let slang: Vec<&LessonWord> = lesson.expressions.iter().collect();
+            for (w, is_expr) in lesson.words.iter().map(|w| (w, false)).chain(slang.into_iter().map(|w| (w, true))) {
                 specs.push(Spec {
                     item_id: None,
                     new_item: Some(StudyItem {
@@ -196,12 +202,12 @@ impl App {
                         meaning_ko: w.meaning_ko.clone(),
                         example: w.example.clone(),
                         example_ko: w.example_ko.clone(),
-                        category: "vocab".into(),
+                        category: if is_expr { "expression".into() } else { "vocab".into() },
                         ..Default::default()
                     }),
                     target: w.word.clone(),
                     ko: w.meaning_ko.clone(),
-                    tip: String::new(),
+                    tip: if is_expr { "💬 원어민 표현·유행어".into() } else { String::new() },
                     reps,
                     recall: false,
                     is_word: true,

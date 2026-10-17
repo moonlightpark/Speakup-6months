@@ -125,11 +125,12 @@ impl Claude {
                 "key_phrases": arr(phrase_schema())
             })),
             "listening": obj(json!({"search_queries": arr(s()), "focus_ko": s()})),
+            "expressions": arr(obj(json!({"word": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
         }));
         let user = format!(
             "Create today's lesson.\n\
              Program day {day} of 182 (week {week}). Phase: {phase}.\n\
-             Weekly theme: {theme}. Business focus: {business}. Grammar focus: {grammar}.\n\
+             Weekly theme: {theme}. Business focus: {business}. Background grammar (never teach it explicitly): {grammar}.\n\
              Learner level: {level:.1}/10 (CEFR {cefr}).\n\
              Words the learner already knows (do NOT repeat them): {known}\n\
              Items the learner keeps getting wrong (reuse some of them inside the new example sentences so they get extra practice): {weak}\n\
@@ -137,11 +138,16 @@ impl Claude {
              - sentences: {avoid_s}\n\
              - self-expression questions: {avoid_q}\n\
              - role-play scenarios: {avoid_r}\n\n\
+             Style: everyday English exactly as native speakers really say it — contractions, phrasal verbs, fillers, \
+             natural reactions and idioms. Do not write textbook or grammar-drill sentences; the goal is listening and speaking, not grammar.\n\
              Requirements:\n\
              - words: exactly {nw} new, high-frequency spoken words or short phrases for the theme, each with a short natural example sentence.\n\
              - sentences: exactly {ns} natural spoken sentences for reading aloud / shadowing, at or slightly above the learner's level; tip_ko is one pronunciation or linking tip. {chunk_rule}\n\
              - self_expression: one open question on the theme that makes the learner talk about their own life for 30-60 seconds; 4 useful_phrases; a model_answer of 3-5 sentences at the learner's level.\n\
              - business: a realistic role-play for the business focus; ai_role is who you will play; opening_line is your first line; 4 key_phrases the learner can use.\n\
+             - expressions: exactly 2 everyday native expressions or slang the learner hasn't seen: one classic expression \
+             (still common, may be from past decades, e.g. 'my bad', 'rain check') and one recent slang term (2010s-2020s social media, e.g. 'no cap', 'low-key'). \
+             meaning_ko: natural Korean meaning plus when/where it's used (e.g. '(요즘 유행어) …', '(90년대) …'); example: a short real-life line using it.\n\
              - listening: 2-3 YouTube search queries that find real native-speaker videos (channels such as BBC Learning English, VOA Learning English, TED, Rachel's English) on this theme at a suitable level; focus_ko says what to listen for.",
             day = req.day,
             week = req.week,

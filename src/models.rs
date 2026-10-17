@@ -378,4 +378,7 @@ pub struct Lesson {
     pub self_expression: SelfExpression,
     pub business: BusinessScenario,
     pub listening: ListeningPlan,
+    /// Everyday native expressions / slang of the day (one classic, one recent).
+    #[serde(default)]
+    pub expressions: Vec<LessonWord>,
 }

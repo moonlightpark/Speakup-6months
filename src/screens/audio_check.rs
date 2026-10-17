@@ -15,8 +15,9 @@ pub struct AudioCheckState {
     /// Latest known permission (the OS answer to a request arrives on another thread).
     pub permission: Arc<Mutex<MicPermission>>,
     checked_at: Option<Instant>,
-    inputs: Vec<String>,
-    outputs: Vec<String>,
+    /// Microphones and speakers; listing them can take seconds on macOS, so it runs off the UI thread.
+    devices: Arc<Mutex<Option<(Vec<String>, Vec<String>)>>>,
+    listing: bool,
     testing: bool,
     peak: f32,
     /// The microphone in use is a MacBook's built-in one and the lid is closed.
@@ -29,8 +30,8 @@ impl Default for AudioCheckState {
         Self {
             permission: Arc::new(Mutex::new(mic_permission::status())),
             checked_at: None,
-            inputs: Vec::new(),
-            outputs: Vec::new(),
+            devices: Arc::default(),
+            listing: false,
             testing: false,
             peak: 0.0,
             builtin_mic_off: Arc::default(),
@@ -56,6 +57,15 @@ impl AudioCheckState {
                 off.store(lid, std::sync::atomic::Ordering::Relaxed);
             });
         }
+    }
+
+    fn list_devices(&mut self) {
+        if self.listing || cfg!(test) {
+            return;
+        }
+        self.listing = true;
+        let out = self.devices.clone();
+        std::thread::spawn(move || *out.lock().unwrap() = Some((audio::input_devices(), audio::output_devices())));
     }
 
     pub fn builtin_mic_off(&self) -> bool {
@@ -111,9 +121,10 @@ impl App {
         let mut changed = false;
         let st = &mut self.audio_check;
         // Tests never touch real audio devices (enumerating WASAPI devices from test threads crashes on Windows).
-        if st.inputs.is_empty() && st.outputs.is_empty() && !cfg!(test) {
-            st.inputs = audio::input_devices();
-            st.outputs = audio::output_devices();
+        st.list_devices();
+        let (inputs, outputs) = st.devices.lock().unwrap().clone().unwrap_or_default();
+        if st.listing && st.devices.lock().unwrap().is_none() {
+            ui.ctx().request_repaint_after(Duration::from_millis(200));
         }
 
         // Permission
@@ -152,7 +163,7 @@ impl App {
         egui::Grid::new("audio_devices").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
             ui.label("🎤 마이크");
             egui::ComboBox::from_id_salt("mic_dev").width(320.0).selected_text(label(&self.store.settings.input_device)).show_ui(ui, |ui| {
-                for name in std::iter::once(String::new()).chain(st.inputs.iter().cloned()) {
+                for name in std::iter::once(String::new()).chain(inputs.iter().cloned()) {
                     if ui.selectable_label(self.store.settings.input_device == name, label(&name)).clicked() {
                         self.store.settings.input_device = name.clone();
                         self.voice.recorder.device = name;
@@ -163,7 +174,7 @@ impl App {
             ui.end_row();
             ui.label("🔈 스피커");
             egui::ComboBox::from_id_salt("out_dev").width(320.0).selected_text(label(&self.store.settings.output_device)).show_ui(ui, |ui| {
-                for name in std::iter::once(String::new()).chain(st.outputs.iter().cloned()) {
+                for name in std::iter::once(String::new()).chain(outputs.iter().cloned()) {
                     if ui.selectable_label(self.store.settings.output_device == name, label(&name)).clicked() {
                         self.store.settings.output_device = name.clone();
                         self.voice.player.set_device(name);
@@ -173,10 +184,16 @@ impl App {
             });
             ui.end_row();
         });
-        if ui.small_button("↻ 장치 목록 새로고침").clicked() {
-            st.inputs = audio::input_devices();
-            st.outputs = audio::output_devices();
-        }
+        ui.horizontal(|ui| {
+            if ui.small_button("↻ 장치 목록 새로고침").clicked() {
+                *st.devices.lock().unwrap() = None;
+                st.listing = false;
+            }
+            if st.devices.lock().unwrap().is_none() && !cfg!(test) {
+                ui.spinner();
+                ui.label(RichText::new("장치 찾는 중…").color(MUTED).small());
+            }
+        });
         ui.label(RichText::new("소리 내기(원어민 음성)는 운영체제의 기본 출력 장치를 사용합니다. 녹음·유튜브 재생은 위에서 고른 스피커로 나옵니다.").color(MUTED).small());
         ui.add_space(6.0);
 

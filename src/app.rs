@@ -37,6 +37,11 @@ pub enum Screen {
 }
 
 /// The daily routine, in order. Keys are stored in `profile.today.done`.
+/// Width of the main content column; the window is sized to fit it next to the sidebar.
+pub const CONTENT_WIDTH: f32 = 900.0;
+/// Sidebar width.
+pub const SIDEBAR_WIDTH: f32 = 232.0;
+
 pub const STEPS: &[(&str, &str, Screen)] = &[
     ("homework", "📝 숙제 확인", Screen::Homework),
     ("review", "🔁 복습 (배운 단어·문장)", Screen::Review),
@@ -832,6 +837,10 @@ impl App {
         for s in &lesson.sentences {
             self.voice.speaker.prefetch(&s.text, r);
         }
+        for e in &lesson.expressions {
+            self.voice.speaker.prefetch(&e.word, r);
+            self.voice.speaker.prefetch(&e.example, r);
+        }
         for w in &lesson.words {
             self.voice.speaker.prefetch(&w.example, r);
         }
@@ -1018,7 +1027,7 @@ impl eframe::App for App {
 
         if !matches!(self.screen, Screen::Onboarding | Screen::LevelTest) {
             egui::SidePanel::left("nav")
-                .exact_width(232.0)
+                .exact_width(SIDEBAR_WIDTH)
                 .resizable(false)
                 .frame(egui::Frame::new().fill(SIDEBAR).inner_margin(egui::Margin::symmetric(14, 0)).stroke(egui::Stroke::new(1.0_f32, BORDER)))
                 .show(ctx, |ui| self.nav_ui(ui));
@@ -1036,25 +1045,32 @@ impl eframe::App for App {
         }
         egui::CentralPanel::default().frame(egui::Frame::new().fill(BG).inner_margin(egui::Margin { left: 32, right: 24, top: 22, bottom: 10 })).show(ctx, |ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(900.0);
-                match self.screen {
-                    Screen::Onboarding => self.onboarding_ui(ui),
-                    Screen::Home => self.home_ui(ui),
-                    Screen::Homework => self.homework_ui(ui),
-                    Screen::Review => self.review_ui(ui),
-                    Screen::Words => self.words_ui(ui),
-                    Screen::Reading => self.reading_ui(ui),
-                    Screen::Speed => self.speed_ui(ui),
-                    Screen::Listening => self.listening_ui(ui),
-                    Screen::SelfExpression => self.self_expression_ui(ui),
-                    Screen::Business => self.business_ui(ui),
-                    Screen::Feedback => self.feedback_ui(ui),
-                    Screen::Vocabulary => self.vocabulary_ui(ui),
-                    Screen::History => self.history_ui(ui),
-                    Screen::Progress => self.progress_ui(ui),
-                    Screen::LevelTest => self.level_test_ui(ui),
-                    Screen::Settings => self.settings_ui(ui),
-                }
+                // Content column of a fixed width, centered when the window is wider.
+                let extra = ((ui.available_width() - CONTENT_WIDTH) / 2.0).max(0.0);
+                ui.horizontal_top(|ui| {
+                    ui.add_space(extra);
+                    ui.vertical(|ui| {
+                        ui.set_max_width(CONTENT_WIDTH);
+                        match self.screen {
+                            Screen::Onboarding => self.onboarding_ui(ui),
+                            Screen::Home => self.home_ui(ui),
+                            Screen::Homework => self.homework_ui(ui),
+                            Screen::Review => self.review_ui(ui),
+                            Screen::Words => self.words_ui(ui),
+                            Screen::Reading => self.reading_ui(ui),
+                            Screen::Speed => self.speed_ui(ui),
+                            Screen::Listening => self.listening_ui(ui),
+                            Screen::SelfExpression => self.self_expression_ui(ui),
+                            Screen::Business => self.business_ui(ui),
+                            Screen::Feedback => self.feedback_ui(ui),
+                            Screen::Vocabulary => self.vocabulary_ui(ui),
+                            Screen::History => self.history_ui(ui),
+                            Screen::Progress => self.progress_ui(ui),
+                            Screen::LevelTest => self.level_test_ui(ui),
+                            Screen::Settings => self.settings_ui(ui),
+                        }
+                    });
+                });
             });
         });
         if let Some((msg, at)) = &self.toast {

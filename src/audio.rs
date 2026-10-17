@@ -472,8 +472,11 @@ impl Player {
                         if let Some(s) = sink.take() {
                             s.stop();
                         }
-                        let wanted = pick_device(&preferred, false).and_then(|d| d.name().ok());
-                        if out.is_none() || wanted.is_some_and(|w| out.as_ref().is_some_and(|o| o.name != w)) {
+                        // Follow the system default when it changes (headphones plugged in…). Only
+                        // the default is checked: listing every device can take seconds.
+                        let default_changed = preferred.is_empty()
+                            && cpal::default_host().default_output_device().and_then(|d| d.name().ok()).is_some_and(|w| out.as_ref().is_some_and(|o| o.name != w));
+                        if out.is_none() || default_changed {
                             drop(out.take()); // release the old device first
                             *os.lock().unwrap() = Some(Instant::now());
                             out = open_output(&preferred);

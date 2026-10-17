@@ -23,11 +23,18 @@ rand = "0.9"
 open = "5"
 bzip2 = "0.5"
 tar = "0.4"
-sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
 
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["eframe"] }
 hound = "3.5"
+
+# Neural TTS (sherpa-onnx). Statically linked on macOS/Linux; the prebuilt static Windows
+# library has no TTS, so Windows links the DLLs, which are shipped next to the .exe.
+[target.'cfg(not(windows))'.dependencies]
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
+
+[target.'cfg(windows)'.dependencies]
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

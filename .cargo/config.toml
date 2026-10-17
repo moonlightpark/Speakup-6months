@@ -1,3 +1,7 @@
 [env]
 # whisper.cpp's CMakeLists still declares an old minimum; CMake 4.x needs this.
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+
+# The statically linked sherpa-onnx (neural voice) requires non-PIC code on Linux x86_64.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "relocation-model=dynamic-no-pic"]
