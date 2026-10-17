@@ -32,6 +32,8 @@ pub struct Settings {
     pub neural_voice: String,
     /// Multilingual whisper model for Korean speech (translator): "small" or "base".
     pub korean_model: String,
+    /// Colour Korean passages by grammatical role (주어·동사·…). 직독직해 keeps its colours.
+    pub ko_role_colors: bool,
 }
 
 impl Default for Settings {
@@ -55,6 +57,7 @@ impl Default for Settings {
             neural_tts: true,
             neural_voice: "af_heart".into(),
             korean_model: "small".into(),
+            ko_role_colors: true,
         }
     }
 }

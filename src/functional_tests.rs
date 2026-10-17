@@ -996,3 +996,27 @@ fn ft25_korean_passages_and_gloss_are_coloured_by_role() {
     store.gloss.insert("I am a boy.".into(), vec![Chunk { en: "I am a boy.".into(), ko: "나는 소년".into(), role: String::new() }]);
     assert!(store.gloss_for("I am a boy.").is_empty());
 }
+
+#[test]
+fn ft26_korean_colours_can_be_switched_off() {
+    let mut t = launch_at(temp_dir("roles-off"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.settings.ko_role_colors = false;
+        s.items.push(StudyItem { id: "s:1".into(), kind: ItemKind::Sentence, text: "I like coffee.".into(), meaning_ko: "나는 커피를 좋아해.".into(), ..Default::default() });
+    });
+    t.nav("✏  쓰기");
+    t.click("🔁 한→영 작문");
+    t.steps(30);
+    assert!(t.has("나는 커피를 좋아해."));
+    assert!(!t.prompts().iter().any(|p| p.starts_with("Korean grammar roles.")), "no annotation requests while switched off");
+    assert!(!t.dir.join("ko_roles.json").exists());
+    // The switch is in settings, and turning it back on colours the passage.
+    t.nav("⚙  설정");
+    t.click("한글 지문에 문장 성분 색상 표시 (주어·동사·목적어…)");
+    assert!(t.app().store.settings.ko_role_colors);
+    t.nav("✏  쓰기");
+    t.click("🔁 한→영 작문");
+    let cache = t.dir.join("ko_roles.json");
+    t.wait("korean roles", |_| cache.exists());
+}

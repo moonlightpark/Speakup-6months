@@ -74,6 +74,8 @@ struct State {
     failed: HashSet<String>,
     job: Pending<Vec<Vec<KoSeg>>>,
     path: Option<PathBuf>,
+    /// Settings switch; off = Korean passages in their normal colour and no requests.
+    off: bool,
 }
 
 impl State {
@@ -122,9 +124,11 @@ pub fn load(ctx: &egui::Context, dir: &Path) {
 }
 
 /// Called once per frame: collects finished annotations and sends the next batch.
-pub fn pump(ctx: &egui::Context, claude: Option<Claude>) {
+/// `enabled` is the settings switch for colouring Korean passages.
+pub fn pump(ctx: &egui::Context, claude: Option<Claude>, enabled: bool) {
     let st = state(ctx);
     let mut s = st.lock().unwrap();
+    s.off = !enabled;
     if let Some(res) = s.job.poll() {
         let batch = std::mem::take(&mut s.batch);
         match res {
@@ -144,6 +148,9 @@ pub fn pump(ctx: &egui::Context, claude: Option<Claude>) {
         }
         ctx.request_repaint();
     }
+    if s.off {
+        s.wanted.clear();
+    }
     if s.job.running() || s.wanted.is_empty() {
         return;
     }
@@ -162,10 +169,10 @@ pub fn ko_label(ui: &mut Ui, text: &str, size: f32, fallback: Color32) -> egui::
     let segs = {
         let st = state(ui.ctx());
         let mut s = st.lock().unwrap();
-        match s.cache.get(text) {
+        match s.cache.get(text).filter(|_| !s.off) {
             Some(segs) => segs.clone(),
             None => {
-                if wants_roles(text) && !s.failed.contains(text) && !s.wanted.iter().chain(&s.batch).any(|t| t == text) {
+                if !s.off && wants_roles(text) && !s.failed.contains(text) && !s.wanted.iter().chain(&s.batch).any(|t| t == text) {
                     s.wanted.push(text.to_string());
                 }
                 Vec::new()

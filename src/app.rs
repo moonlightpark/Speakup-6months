@@ -1050,6 +1050,8 @@ impl App {
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_review, 1..=5).text("복습 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10).text("약점 항목 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=20).text("하루 새 단어 (0 = 단계별 자동)")).changed();
+            changed |= ui.checkbox(&mut self.store.settings.ko_role_colors, "한글 지문에 문장 성분 색상 표시 (주어·동사·목적어…)").changed();
+            ui.label(RichText::new("눈이 피로하면 끄세요. 직독직해 색상은 📖 직독직해 버튼으로 따로 켜고 끕니다.").color(MUTED).small());
             ui.horizontal(|ui| {
                 ui.label("학습 언어:");
                 for l in language::LANGUAGES {
@@ -1130,7 +1132,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.roll_day();
         self.poll_jobs();
-        crate::grammar::pump(ctx, self.claude());
+        crate::grammar::pump(ctx, self.claude(), self.store.settings.ko_role_colors);
         self.prefetch_lesson();
         self.track_time(ctx);
         if self.lesson_job.running() || self.ytdlp_job.running() || self.voice.player.is_playing() {
