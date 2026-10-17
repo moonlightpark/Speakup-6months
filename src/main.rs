@@ -35,6 +35,7 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("SpeakUp 6M — 영어 6개월 완성")
+            .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon/icon_256.png")).unwrap_or_default())
             .with_inner_size([width, 800.0])
             .with_min_inner_size([width - 160.0, 600.0]),
         // Always open at the fitted size instead of a size remembered from an earlier run.

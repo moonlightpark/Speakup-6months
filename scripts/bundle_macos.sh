@@ -8,6 +8,7 @@ APP="target/release/SpeakUp 6M.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp target/release/speakup "$APP/Contents/MacOS/speakup"
+cp assets/icon/icon.icns "$APP/Contents/Resources/icon.icns"
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -18,6 +19,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>SpeakUp 6M</string>
   <key>CFBundleIdentifier</key><string>com.speakup.sixmonths</string>
   <key>CFBundleExecutable</key><string>speakup</string>
+  <key>CFBundleIconFile</key><string>icon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>

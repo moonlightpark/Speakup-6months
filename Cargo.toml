@@ -42,6 +42,9 @@ objc2-av-foundation = { version = "0.3", default-features = false, features = ["
 objc2-foundation = "0.3"
 whisper-rs = { version = "0.14", features = ["metal"] }
 
+[target."cfg(windows)".build-dependencies]
+winresource = "0.1"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

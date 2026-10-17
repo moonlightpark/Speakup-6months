@@ -35,6 +35,23 @@ jobs:
         with:
           key: ${{ matrix.name }}
 
+      # sherpa-onnx's prebuilt libraries live in the user cache dir, outside target/.
+      # Keep them cached, and rebuild sherpa-rs-sys if they are missing so a cached
+      # target/ never links against files that aren't there.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/sherpa-rs
+            ~/AppData/Local/sherpa-rs
+          key: sherpa-${{ matrix.name }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Refresh sherpa-onnx if needed
+        shell: bash
+        run: |
+          dir="$HOME/Library/Caches/sherpa-rs"
+          [ "$RUNNER_OS" = "Windows" ] && dir="$LOCALAPPDATA/sherpa-rs"
+          if [ ! -d "$dir" ]; then cargo clean --release -p sherpa-rs-sys; fi
+
       - name: Windows libclang
         if: runner.os == 'Windows'
         shell: bash
