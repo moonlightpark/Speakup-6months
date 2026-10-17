@@ -88,6 +88,15 @@ impl App {
                     if !r.scenario.is_empty() {
                         ui.label(format!("💼 회화 상황: {}", r.scenario));
                     }
+                    if r.speaking_minutes + r.reading_minutes + r.writing_minutes > 0 {
+                        ui.label(RichText::new(format!("⏱ 말하기 {}분 · 읽기 {}분 · 쓰기 {}분", r.speaking_minutes, r.reading_minutes, r.writing_minutes)).color(MUTED));
+                    }
+                    if !r.reading.is_empty() {
+                        ui.label(format!("📘 읽은 책: {}", r.reading.join(", ")));
+                    }
+                    if r.writings > 0 {
+                        ui.label(format!("✏ 쓰기 {}개", r.writings));
+                    }
                     if r.best_wpm > 0.0 {
                         ui.label(format!("⚡ 스피드 리딩 최고 {:.0} WPM", r.best_wpm));
                     }

@@ -12,6 +12,7 @@ mod content;
 mod curriculum;
 mod expressions;
 mod language;
+mod library;
 mod mic_permission;
 mod neural_tts;
 mod models;

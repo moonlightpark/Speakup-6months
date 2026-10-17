@@ -28,15 +28,14 @@ tar = "0.4"
 egui_kittest = { version = "0.31", features = ["eframe"] }
 hound = "3.5"
 
-# Neural TTS (sherpa-onnx). Statically linked on macOS/Linux; the prebuilt static Windows
-# library has no TTS, so Windows links the DLLs, which are shipped next to the .exe.
-[target.'cfg(not(windows))'.dependencies]
-sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
+# Neural TTS (sherpa-onnx). Statically linked on macOS; the prebuilt static Windows/Linux
+# libraries have no TTS, so there the shared libraries are shipped next to the executable.
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(not(target_os = "macos"))'.dependencies]
 sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
 block2 = "0.6"
 objc2 = "0.6"
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }

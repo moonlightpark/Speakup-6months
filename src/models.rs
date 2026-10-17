@@ -84,6 +84,18 @@ pub struct DayProgress {
     pub speed_rounds: u32,
     pub study_seconds: u64,
     pub wrapped_up: bool,
+    /// Time per skill today (target split 말하기 60 : 읽기 20 : 쓰기 20).
+    #[serde(default)]
+    pub speaking_seconds: u64,
+    #[serde(default)]
+    pub reading_seconds: u64,
+    #[serde(default)]
+    pub writing_seconds: u64,
+    /// Library paragraphs read and writing exercises done today.
+    #[serde(default)]
+    pub paragraphs_read: u32,
+    #[serde(default)]
+    pub writings_done: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -167,6 +179,17 @@ pub struct DayRecord {
     pub question: String,
     pub scenario: String,
     pub best_wpm: f32,
+    #[serde(default)]
+    pub speaking_minutes: u32,
+    #[serde(default)]
+    pub reading_minutes: u32,
+    #[serde(default)]
+    pub writing_minutes: u32,
+    /// Books read that day ("title (page)").
+    #[serde(default)]
+    pub reading: Vec<String>,
+    #[serde(default)]
+    pub writings: u32,
 }
 
 /// A word the learner mispronounced (missed by speech recognition) during practice.
@@ -381,4 +404,27 @@ pub struct Lesson {
     /// Everyday native expressions / slang of the day (one classic, one recent).
     #[serde(default)]
     pub expressions: Vec<LessonWord>,
+}
+
+/// Where the learner is in a library book.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct BookProgress {
+    pub page: usize,
+    pub pages: usize,
+    pub finished: bool,
+    pub last_read: Option<NaiveDate>,
+    pub paragraphs_read: u32,
+}
+
+/// One writing exercise (dictation, translation or free writing) and its result.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct WritingRecord {
+    pub date: Option<NaiveDate>,
+    pub kind: String,
+    pub prompt: String,
+    pub text: String,
+    pub corrected: String,
+    pub score: f32,
 }

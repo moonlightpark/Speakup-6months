@@ -8,7 +8,9 @@
 //!   homework.json      assigned homework and its check results
 //!   attempts.jsonl     every spoken attempt (target, transcript, score)
 //!   lessons/DATE.json  the generated lesson for each day
-//!   models/            whisper speech-recognition models
+//!   library.json       reading-library progress per book; library/ holds downloaded books
+//!   writing.json       writing exercises (dictation, translation, free writing)
+//!   models/            whisper speech-recognition and Kokoro voice models
 //!   youtube/ID/        downloaded YouTube audio + English subtitles
 
 use crate::models::*;
@@ -30,6 +32,9 @@ pub struct Store {
     /// 직독직해 glosses by sentence text.
     pub gloss: std::collections::HashMap<String, Vec<Chunk>>,
     pub history: Vec<DayRecord>,
+    /// Reading library progress by book id.
+    pub library: std::collections::HashMap<String, BookProgress>,
+    pub writings: Vec<WritingRecord>,
 }
 
 fn load_json<T: DeserializeOwned + Default>(path: &Path) -> T {
@@ -66,7 +71,7 @@ impl Store {
     }
 
     pub fn open_at(dir: PathBuf) -> Result<Self> {
-        for sub in ["", "lessons", "models", "youtube", "bin"] {
+        for sub in ["", "lessons", "models", "youtube", "bin", "library"] {
             fs::create_dir_all(dir.join(sub))?;
         }
         Ok(Self {
@@ -78,6 +83,8 @@ impl Store {
             corrections: load_json(&dir.join("corrections.json")),
             gloss: load_json(&dir.join("gloss.json")),
             history: load_json(&dir.join("history.json")),
+            library: load_json(&dir.join("library.json")),
+            writings: load_json(&dir.join("writing.json")),
             dir,
         })
     }
@@ -106,6 +113,16 @@ impl Store {
 
     pub fn gloss_for(&self, text: &str) -> Vec<Chunk> {
         self.gloss.get(text.trim()).cloned().unwrap_or_default()
+    }
+
+    pub fn save_library(&self) {
+        log_err(save_json(&self.dir.join("library.json"), &self.library));
+    }
+    pub fn save_writings(&self) {
+        log_err(save_json(&self.dir.join("writing.json"), &self.writings));
+    }
+    pub fn library_dir(&self) -> PathBuf {
+        self.dir.join("library")
     }
 
     pub fn save_history(&self) {

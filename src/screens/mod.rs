@@ -8,3 +8,5 @@ pub mod test;
 pub mod feedback;
 pub mod speed;
 pub mod history;
+pub mod library;
+pub mod writing;

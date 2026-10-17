@@ -3,6 +3,8 @@
 
 # Documents stay local (Order.md holds private notes such as the API key)
 *.md
+# …except the user guide
+!README.md
 
 # OS / editor files
 .DS_Store

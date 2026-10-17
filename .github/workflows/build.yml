@@ -77,7 +77,12 @@ jobs:
         run: |
           cargo build --release
           mkdir -p dist
-          tar -C target/release -czf "dist/SpeakUp6M-${{ matrix.name }}.tar.gz" speakup
+          # The neural voice needs the sherpa-onnx / onnxruntime libraries beside the binary.
+          mkdir -p pkg/SpeakUp6M
+          cp target/release/speakup pkg/SpeakUp6M/
+          cp -P target/release/*.so* pkg/SpeakUp6M/
+          ls -la pkg/SpeakUp6M
+          tar -C pkg -czf "dist/SpeakUp6M-${{ matrix.name }}.tar.gz" SpeakUp6M
 
       - uses: actions/upload-artifact@v4
         with:

@@ -6,7 +6,7 @@ use crate::content;
 use crate::curriculum::{self, TOTAL_DAYS};
 use crate::language::{self, LanguagePack};
 use crate::models::*;
-use crate::screens::{audio_check::AudioCheckState, feedback::FeedbackState, speed::SpeedState, listening::ListeningState, practice::DrillQueue, speaking::{RoleplayState, SelfExprState}, homework::HomeworkState, test::LevelTest};
+use crate::screens::{library::LibraryState, writing::WritingState, audio_check::AudioCheckState, feedback::FeedbackState, speed::SpeedState, listening::ListeningState, practice::DrillQueue, speaking::{RoleplayState, SelfExprState}, homework::HomeworkState, test::LevelTest};
 use crate::srs;
 use crate::storage::Store;
 use crate::stt::{self, Stt, SttStatus};
@@ -28,6 +28,8 @@ pub enum Screen {
     Listening,
     SelfExpression,
     Business,
+    Library,
+    Writing,
     Vocabulary,
     Feedback,
     History,
@@ -51,7 +53,22 @@ pub const STEPS: &[(&str, &str, Screen)] = &[
     ("listening", "🎧 리스닝 · 구간반복", Screen::Listening),
     ("speaking", "💬 자기 표현 말하기", Screen::SelfExpression),
     ("business", "💼 비즈니스 회화", Screen::Business),
+    ("library", "📘 리딩 (동화·소설)", Screen::Library),
+    ("writing", "✏ 쓰기 (받아쓰기·작문)", Screen::Writing),
 ];
+
+/// Daily time split by skill (Order: 말하기 60 · 읽기 20 · 쓰기 20).
+pub const SKILL_WEIGHTS: [(&str, f32); 3] = [("🎤 말하기", 0.6), ("📘 읽기", 0.2), ("✏ 쓰기", 0.2)];
+
+/// Which skill a screen trains (None = not study time).
+pub fn skill_of(s: Screen) -> Option<usize> {
+    match s {
+        Screen::Library => Some(1),
+        Screen::Writing => Some(2),
+        Screen::Settings | Screen::Onboarding | Screen::Progress | Screen::History | Screen::Vocabulary => None,
+        _ => Some(0),
+    }
+}
 
 pub struct App {
     pub store: Store,
@@ -69,6 +86,8 @@ pub struct App {
     pub speed: SpeedState,
     pub feedback: FeedbackState,
     pub audio_check: AudioCheckState,
+    pub library: LibraryState,
+    pub writing: WritingState,
     pub test: Option<LevelTest>,
     pub toast: Option<(String, Instant)>,
     pub vocab_filter: String,
@@ -144,6 +163,8 @@ impl App {
             speed: SpeedState::default(),
             feedback: FeedbackState::default(),
             audio_check: AudioCheckState::default(),
+            library: LibraryState::default(),
+            writing: WritingState::default(),
             test: None,
             toast: None,
             vocab_filter: String::new(),
@@ -233,6 +254,17 @@ impl App {
             question: lesson.map(|l| l.self_expression.question.clone()).unwrap_or_default(),
             scenario: lesson.map(|l| l.business.title.clone()).unwrap_or_default(),
             best_wpm: p.speed_history.iter().filter(|r| r.date == date && r.kind == "reading").map(|r| r.wpm).fold(0.0, f32::max),
+            speaking_minutes: (p.today.speaking_seconds / 60) as u32,
+            reading_minutes: (p.today.reading_seconds / 60) as u32,
+            writing_minutes: (p.today.writing_seconds / 60) as u32,
+            reading: self
+                .store
+                .library
+                .iter()
+                .filter(|(_, b)| b.last_read == Some(date))
+                .filter_map(|(id, b)| crate::library::book(id).map(|bk| format!("{} ({}/{}쪽)", bk.title_ko, (b.page + 1).min(b.pages), b.pages)))
+                .collect(),
+            writings: self.store.writings.iter().filter(|w| w.date == Some(date)).count() as u32,
         };
         if rec.attempts > 0 || !rec.steps.is_empty() || rec.minutes > 0 {
             self.store.upsert_day(rec);
@@ -496,6 +528,8 @@ impl App {
                     (Screen::Listening, "🎧  리스닝 랩"),
                     (Screen::SelfExpression, "💬  자기 표현"),
                     (Screen::Business, "💼  회화 · 비즈니스"),
+                    (Screen::Library, "📘  리딩 라이브러리"),
+                    (Screen::Writing, "✏  쓰기"),
                 ],
             ),
             ("내 학습", &[(Screen::Feedback, "🔬  피드백 센터"), (Screen::Vocabulary, "📒  내 단어장"), (Screen::History, "📅  학습 기록"), (Screen::Progress, "📈  레벨 · 평가"), (Screen::Settings, "⚙  설정")]),
@@ -621,6 +655,27 @@ impl App {
         });
         ui.add_space(12.0);
 
+        // Skill balance: 말하기 60 · 읽기 20 · 쓰기 20 of the daily goal.
+        card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("오늘의 학습 비중").size(17.0).strong());
+                ui.label(RichText::new("말하기 60 · 읽기 20 · 쓰기 20 — 말하기가 제일 중요해요").color(MUTED));
+            });
+            let t = &p.today;
+            let secs = [t.speaking_seconds, t.reading_seconds, t.writing_seconds];
+            let colors = [crate::art::PINK, crate::art::CYAN, WARN];
+            ui.columns(3, |cols| {
+                for (i, col) in cols.iter_mut().enumerate() {
+                    let (label, w) = SKILL_WEIGHTS[i];
+                    let target = (goal as f32 * w).round().max(1.0);
+                    let mins = secs[i] as f32 / 60.0;
+                    col.label(RichText::new(format!("{label}  {:.0} / {target:.0}분", mins.floor())).strong());
+                    col.add(egui::ProgressBar::new((mins / target).min(1.0)).desired_height(10.0).corner_radius(5.0).fill(colors[i]));
+                }
+            });
+        });
+        ui.add_space(12.0);
+
         // Today's routine
         let mut next: Option<Screen> = None;
         card(ui, |ui| {
@@ -636,6 +691,8 @@ impl App {
                     "review" => format!("{}개", srs::due_count(&self.store.items)),
                     "listening" => format!("쉐도잉 {}/5", self.store.profile.today.listening_passes.min(5)),
                     "speed" => format!("{}/3 라운드", self.store.profile.today.speed_rounds.min(3)),
+                    "library" => format!("{}/{} 문단", self.store.profile.today.paragraphs_read.min(crate::screens::library::READ_GOAL), crate::screens::library::READ_GOAL),
+                    "writing" => format!("{}/{}개", self.store.profile.today.writings_done.min(crate::screens::writing::WRITING_GOAL), crate::screens::writing::WRITING_GOAL),
                     _ => String::new(),
                 };
                 let row = egui::Frame::new()
@@ -1001,8 +1058,16 @@ impl App {
             self.last_tick = now;
             let studying = !matches!(self.screen, Screen::Settings | Screen::Onboarding | Screen::Progress | Screen::History);
             if studying && now - self.last_activity < Duration::from_secs(120) {
-                self.store.profile.study_seconds += dt.as_secs();
-                self.store.profile.today.study_seconds += dt.as_secs();
+                let secs = dt.as_secs();
+                let t = &mut self.store.profile.today;
+                self.store.profile.study_seconds += secs;
+                t.study_seconds += secs;
+                match skill_of(self.screen) {
+                    Some(1) => t.reading_seconds += secs,
+                    Some(2) => t.writing_seconds += secs,
+                    Some(_) => t.speaking_seconds += secs,
+                    None => {}
+                }
             }
         }
         if now - self.last_save > Duration::from_secs(30) {
@@ -1062,6 +1127,8 @@ impl eframe::App for App {
                             Screen::Listening => self.listening_ui(ui),
                             Screen::SelfExpression => self.self_expression_ui(ui),
                             Screen::Business => self.business_ui(ui),
+                            Screen::Library => self.library_ui(ui),
+                            Screen::Writing => self.writing_ui(ui),
                             Screen::Feedback => self.feedback_ui(ui),
                             Screen::Vocabulary => self.vocabulary_ui(ui),
                             Screen::History => self.history_ui(ui),

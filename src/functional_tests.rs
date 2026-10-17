@@ -82,6 +82,14 @@ fn respond(body: &Value) -> Value {
     } else if prompt.starts_with("Homework:") {
         let ok = prompt.to_lowercase().contains("they said: \"the deadline");
         json!({"ok": ok, "feedback_ko": if ok { "정확해요" } else { "단어를 넣어 주세요" }, "better": "The deadline is tomorrow."})
+    } else if prompt.starts_with("Korean: \"") {
+        let ok = prompt.contains("Learner wrote: \"I really like coffee");
+        json!({"ok": ok, "feedback_ko": if ok { "같은 뜻이에요" } else { "다시 써 보세요" }, "better": "I like coffee."})
+    } else if prompt.contains("wrote this in English") {
+        json!({"score": 72, "feedback_ko": "좋아요!", "corrections": [{"original": "I go park", "corrected": "I went to the park", "explanation_ko": "과거 시제"}],
+               "natural_version": "I went to the park and had a coffee.", "natural_version_ko": "공원에 가서 커피를 마셨어요."})
+    } else if prompt.starts_with("Rewrite this page") {
+        json!({"paragraphs": ["A lion slept. A mouse ran on him."], "summary_ko": "사자와 생쥐"})
     } else if prompt.contains("Diagnose") {
         json!({"tip_ko": "th는 혀를 이 사이에", "focus_words": ["think"]})
     } else {
@@ -764,4 +772,82 @@ fn ft19_saved_name_and_key_are_not_asked_again() {
     assert!(h.query_by_label_contains("✅ Tyler").is_some());
     assert!(h.query_by_label_contains("✅ 저장됨").is_some());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn ft20_library_reads_a_story_and_tracks_progress() {
+    let mut t = launch("library");
+    t.nav("📘  리딩 라이브러리");
+    assert!(t.has("The Lion and the Mouse") && t.has("동화"));
+    t.h.get_all_by_label("읽기 ›").next().unwrap().click();
+    t.steps(3);
+    assert!(t.has("A big lion was sleeping under a tree."));
+    // Selecting a sentence opens its tools.
+    t.click("A big lion was sleeping under a tree.");
+    assert!(t.has("🎤 소리 내어 읽기") && t.has("📖 직독직해"));
+    t.click("📖 직독직해");
+    t.wait("gloss", |a| !a.store.gloss_for("A big lion was sleeping under a tree.").is_empty());
+    t.click("⭐ 문장 저장 (복습)");
+    assert!(t.app().store.items.iter().any(|i| i.text == "A big lion was sleeping under a tree." && i.category == "reading"));
+    // Easier rewrite by Claude.
+    t.click("✨ 쉬운 영어로 다시 쓰기");
+    t.wait("simplified", |a| a.library.open.as_ref().is_some_and(|r| r.paragraphs_shown().len() == 1));
+    t.click("✓ 다 읽었어요");
+    let app = t.app();
+    assert!(app.library.open.is_none());
+    assert_eq!(app.store.profile.today.paragraphs_read, 6);
+    assert!(app.store.library["lion-mouse"].finished);
+    assert!(t.dir.join("library.json").exists());
+}
+
+#[test]
+fn ft21_writing_dictation_translation_and_diary() {
+    let mut t = launch_at(temp_dir("writing"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.items.push(StudyItem { id: "s:1".into(), kind: ItemKind::Sentence, text: "I like coffee.".into(), meaning_ko: "나는 커피를 좋아해.".into(), ..Default::default() });
+    });
+    t.nav("✏  쓰기");
+    // Dictation: exact answer scores 100.
+    t.app_mut().writing.input = "I like coffee".into();
+    t.click("확인");
+    assert!(t.has("100점"));
+    t.click("다음 ▶");
+    assert_eq!(t.app().store.profile.today.writings_done, 1);
+    // Translation: a different but correct wording is accepted by Claude.
+    t.click("🔁 한→영 작문");
+    assert!(t.has("나는 커피를 좋아해."));
+    t.app_mut().writing.input = "I really like coffee".into();
+    t.click("확인");
+    t.wait("translation check", |a| t_done(a));
+    assert!(t.has("같은 뜻이에요"));
+    t.click("다음 ▶");
+    // Diary: Claude corrects, the correction goes to the feedback center, then read it aloud.
+    t.click("📝 영어 일기");
+    t.app_mut().writing.input = "Today I go park and drink coffee.".into();
+    t.steps(2);
+    t.click("✨ Claude 교정 받기");
+    t.wait("diary feedback", |a| a.writing.diary_result.is_some());
+    assert!(t.has("72점") && t.has("I went to the park and had a coffee."));
+    assert!(t.app().store.corrections.iter().any(|c| c.corrected == "I went to the park"));
+    t.say("I went to the park and had a coffee.", 3.0);
+    assert_eq!(t.app().store.profile.today.writings_done, 3);
+    assert_eq!(t.app().store.writings.len(), 3);
+}
+
+fn t_done(a: &App) -> bool {
+    a.writing.translation_done()
+}
+
+#[test]
+fn ft22_study_time_is_split_by_skill() {
+    let mut t = launch("skills");
+    assert!(t.has("오늘의 학습 비중") && t.has("🎤 말하기") && t.has("📘 읽기") && t.has("✏ 쓰기"));
+    assert_eq!(crate::app::skill_of(Screen::Library), Some(1));
+    assert_eq!(crate::app::skill_of(Screen::Writing), Some(2));
+    assert_eq!(crate::app::skill_of(Screen::Business), Some(0));
+    let w: f32 = crate::app::SKILL_WEIGHTS.iter().map(|s| s.1).sum();
+    assert!((w - 1.0).abs() < 1e-6 && crate::app::SKILL_WEIGHTS[0].1 == 0.6);
+    // The routine has a reading and a writing step.
+    assert!(t.has("📘 리딩 (동화·소설)") && t.has("✏ 쓰기 (받아쓰기·작문)"));
 }

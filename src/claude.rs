@@ -277,6 +277,59 @@ impl Claude {
         self.call(user, schema, "low")
     }
 
+    /// Corrects a short piece of writing (diary / answer to a prompt).
+    pub fn writing_feedback(&self, prompt: &str, text: &str, level: f32) -> Result<WritingFeedback> {
+        let schema = obj(json!({
+            "score": json!({"type": "integer"}),
+            "feedback_ko": s(),
+            "corrections": arr(obj(json!({"original": s(), "corrected": s(), "explanation_ko": s()}))),
+            "natural_version": s(),
+            "natural_version_ko": s(),
+        }));
+        let user = format!(
+            "The learner (level {level:.1}/10, CEFR {cefr}) wrote this in English.\nPrompt: {prompt}\nTheir text: \"{text}\"\n\n\
+             score 0-100 for their level (meaning, naturalness, accuracy). corrections: the most important fixes (max 6), each original → corrected \
+             with a short Korean explanation. natural_version: how a native speaker would write the same ideas in everyday, spoken-style English \
+             (they will read it aloud afterwards). natural_version_ko: its Korean translation. feedback_ko: 2 encouraging, concrete sentences.",
+            cefr = cefr_of(level)
+        );
+        self.call(user, schema, "low")
+    }
+
+    /// Checks a Korean→English translation; alternatives with the same meaning are fine.
+    pub fn check_translation(&self, korean: &str, reference: &str, answer: &str) -> Result<TranslationCheck> {
+        let schema = obj(json!({"ok": json!({"type": "boolean"}), "feedback_ko": s(), "better": s()}));
+        let user = format!(
+            "Korean: \"{korean}\"\nReference English: \"{reference}\"\nLearner wrote: \"{answer}\"\n\n\
+             ok=true if the learner's sentence says the same thing in natural English (it doesn't have to match the reference word for word; \
+             minor spelling slips are fine). feedback_ko: one short sentence. better: the most natural way to say it (may be the reference)."
+        );
+        self.call(user, schema, "low")
+    }
+
+    /// Rewrites a page of a book in easier English for the learner's level.
+    pub fn simplify_page(&self, paragraphs: &[String], level: f32) -> Result<SimplifiedPage> {
+        let schema = obj(json!({"paragraphs": arr(s()), "summary_ko": s()}));
+        let user = format!(
+            "Rewrite this page of a story for an English learner at level {level:.1}/10 (CEFR {cefr}). Keep the story, the characters and \
+             the order of events, one output paragraph per input paragraph, but use simpler words and shorter sentences that sound natural \
+             when read aloud. summary_ko: a 2-3 sentence Korean summary of the page.\n\n{text}",
+            cefr = cefr_of(level),
+            text = paragraphs.join("\n\n")
+        );
+        self.call(user, schema, "low")
+    }
+
+    /// Meaning of a word as used in a sentence.
+    pub fn word_in_context(&self, word: &str, sentence: &str) -> Result<WordMeaning> {
+        let schema = obj(json!({"meaning_ko": s(), "note_ko": s(), "example": s(), "example_ko": s()}));
+        let user = format!(
+            "Word: \"{word}\"\nSentence: \"{sentence}\"\n\nmeaning_ko: its Korean meaning in this sentence (short). note_ko: one short note \
+             (base form, nuance, or if it's old-fashioned). example: a different, everyday example sentence. example_ko: its translation."
+        );
+        self.call(user, schema, "low")
+    }
+
     pub fn assess_level(&self, readings: &[(String, String, f32)], question: &str, answer: &str, current: f32) -> Result<LevelAssessment> {
         let schema = obj(json!({
             "level": json!({"type": "number"}), "summary_ko": s(),
@@ -491,4 +544,34 @@ mod tests {
         assert_eq!(v["required"].as_array().unwrap().len(), 2);
         assert_eq!(v["additionalProperties"], false);
     }
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct WritingFeedback {
+    pub score: i32,
+    pub feedback_ko: String,
+    pub corrections: Vec<Correction>,
+    pub natural_version: String,
+    pub natural_version_ko: String,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct TranslationCheck {
+    pub ok: bool,
+    pub feedback_ko: String,
+    pub better: String,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct SimplifiedPage {
+    pub paragraphs: Vec<String>,
+    pub summary_ko: String,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct WordMeaning {
+    pub meaning_ko: String,
+    pub note_ko: String,
+    pub example: String,
+    pub example_ko: String,
 }
