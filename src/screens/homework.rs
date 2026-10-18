@@ -5,7 +5,7 @@ use crate::app::App;
 use crate::claude::WordUseCheck;
 use crate::models::*;
 use crate::widgets::*;
-use egui::{RichText, Ui, Vec2};
+use egui::{Color32, RichText, Ui, Vec2};
 
 #[derive(Default)]
 pub struct HomeworkState {
@@ -15,6 +15,9 @@ pub struct HomeworkState {
     pub capture: Capture,
     pub check: Pending<WordUseCheck>,
     pub check_error: Option<String>,
+    /// 나만의 문장: what was said last, and whether it used the word.
+    pub said: Option<(String, bool)>,
+    pub show_hint: bool,
 }
 
 impl App {
@@ -46,6 +49,8 @@ impl App {
                 for (ti, t) in hw.tasks.iter().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label(if t.done { "✅" } else { "⬜" });
+                        let icon = if t.kind == TaskKind::UseWord { "✏ 문장 만들기" } else { "🔊 읽기" };
+                        ui.label(RichText::new(icon).small().color(if t.kind == TaskKind::UseWord { warn() } else { ACCENT }));
                         ui.label(RichText::new(&t.instruction_ko).color(if t.done { muted() } else { text_strong() }));
                         if !t.done && ui.button("하기").clicked() {
                             start = Some((hi, ti));
@@ -66,6 +71,8 @@ impl App {
         self.homework.active = Some((hi, ti));
         self.homework.capture = Capture::default();
         self.homework.check_error = None;
+        self.homework.said = None;
+        self.homework.show_hint = false;
     }
 
     fn homework_task_ui(&mut self, ui: &mut Ui) {
@@ -118,29 +125,7 @@ impl App {
                     }
                 }
                 let task = self.store.homework[hi].tasks[ti].clone();
-                card(ui, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.label(RichText::new(&task.text).size(30.0).strong());
-                        crate::grammar::ko_label(ui, &task.meaning_ko, 16.0, muted());
-                        ui.add_space(8.0);
-                        if self.homework.check.running() {
-                            spinner_label(ui, "Claude가 확인 중…");
-                        } else if let Some(transcript) = self.homework.capture.ui(ui, &mut self.voice, 30.0) {
-                            let (w, m) = (task.text.clone(), task.meaning_ko.clone());
-                            self.store.log_attempt("homework", &w, &transcript, 0.0);
-                            self.homework.check.spawn(move || c.check_word_use(&w, &m, &transcript));
-                        }
-                        if let Some(e) = &self.homework.check_error {
-                            error_label(ui, e);
-                        }
-                        if !task.feedback.is_empty() {
-                            ui.label(RichText::new(&task.feedback).color(if task.passed > 0 { GOOD } else { warn() }));
-                        }
-                        if task.passed > 0 && ui.add(egui::Button::new("다음 ▶").fill(GOOD).min_size(Vec2::new(140.0, 36.0))).clicked() {
-                            finished = true;
-                        }
-                    });
-                });
+                finished = self.make_sentence_ui(ui, &task, c);
             }
         }
         if ui.small_button("◀ 숙제 목록").clicked() {
@@ -166,5 +151,113 @@ impl App {
                 None => self.homework.active = None,
             }
         }
+    }
+
+    /// ✏ 나만의 문장 만들기: a mission screen that looks nothing like read-aloud — the word sits
+    /// in a sentence template, and what was said is checked for the word before Claude judges it.
+    /// Returns true when the learner moves on.
+    fn make_sentence_ui(&mut self, ui: &mut Ui, task: &HomeworkTask, c: crate::claude::Claude) -> bool {
+        let word = task.text.clone();
+        let mut next = false;
+        // Mission banner.
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width().min(760.0), 78.0), egui::Sense::hover());
+        crate::art::gradient_rect(ui.painter(), rect, 16.0, Color32::from_rgb(236, 120, 40), crate::art::PINK);
+        ui.painter().text(rect.left_top() + Vec2::new(20.0, 14.0), egui::Align2::LEFT_TOP, "✏ 나만의 문장 만들기 미션", egui::FontId::proportional(22.0), Color32::WHITE);
+        ui.painter().text(
+            rect.left_top() + Vec2::new(20.0, 46.0),
+            egui::Align2::LEFT_TOP,
+            "따라 읽기가 아니에요! 아래 단어를 꼭 넣어 내 문장을 직접 만들어 말하세요",
+            egui::FontId::proportional(15.0),
+            Color32::from_rgb(255, 240, 230),
+        );
+        ui.add_space(10.0);
+        card(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                // The sentence template: ____ ( word ) ____ .
+                ui.horizontal(|ui| {
+                    let blank = RichText::new("＿＿＿＿").size(28.0).color(muted());
+                    let w = ui.fonts(|f| f.layout_no_wrap(word.clone(), egui::FontId::proportional(32.0), Color32::WHITE).size().x) + 230.0;
+                    ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
+                    ui.label(blank.clone());
+                    egui::Frame::new().fill(warn()).corner_radius(10.0).inner_margin(egui::Margin::symmetric(14, 4)).show(ui, |ui| {
+                        ui.label(RichText::new(format!("( {word} )")).size(32.0).strong().color(Color32::WHITE));
+                    });
+                    ui.label(blank);
+                    ui.label(RichText::new(".").size(28.0).color(muted()));
+                });
+                crate::grammar::ko_label(ui, &format!("뜻: {}", task.meaning_ko), 17.0, muted());
+                ui.add_space(8.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.add_space(((ui.available_width() - 520.0) / 2.0).max(0.0));
+                    for step in ["① 뜻 확인", "② 내 이야기로 문장 떠올리기", "③ 🎤 눌러서 말하기"] {
+                        chip(ui, step, crate::art::VIOLET);
+                    }
+                });
+                ui.add_space(4.0);
+                ui.checkbox(&mut self.homework.show_hint, "💡 막히면 힌트 보기");
+                if self.homework.show_hint {
+                    egui::Frame::new().fill(subtle_fill()).corner_radius(10.0).inner_margin(10.0).show(ui, |ui| {
+                        ui.label(RichText::new("이렇게 시작해 보세요 (… 자리에 내 이야기를)").color(ACCENT));
+                        for starter in [format!("I … {word} …"), format!("Yesterday, my … {word} …"), format!("I think {word} is …"), format!("At work, I … {word} …")] {
+                            ui.label(RichText::new(starter).size(16.0));
+                        }
+                        if let Some((b, _)) = crate::dictionary::lookup(&word).filter(|(b, _)| !b.example.is_empty()) {
+                            ui.add_space(4.0);
+                            ui.label(RichText::new(format!("참고 예문: {}", b.example)).color(muted()));
+                            ui.label(RichText::new("그대로 따라 하지 말고, 바꿔서 내 문장으로 만들어요!").color(warn()).small());
+                        }
+                    });
+                }
+                ui.add_space(8.0);
+                if self.homework.check.running() {
+                    spinner_label(ui, "Claude가 내 문장을 확인 중…");
+                } else if let Some(said) = self.homework.capture.ui(ui, &mut self.voice, 30.0) {
+                    self.store.log_attempt("homework", &word, &said, 0.0);
+                    let used = crate::dictionary::sentence_uses(&said, &word);
+                    let long_enough = said.split_whitespace().count() >= 4;
+                    self.homework.said = Some((said.clone(), used && long_enough));
+                    self.homework.check_error = None;
+                    // Only a real sentence with the word goes to Claude (saves credit too).
+                    if used && long_enough {
+                        let (w, m) = (word.clone(), task.meaning_ko.clone());
+                        self.homework.check.spawn(move || c.check_word_use(&w, &m, &said));
+                    }
+                }
+                ui.label(RichText::new(format!("🎤 '{word}'을(를) 넣어서 말해요")).color(muted()).small());
+                // What was said, with the word highlighted (or what's missing).
+                if let Some((said, ok)) = self.homework.said.clone() {
+                    ui.add_space(6.0);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("내 문장:").color(muted()));
+                        for t in said.split_whitespace() {
+                            if crate::dictionary::sentence_uses(t, &word) || word.split_whitespace().any(|w| crate::dictionary::same_word(t, w)) {
+                                egui::Frame::new().fill(GOOD.gamma_multiply(0.3)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(4, 0)).show(ui, |ui| {
+                                    ui.label(RichText::new(t).size(18.0).strong().color(GOOD));
+                                });
+                            } else {
+                                ui.label(RichText::new(t).size(18.0));
+                            }
+                        }
+                    });
+                    if !crate::dictionary::sentence_uses(&said, &word) {
+                        error_label(ui, &format!("✖ '{word}'이(가) 빠졌어요 — 녹음만 하지 말고, '{word}'을(를) 넣은 내 문장을 만들어 다시 말해 보세요."));
+                    } else if !ok {
+                        error_label(ui, "✖ 단어만 말했어요 — 4단어 이상의 문장으로 말해 보세요. (예: 주어 + 동사 + 단어 + 이야기)");
+                    } else {
+                        ui.label(RichText::new(format!("✓ '{word}'을(를) 넣어 문장을 만들었어요")).color(GOOD).strong());
+                    }
+                }
+                if let Some(e) = &self.homework.check_error {
+                    error_label(ui, e);
+                }
+                if !task.feedback.is_empty() {
+                    ui.label(RichText::new(&task.feedback).color(if task.passed > 0 { GOOD } else { warn() }));
+                }
+                if task.passed > 0 && ui.add(egui::Button::new("다음 ▶").fill(GOOD).min_size(Vec2::new(140.0, 36.0))).clicked() {
+                    next = true;
+                }
+            });
+        });
+        next
     }
 }

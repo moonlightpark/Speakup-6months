@@ -97,6 +97,24 @@ pub fn lookup(word: &str) -> Option<(&'static BankWord, bool)> {
     base_forms(&w).iter().find_map(|b| index().get(&b.to_lowercase())).map(|i| (&all[*i], true))
 }
 
+/// Whether `token` is `target` or a form of it ("went" → go, "deadlines" → deadline).
+pub fn same_word(token: &str, target: &str) -> bool {
+    let norm = |w: &str| w.trim_matches(|c: char| !c.is_alphanumeric()).replace('’', "'").to_lowercase();
+    let (t, g) = (norm(token), norm(target));
+    !t.is_empty() && (t == g || base_forms(&t).iter().any(|b| b.eq_ignore_ascii_case(&g)))
+}
+
+/// Whether a spoken sentence uses `target` (a word in any form, or a whole phrase).
+pub fn sentence_uses(sentence: &str, target: &str) -> bool {
+    let words: Vec<&str> = target.split_whitespace().collect();
+    let said: Vec<&str> = sentence.split_whitespace().collect();
+    match words.len() {
+        0 => false,
+        1 => said.iter().any(|w| same_word(w, words[0])),
+        n => said.windows(n).any(|win| win.iter().zip(&words).enumerate().all(|(i, (a, b))| if i + 1 == n { same_word(a, b) } else { same_word(a, b) || a.eq_ignore_ascii_case(b) })),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +137,15 @@ mod tests {
             }
         }
         assert!(lookup("go").is_some_and(|(b, _)| !b.meaning_ko.is_empty() && !b.example.is_empty()));
+    }
+
+    #[test]
+    fn finds_the_word_in_a_sentence() {
+        assert!(sentence_uses("The deadline for the report is tomorrow", "deadline"));
+        assert!(sentence_uses("We missed two deadlines.", "deadline"));
+        assert!(sentence_uses("I went home early", "go"));
+        assert!(sentence_uses("I'm looking forward to the trip", "look forward to"));
+        assert!(!sentence_uses("I have no idea", "deadline"));
+        assert!(!sentence_uses("", "deadline"));
     }
 }

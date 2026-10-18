@@ -492,10 +492,18 @@ fn ft06_homework_is_checked_next_day() {
     t.say("The deadline is Friday.", 1.5);
     t.say("The deadline is Friday.", 1.5);
     t.click("다음 ▶");
-    // Now the "use the word" task, checked by Claude.
+    // Now the "use the word" task: a mission screen, not a read-aloud one.
+    assert!(t.has("( deadline )") && t.has("💡 막히면 힌트 보기"));
+    // Without the word (just recording something) it is caught on the device, no Claude call.
+    let checks = |t: &T| t.prompts().iter().filter(|p| p.starts_with("Homework:")).count();
+    let before = checks(&t);
     t.say("I have no idea", 1.0);
-    t.wait("word check", |a| a.store.homework[0].tasks[1].feedback.contains("단어를"));
+    assert!(t.has("'deadline'이(가) 빠졌어요"));
+    t.say("deadline", 0.8);
+    assert!(t.has("단어만 말했어요"));
+    assert_eq!(checks(&t), before, "not sent to Claude");
     t.say("The deadline for the report is tomorrow", 2.0);
+    assert!(t.has("✓ 'deadline'을(를) 넣어 문장을 만들었어요"));
     t.wait("word check ok", |a| a.store.homework[0].tasks[1].passed > 0);
     t.click("다음 ▶");
     let hw = &t.app().store.homework[0];
