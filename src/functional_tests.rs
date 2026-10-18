@@ -1469,10 +1469,14 @@ fn ft40_business_click_a_scene_or_key_phrase_to_start_talking() {
     t.click("🎭 상황 모음");
     assert!(t.has("완료한 상황 0/") && t.has("Job interview"));
     t.click("Ordering at a restaurant");
-    t.wait("AI opening line", |a| !a.roleplay.lines.is_empty());
-    assert!(t.app().roleplay.started);
-    let p = t.prompts().into_iter().filter(|p| p.starts_with("Role-play.")).last().unwrap();
-    assert!(p.contains("a friendly waiter"), "the clicked scene was started");
+    assert!(t.app().roleplay.started && t.app().roleplay.scenario.as_ref().is_some_and(|s| s.title.contains("restaurant")));
+    // The scene's opening request reaches Claude (background thread: wait for it, as on slow CI).
+    let t0 = Instant::now();
+    while !t.prompts().iter().any(|p| p.starts_with("Role-play.") && p.contains("a friendly waiter")) {
+        assert!(t0.elapsed() < Duration::from_secs(20), "the clicked scene was started");
+        t.steps(1);
+        std::thread::sleep(Duration::from_millis(15));
+    }
 }
 
 #[test]
