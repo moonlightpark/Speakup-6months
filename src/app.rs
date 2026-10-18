@@ -1279,6 +1279,11 @@ impl App {
                 let _ = open::that(&self.store.dir);
             }
         });
+        // App version at the bottom (from Cargo.toml at build time).
+        ui.add_space(12.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(app_version_label()).color(MUTED));
+        });
         if changed {
             self.store.save_settings();
         }
@@ -1412,6 +1417,11 @@ fn fmt_minutes(m: u64) -> String {
 }
 
 /// 5460 → "5,460".
+/// "SpeakUp 버전 1.5.2 (macos aarch64)" for the settings screen.
+pub fn app_version_label() -> String {
+    format!("SpeakUp 버전 {} ({} {})", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH)
+}
+
 pub fn thousands(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();

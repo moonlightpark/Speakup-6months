@@ -1457,3 +1457,10 @@ fn ft40_business_click_a_scene_or_key_phrase_to_start_talking() {
     let p = t.prompts().into_iter().filter(|p| p.starts_with("Role-play.")).last().unwrap();
     assert!(p.contains("a friendly waiter"), "the clicked scene was started");
 }
+
+#[test]
+fn ft41_settings_shows_the_app_version() {
+    let mut t = launch("version");
+    t.nav("⚙  설정");
+    assert!(t.has(&format!("SpeakUp 버전 {}", env!("CARGO_PKG_VERSION"))));
+}
