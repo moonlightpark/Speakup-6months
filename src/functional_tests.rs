@@ -1436,7 +1436,12 @@ fn ft39_reading_list_colours_click_and_home_progress() {
     t.click("다음 ▶");
     assert_eq!(t.app().store.word_stat("It's my first time").passes, 3);
     assert_eq!(t.app().item_progress("reading").map(|p| p.0), Some(1), "one idiom learned");
-    t.click("🏠 홈으로");
+    // "다음 문장" goes on to the next sentence in the list.
+    let second = t.app_mut().idiom_set()[1].en.clone();
+    t.click("다음 문장 ▶");
+    assert!(t.has(&format!("문장 읽기 · {}", second.chars().take(30).collect::<String>())), "next sentence: {second}");
+    t.click("그만하기");
+    t.nav("🏠  홈");
     assert!(t.has("(1/1,300문장 · 기억 완료 0)"));
 }
 

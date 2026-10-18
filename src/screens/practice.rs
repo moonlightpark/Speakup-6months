@@ -33,12 +33,15 @@ pub struct DrillQueue {
     pub results: Vec<(String, f32)>,
     /// When the celebration started (egui time), so it plays once from the beginning.
     pub finished_at: Option<f64>,
+    /// The rest of the list after a clicked row: the celebration's "다음 문장" practises the
+    /// first of these next, one at a time.
+    pub then: Vec<Spec>,
 }
 
 impl DrillQueue {
     pub fn new(step: &'static str, category: &'static str, title: &str, specs: Vec<Spec>) -> Self {
         let drill = specs.first().map(make_drill).unwrap_or_default();
-        Self { step, category, title: title.to_string(), specs, idx: 0, drill, results: Vec::new(), finished_at: None }
+        Self { step, category, title: title.to_string(), specs, idx: 0, drill, results: Vec::new(), finished_at: None, then: Vec::new() }
     }
 
     pub fn finished(&self) -> bool {
@@ -113,6 +116,7 @@ impl App {
             let avg = if q.results.is_empty() { 0.0 } else { q.results.iter().map(|r| r.1).sum::<f32>() / q.results.len() as f32 };
             let weak: Vec<String> = q.results.iter().filter(|r| r.1 < pass).map(|r| r.0.clone()).collect();
             let title = q.title.clone();
+            let has_next = !q.then.is_empty();
             let now = ui.input(|i| i.time);
             let t = (now - *q.finished_at.get_or_insert(now)) as f32;
             // Animated celebration, with the title and score as real labels on top of it.
@@ -137,7 +141,7 @@ impl App {
                 });
             }
             ui.add_space(8.0);
-            let mut close = false;
+            let (mut close, mut go_next) = (false, false);
             ui.horizontal(|ui| {
                 if ui.add(egui::Button::new(RichText::new("🏠 홈으로").size(17.0)).fill(ACCENT).min_size(Vec2::new(160.0, 40.0))).clicked() {
                     close = true;
@@ -146,9 +150,22 @@ impl App {
                 if ui.button("닫기").clicked() {
                     close = true;
                 }
+                if has_next && ui.add(egui::Button::new(RichText::new("다음 문장 ▶").size(17.0)).min_size(Vec2::new(140.0, 40.0))).clicked() {
+                    go_next = true;
+                }
             });
             if close {
                 self.queue = None;
+            } else if go_next {
+                if let Some(q) = self.queue.take() {
+                    let mut rest = q.then;
+                    let spec = rest.remove(0);
+                    let prefix = q.title.split(" · ").next().unwrap_or("").to_string();
+                    crate::applog!("{prefix}: 다음 문장 '{}'", spec.target);
+                    let mut next = DrillQueue::new("", q.category, &format!("{prefix} · {}", spec.target.chars().take(30).collect::<String>()), vec![spec]);
+                    next.then = rest;
+                    self.queue = Some(next);
+                }
             }
             if !step.is_empty() && !self.step_done(step) {
                 self.complete_step(step);
@@ -545,11 +562,14 @@ impl App {
             "reading",
             &marks,
         );
-        if let Some(spec) = picked.and_then(|i| row_specs.get(i).cloned()) {
-            // One sentence on demand, repeated in full so the count moves toward 기억 완료.
+        if let Some((i, spec)) = picked.and_then(|i| Some((i, row_specs.get(i).cloned()?))) {
+            // One sentence on demand, repeated in full so the count moves toward 기억 완료;
+            // "다음 문장" then goes on down the list.
             crate::applog!("reading: 리스트에서 '{}' 바로 연습", spec.target);
             let title = format!("문장 읽기 · {}", spec.target.chars().take(30).collect::<String>());
-            self.queue = Some(DrillQueue::new("", "reading", &title, vec![Spec { reps, ..spec }]));
+            let mut q = DrillQueue::new("", "reading", &title, vec![Spec { reps, ..spec }]);
+            q.then = row_specs[i + 1..].iter().map(|s| Spec { reps, ..s.clone() }).collect();
+            self.queue = Some(q);
             return;
         }
         if start {
