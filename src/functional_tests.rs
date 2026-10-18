@@ -1222,12 +1222,22 @@ fn ft33_progress_card_shows_each_activity() {
         let day = |n: i64, steps: &[&str]| DayRecord { date: Some(today() - chrono::Duration::days(n)), steps: steps.iter().map(|s| s.to_string()).collect(), ..Default::default() };
         // Days before the program started don't count.
         s.history = vec![day(3, &["words", "speed"]), day(2, &["words"]), day(9, &["words"])];
+        // 새 단어 / 문장 읽기 count learned items: 3 words (1 memorized) and 2 idioms.
+        for w in ["apple", "river", "window"] {
+            crate::srs::add_item(&mut s.items, StudyItem { kind: ItemKind::Word, text: w.into(), meaning_ko: "뜻".into(), category: "vocab".into(), ..Default::default() });
+        }
+        for t in ["It's my first time", "What's done is done"] {
+            crate::srs::add_item(&mut s.items, StudyItem { kind: ItemKind::Sentence, text: t.into(), category: "idiom".into(), ..Default::default() });
+        }
+        s.word_stats.insert("apple".into(), WordStat { passes: 10, attempts: 10, last: None });
     });
     assert!(t.has("📊 진척율"));
     for (key, n) in [("words", 3), ("speed", 1), ("writing", 1), ("business", 0), ("library", 0)] {
         assert_eq!(t.app().activity_days(key), n, "{key}");
     }
-    for text in ["1.6%  (3/182일) · 오늘 ✓", "0.5%  (1/182일) · 오늘 ✓", "0.5%  (1/182일)", "0.0%  (0/182일)", "📘 리딩 (동화·소설)", "💼 비즈니스 회화"] {
+    let words = crate::wordbank::all().len();
+    let words_line = format!("{:.1}%  (3/{}단어 · 기억 완료 1) · 오늘 ✓", 300.0 / words as f32, crate::app::thousands(words as u64));
+    for text in [words_line.as_str(), "0.2%  (2/1,300문장 · 기억 완료 0)", "0.5%  (1/182일) · 오늘 ✓", "0.5%  (1/182일)", "0.0%  (0/182일)", "📘 리딩 (동화·소설)", "💼 비즈니스 회화"] {
         assert!(t.has(text), "progress card should show {text:?}");
     }
 }
@@ -1402,4 +1412,25 @@ fn ft38_speed_reading_pages_through_the_learners_own_books() {
     assert_eq!(t.app().store.profile.speed_book_pages.get("Pocahontas"), Some(&1), "where the learner left off");
     t.click("◀ 이전 쪽");
     assert!(t.has("1 / 3쪽"));
+}
+
+#[test]
+fn ft39_reading_list_colours_click_and_home_progress() {
+    let mut t = launch_at(temp_dir("readmarks"), true, |s| {
+        s.profile.placement_done = true;
+        s.word_stats.insert("what's done is done".into(), WordStat { passes: 12, attempts: 12, last: None });
+    });
+    t.nav("📖  문장 읽기");
+    assert!(t.has("기억 완료 1/") && t.has("✓ 완료") && t.has("미완료"), "reading list coloured like 새 단어");
+    // Click the first idiom: just that sentence, then it counts on the home progress card.
+    t.click("💬 It's my first time");
+    assert!(t.has("문장 읽기 · It's my first time"));
+    for _ in 0..3 {
+        t.say("It's my first time", 1.0);
+    }
+    t.click("다음 ▶");
+    assert_eq!(t.app().store.word_stat("It's my first time").passes, 3);
+    assert_eq!(t.app().item_progress("reading").map(|p| p.0), Some(1), "one idiom learned");
+    t.click("🏠 홈으로");
+    assert!(t.has("(1/1,300문장 · 기억 완료 0)"));
 }

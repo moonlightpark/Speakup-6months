@@ -323,6 +323,16 @@ impl App {
     pub fn record_attempt(&mut self, category: &str, target: &str, a: &Attempt) {
         self.record_score(category, target, &a.transcript, a.score);
         // 새 단어 entries (today's words/chunks/expression, or learned words) keep their own count.
+        if category == "reading" {
+            // 문장 읽기: today's idiom sentences and longer sentences keep a count too (list colours).
+            let idioms = self.store.profile.today.idioms.clone().unwrap_or_default();
+            let in_today = idioms.iter().filter_map(|n| crate::idioms::by_no(*n)).any(|i| i.en == target)
+                || self.lesson.as_ref().is_some_and(|l| l.sentences.iter().any(|s| s.text == target));
+            if in_today {
+                let pass = self.pass_score();
+                self.store.record_word_practice(target, a.score >= pass);
+            }
+        }
         if category == "vocab" {
             let lower = target.to_lowercase();
             let in_set = self.store.profile.today.word_set.iter().any(|w| w.words.iter().chain(&w.phrases).chain(&w.expressions).any(|x| x.word.to_lowercase() == lower));
@@ -429,24 +439,49 @@ impl App {
         past as u32 + self.step_done(key) as u32
     }
 
+    /// Item-based progress for 새 단어 (words learned of the 6,000-word database) and 문장 읽기
+    /// (idiom sentences learned of 1,300): (learned, total, memorized, unit). Other steps: None.
+    pub fn item_progress(&self, key: &str) -> Option<(usize, usize, usize, &'static str)> {
+        let memorized = |text: &str| self.store.word_stat(text).passes >= WORD_DONE_PASSES;
+        match key {
+            "words" => {
+                let learned: Vec<&StudyItem> = self.store.items.iter().filter(|i| i.is_vocab_word()).collect();
+                let done = learned.iter().filter(|i| memorized(&i.text)).count();
+                Some((learned.len(), crate::wordbank::all().len(), done, "단어"))
+            }
+            "reading" => {
+                let learned: Vec<&StudyItem> = self.store.items.iter().filter(|i| i.category == "idiom").collect();
+                let done = learned.iter().filter(|i| memorized(&i.text)).count();
+                Some((learned.len(), crate::idioms::all().len(), done, "문장"))
+            }
+            _ => None,
+        }
+    }
+
     /// 진척율 card: progress of each daily activity over the 6-month program.
     fn activity_progress_card(&self, ui: &mut egui::Ui) {
         let colors = [crate::art::PINK, crate::art::CYAN, WARN, GOOD, Color32::from_rgb(190, 140, 255), Color32::from_rgb(110, 220, 200), Color32::from_rgb(255, 160, 64)];
         card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("📊 진척율").size(17.0).strong());
-                ui.label(RichText::new(format!("활동별로 마친 날 / 6개월 {TOTAL_DAYS}일")).color(MUTED));
+                ui.label(RichText::new(format!("새 단어·문장 읽기는 배운 개수, 나머지는 마친 날 / 6개월 {TOTAL_DAYS}일")).color(MUTED));
             });
             ui.add_space(4.0);
             egui::Grid::new("activity_progress").num_columns(3).spacing([14.0, 6.0]).show(ui, |ui| {
                 for (i, key) in PROGRESS_ACTIVITIES.iter().enumerate() {
                     let Some((_, label, _)) = STEPS.iter().find(|s| s.0 == *key) else { continue };
-                    let n = self.activity_days(key);
-                    let frac = n as f32 / TOTAL_DAYS as f32;
+                    let today_mark = if self.step_done(key) { " · 오늘 ✓" } else { "" };
+                    let (frac, detail) = match self.item_progress(key) {
+                        // Counted per item, so every word or sentence learned moves the bar.
+                        Some((n, total, done, unit)) => (n as f32 / total.max(1) as f32, format!("{n}/{}{unit} · 기억 완료 {done}", thousands(total as u64))),
+                        None => {
+                            let n = self.activity_days(key);
+                            (n as f32 / TOTAL_DAYS as f32, format!("{n}/{TOTAL_DAYS}일"))
+                        }
+                    };
                     ui.label(RichText::new(*label).strong());
                     ui.add(egui::ProgressBar::new(frac.min(1.0)).desired_width(320.0).desired_height(10.0).corner_radius(5.0).fill(colors[i % colors.len()]));
-                    let today_mark = if self.step_done(key) { " · 오늘 ✓" } else { "" };
-                    ui.label(RichText::new(format!("{:.1}%  ({n}/{TOTAL_DAYS}일){today_mark}", frac * 100.0)).color(MUTED));
+                    ui.label(RichText::new(format!("{:.1}%  ({detail}){today_mark}", frac * 100.0)).color(MUTED));
                     ui.end_row();
                 }
             });
@@ -1372,7 +1407,7 @@ fn fmt_minutes(m: u64) -> String {
 }
 
 /// 5460 → "5,460".
-fn thousands(n: u64) -> String {
+pub fn thousands(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {

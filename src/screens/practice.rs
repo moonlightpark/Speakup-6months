@@ -7,6 +7,7 @@ use crate::srs;
 use crate::widgets::*;
 use egui::{Color32, RichText, Ui, Vec2};
 
+#[derive(Clone)]
 pub struct Spec {
     /// Existing SRS item being reviewed.
     pub item_id: Option<String>,
@@ -246,7 +247,7 @@ impl App {
                     let text = RichText::new(en).size(17.0).strong().color(color);
                     if mark.is_some() {
                         // Click a word to practise just that one right away.
-                        let r = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text("클릭하면 이 단어만 바로 연습해요");
+                        let r = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
                         if r.hovered() {
                             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                         }
@@ -469,46 +470,40 @@ impl App {
             .map(|i| (format!("💬 {}", i.en), i.ko.clone()))
             .chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone())))
             .collect();
+        // Practice so far, like the 새 단어 list: red → orange → green.
+        let marks: Vec<(Color32, String)> = idioms
+            .iter()
+            .map(|i| i.en.as_str())
+            .chain(lesson.sentences.iter().map(|s| s.text.as_str()))
+            .map(|t| word_mark(self.store.word_stat(t).passes))
+            .collect();
         let reps = self.store.settings.reps_new;
-        if self.intro_card(
-            ui,
-            "📖 문장 소리 내어 읽기 (쉐도잉)",
-            &format!(
-                "💬 오늘의 숙어 문장 {}개를 한 번씩 소리 내어 읽고, 이어서 읽기 쉬운 긴 문장을 원어민처럼 따라 읽어요(각 {reps}번 통과).",
-                idioms.len()
-            ),
-            &rows,
-            "reading",
-            &[],
-        )
-        .0
-        {
-            let mut specs: Vec<Spec> = idioms
-                .iter()
-                .map(|i| Spec {
-                    item_id: None,
-                    // Saved once; afterwards spaced repetition brings it back.
-                    new_item: (!known(&i.en)).then(|| StudyItem {
-                        kind: ItemKind::Sentence,
-                        text: i.en.clone(),
-                        meaning_ko: i.ko.clone(),
-                        example: i.also.first().cloned().unwrap_or_default(),
-                        category: "idiom".into(),
-                        ..Default::default()
-                    }),
-                    target: i.en.clone(),
-                    ko: i.ko.clone(),
-                    tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 오늘의 숙어 문장".into()),
-                    reps: 1,
-                    recall: false,
-                    is_word: false,
-                    chunks: Vec::new(),
-                })
-                .collect();
-            for s in &lesson.sentences {
-                // Passed before (e.g. before a restart): once, without counting as a new review.
+        // One drill per row (same order as `rows`). Idioms once each in the day's run; a sentence
+        // passed before (e.g. before a restart) once, without counting as a new review.
+        let row_specs: Vec<Spec> = idioms
+            .iter()
+            .map(|i| Spec {
+                item_id: None,
+                // Saved once; afterwards spaced repetition brings it back.
+                new_item: (!known(&i.en)).then(|| StudyItem {
+                    kind: ItemKind::Sentence,
+                    text: i.en.clone(),
+                    meaning_ko: i.ko.clone(),
+                    example: i.also.first().cloned().unwrap_or_default(),
+                    category: "idiom".into(),
+                    ..Default::default()
+                }),
+                target: i.en.clone(),
+                ko: i.ko.clone(),
+                tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 오늘의 숙어 문장".into()),
+                reps: 1,
+                recall: false,
+                is_word: false,
+                chunks: Vec::new(),
+            })
+            .chain(lesson.sentences.iter().map(|s| {
                 let passed = known(&s.text);
-                specs.push(Spec {
+                Spec {
                     item_id: None,
                     new_item: (!passed).then(|| StudyItem {
                         kind: ItemKind::Sentence,
@@ -524,8 +519,29 @@ impl App {
                     recall: false,
                     is_word: false,
                     chunks: self.store.gloss_for(&s.text),
-                });
-            }
+                }
+            }))
+            .collect();
+        let (start, picked) = self.intro_card(
+            ui,
+            "📖 문장 소리 내어 읽기 (쉐도잉)",
+            &format!(
+                "💬 오늘의 숙어 문장 {}개를 한 번씩 소리 내어 읽고, 이어서 읽기 쉬운 긴 문장을 원어민처럼 따라 읽어요(각 {reps}번 통과). 문장을 클릭하면 그 문장만 바로 연습해요.",
+                idioms.len()
+            ),
+            &rows,
+            "reading",
+            &marks,
+        );
+        if let Some(spec) = picked.and_then(|i| row_specs.get(i).cloned()) {
+            // One sentence on demand, repeated in full so the count moves toward 기억 완료.
+            crate::applog!("reading: 리스트에서 '{}' 바로 연습", spec.target);
+            let title = format!("문장 읽기 · {}", spec.target.chars().take(30).collect::<String>());
+            self.queue = Some(DrillQueue::new("", "reading", &title, vec![Spec { reps, ..spec }]));
+            return;
+        }
+        if start {
+            let mut specs = row_specs;
             // Finally say each sentence again from the Korean only (기억해서 말하기).
             specs.extend(lesson.sentences.iter().filter(|s| !s.ko.is_empty() && !known(&s.text)).map(|s| recall_spec(&s.text, &s.ko)));
             self.queue = Some(DrillQueue::new("reading", "reading", "문장 읽기", specs));
