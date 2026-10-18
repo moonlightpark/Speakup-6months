@@ -1376,3 +1376,30 @@ fn ft37_click_a_word_in_the_list_to_practise_it() {
     t.click("다음 ▶");
     assert_eq!(t.app().store.items.iter().find(|i| i.text == "schedule").unwrap().attempts, reviews, "not reviewed twice");
 }
+
+#[test]
+fn ft38_speed_reading_pages_through_the_learners_own_books() {
+    let dir = temp_dir("books");
+    std::fs::create_dir_all(dir.join("passages")).unwrap();
+    let book = |stage: u32, title: &str, pages: &[&str]| crate::passages::Book { stage, title: title.into(), pages: pages.iter().map(|p| p.to_string()).collect() };
+    for (file, b) in [
+        ("0.json", book(0, "The Cat", &["Natalie is a movie star."])),
+        ("1.json", book(1, "Pocahontas", &["The English came to Virginia.", "John Smith met Pocahontas.", "She was a friend."])),
+    ] {
+        std::fs::write(dir.join("passages").join(file), serde_json::to_string(&b).unwrap()).unwrap();
+    }
+    let mut t = launch_at(dir, true, |s| {
+        s.profile.placement_done = true;
+        s.record_level(3.0, "test"); // A2 → stage 1
+    });
+    t.nav("⚡  스피드 트레이닝");
+    assert!(t.has("책 2권"));
+    t.click("▶ 지문 받기");
+    assert!(t.has("Pocahontas · 1/3쪽") && t.has("The English came to Virginia."));
+    assert!(t.prompts().iter().all(|p| !p.contains("speed")), "no Claude request for a book page");
+    t.click("다음 쪽 ▶");
+    assert!(t.has("Pocahontas · 2/3쪽") && t.has("John Smith met Pocahontas."));
+    assert_eq!(t.app().store.profile.speed_book_pages.get("Pocahontas"), Some(&1), "where the learner left off");
+    t.click("◀ 이전 쪽");
+    assert!(t.has("1 / 3쪽"));
+}

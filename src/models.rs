@@ -147,6 +147,8 @@ pub struct Profile {
     pub today: DayProgress,
     pub last_checkpoint_week: u32,
     pub speed_history: Vec<SpeedRecord>,
+    /// 스피드 리딩 book position: page index by book title (passages folder).
+    pub speed_book_pages: std::collections::HashMap<String, usize>,
     /// One answer to the same question each week, to hear progress (주간 녹음 비교).
     pub weekly_recordings: Vec<WeeklyRecording>,
     /// Days with a lesson from a human tutor (e.g. italki), logged by the learner.
@@ -194,6 +196,7 @@ impl Default for Profile {
             speed_history: Vec::new(),
             weekly_recordings: Vec::new(),
             tutor_sessions: Vec::new(),
+            speed_book_pages: Default::default(),
             external_tests: Vec::new(),
         }
     }

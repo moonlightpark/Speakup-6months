@@ -28,6 +28,9 @@ pub struct SpeedState {
     pub last: Option<(String, ScoreResult, f32)>,
     pub show_ko: bool,
     pub show_gloss: bool,
+    /// Books from the passages folder (loaded on first use) and the open one: (book, page).
+    pub books: Option<Vec<crate::passages::Book>>,
+    pub book: Option<(usize, usize)>,
     // quick response
     pub queue: Vec<(String, String)>,
     pub idx: usize,
@@ -71,10 +74,44 @@ impl App {
         }
     }
 
+    fn books(&mut self) -> &[crate::passages::Book] {
+        let dir = crate::passages::dir(&self.store.dir);
+        self.speed.books.get_or_insert_with(|| crate::passages::load(&dir))
+    }
+
+    /// Shows one page of a book from the passages folder as the passage to read.
+    fn open_book_page(&mut self, book: usize, page: usize) {
+        let Some(b) = self.books().get(book).cloned() else { return };
+        let page = page.min(b.pages.len().saturating_sub(1));
+        self.speed.attempts.clear();
+        self.speed.last = None;
+        self.speed.error = None;
+        self.speed.show_gloss = false;
+        self.speed.passage = Some(SpeedPassage {
+            title: format!("{} · {}/{}쪽", b.title, page + 1, b.pages.len()),
+            passage: b.pages[page].clone(),
+            passage_ko: String::new(),
+            chunks: Vec::new(),
+        });
+        self.speed.book = Some((book, page));
+        self.store.profile.speed_book_pages.insert(b.title.clone(), page);
+        self.store.save_profile();
+    }
+
     fn new_passage(&mut self) {
         self.speed.attempts.clear();
         self.speed.last = None;
         self.speed.error = None;
+        // The learner's own graded readers come first: the book for the level, where they left off.
+        let level = self.store.profile.level;
+        if let Some(bi) = crate::passages::pick(self.books(), level) {
+            let title = self.books()[bi].title.clone();
+            let page = self.store.profile.speed_book_pages.get(&title).copied().unwrap_or(0);
+            crate::applog!("speed: 지문 {title} {}쪽 (레벨 {level:.1})", page + 1);
+            self.open_book_page(bi, page);
+            return;
+        }
+        self.speed.book = None;
         let p = &self.store.profile;
         let theme = curriculum::week(curriculum::week_number(p)).theme.to_string();
         match self.claude() {
@@ -124,12 +161,52 @@ impl App {
             } else if ui.add(egui::Button::new(RichText::new("▶ 지문 받기").size(18.0)).fill(ACCENT).min_size(Vec2::new(180.0, 42.0))).clicked() {
                 self.new_passage();
             }
+            let n = self.books().len();
+            ui.label(
+                RichText::new(if n > 0 {
+                    format!("📚 지문 폴더의 책 {n}권에서 내 레벨에 맞는 책을 이어서 한 쪽씩 읽어요.")
+                } else {
+                    "📚 지문 폴더(학습 기록 폴더의 passages)가 비어 있어 Claude가 만든 지문으로 연습해요.".to_string()
+                })
+                .color(MUTED),
+            );
+            if ui.small_button("📂 지문 폴더 열기").clicked() {
+                let d = crate::passages::dir(&self.store.dir);
+                let _ = std::fs::create_dir_all(&d);
+                let _ = open::that(d);
+            }
             if let Some(e) = &self.speed.error {
                 error_label(ui, e);
             }
             return;
         }
         let p = self.speed.passage.clone().unwrap();
+        if let Some((bi, page)) = self.speed.book {
+            let books: Vec<(u32, String, usize)> = self.books().iter().map(|b| (b.stage, b.title.clone(), b.pages.len())).collect();
+            let pages = books.get(bi).map(|b| b.2).unwrap_or(1);
+            let mut go: Option<(usize, usize)> = None;
+            ui.horizontal_wrapped(|ui| {
+                egui::ComboBox::from_id_salt("speed_book").selected_text(books.get(bi).map(|b| format!("{}단계 · {}", b.0, b.1)).unwrap_or_default()).show_ui(ui, |ui| {
+                    for (i, (stage, title, n)) in books.iter().enumerate() {
+                        if ui.selectable_label(i == bi, format!("{stage}단계 · {title} ({n}쪽)")).clicked() && i != bi {
+                            go = Some((i, self.store.profile.speed_book_pages.get(title).copied().unwrap_or(0)));
+                        }
+                    }
+                });
+                if ui.add_enabled(page > 0, egui::Button::new("◀ 이전 쪽")).clicked() {
+                    go = Some((bi, page - 1));
+                }
+                ui.label(RichText::new(format!("{} / {pages}쪽", page + 1)).strong());
+                if ui.add_enabled(page + 1 < pages, egui::Button::new("다음 쪽 ▶")).clicked() {
+                    go = Some((bi, page + 1));
+                }
+            });
+            if let Some((b, pg)) = go {
+                self.open_book_page(b, pg);
+                return;
+            }
+            ui.add_space(4.0);
+        }
         card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(&p.title).size(20.0).strong());
@@ -206,9 +283,20 @@ impl App {
                 if ui.button("↻ 같은 지문 더 빠르게").clicked() {
                     self.speed.last = None;
                 }
-                if ui.button("새 지문").clicked() {
-                    self.speed.passage = None;
-                    self.new_passage();
+                match self.speed.book {
+                    // A book: the next page is the next passage.
+                    Some((bi, page)) => {
+                        let pages = self.books().get(bi).map(|b| b.pages.len()).unwrap_or(0);
+                        if page + 1 < pages && ui.button("다음 쪽 ▶").clicked() {
+                            self.open_book_page(bi, page + 1);
+                        }
+                    }
+                    None => {
+                        if ui.button("새 지문").clicked() {
+                            self.speed.passage = None;
+                            self.new_passage();
+                        }
+                    }
                 }
             });
         }
