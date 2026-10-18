@@ -1818,3 +1818,23 @@ fn ft52_sentence_making_and_using_the_days_words_follow_the_curriculum() {
     t.say("My schedule is very busy this week", 3.0);
     assert!(t.app().store.profile.today.words_used.contains(&"schedule".to_string()) && t.has("💡 오늘 단어를 넣어 말해 보세요 (1/2)"));
 }
+
+#[test]
+fn ft53_self_expression_is_a_compose_then_speak_screen() {
+    let mut t = launch("compose");
+    t.nav("💬  자기 표현");
+    t.wait("lesson", |a| a.lesson.is_some());
+    for text in ["자기 표현 · 영작해서 말하기", "📝 영작 설계도", "① 답하기", "② 이유·예시", "③ 마무리"] {
+        assert!(t.has(text), "{text}");
+    }
+    assert!(t.has("✏ 영작 노트 (선택)") && t.has("🎤 영작한 내 답을 말해요 (30~60초)"));
+    // Building blocks go into the draft.
+    t.click("Because …");
+    assert_eq!(t.app().selfx.draft, "Because …");
+    // The model answer comes with sentences using today's words.
+    t.click("모범 답안 보기");
+    assert!(t.has("💡 오늘 단어가 들어간 문장 2개") && t.has_exact("The deadline is Friday.") && t.has_exact("Let me check my schedule."));
+    t.click("The deadline is Friday.");
+    assert_eq!(t.app().selfx.draft, "Because … The deadline is Friday.");
+    assert!(t.has("6 / "), "draft word count");
+}

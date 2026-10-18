@@ -17,6 +17,8 @@ pub struct SelfExprState {
     pub feedback: Option<SpeechFeedback>,
     pub error: Option<String>,
     pub show_model: bool,
+    /// ✏ 영작 노트: the learner's draft before speaking.
+    pub draft: String,
     /// Offline: the built-in question being practised (its English text).
     pub offline_pick: Option<String>,
     /// Offline: feedback worked out on the device (words, speed, useful phrases used).
@@ -113,7 +115,7 @@ impl App {
             }
         }
 
-        page_title(ui, "💬 자기 표현", "질문에 30~60초 동안 내 이야기를 영어로 말해 보세요. 완벽하지 않아도 괜찮아요 — 말한 뒤 더 자연스러운 표현으로 다시 읽습니다.");
+        page_title(ui, "💬 자기 표현 · 영작해서 말하기", "질문에 대한 내 답을 영어로 만들어(영작) 30~60초 동안 말해요. 완벽하지 않아도 괜찮아요 — 말한 뒤 더 자연스러운 표현으로 다시 읽습니다.");
         ui.add_space(8.0);
         if offline {
             let mut other = false;
@@ -128,32 +130,117 @@ impl App {
             }
             ui.add_space(6.0);
         }
+        // The question, asked by the mascot in a speech bubble.
         card(ui, |ui| {
             ui.horizontal(|ui| {
-                speaker_button(ui, &mut self.voice, &se.question);
-                ui.label(RichText::new(&se.question).size(22.0).strong());
+                let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(56.0), egui::Sense::hover());
+                crate::art::mascot(ui.painter(), r.center(), 46.0, crate::art::Mood::Talking, ui.input(|i| i.time) as f32);
+                egui::Frame::new().fill(ACCENT.gamma_multiply(0.14)).corner_radius(14.0).inner_margin(12.0).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("Q.").size(22.0).strong().color(ACCENT));
+                        ui.label(RichText::new(&se.question).size(22.0).strong());
+                        speaker_button(ui, &mut self.voice, &se.question);
+                    });
+                    crate::grammar::ko_label(ui, &se.question_ko, 16.0, muted());
+                });
             });
-            crate::grammar::ko_label(ui, &se.question_ko, 16.0, muted());
-            if !se.useful_phrases.is_empty() {
-                ui.add_space(6.0);
-                ui.label(RichText::new("쓸 수 있는 표현").color(ACCENT));
-                for p in &se.useful_phrases {
-                    ui.horizontal(|ui| {
-                        speaker_button(ui, &mut self.voice, &p.text);
-                        ui.label(RichText::new(&p.text).strong());
-                        crate::grammar::ko_label(ui, &p.ko, 16.0, muted());
+        });
+        ui.add_space(8.0);
+        // 📝 영작 설계도: answer → details → wrap-up, with the useful phrases as building blocks.
+        let target = crate::offline_talk::target_words(self.store.profile.level);
+        let mut insert: Option<String> = None;
+        let focus = self.focus_words();
+        card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("📝 영작 설계도").size(18.0).strong());
+                ui.label(RichText::new(format!("이 순서로 내 답을 영어로 만들어 보세요 · 목표 약 {target}단어 ({}) · 30~60초", cefr_of(self.store.profile.level))).color(muted()));
+            });
+            ui.add_space(6.0);
+            let steps: [(&str, &str, &[&str]); 3] = [
+                ("① 답하기", "질문에 한 문장으로 바로 답해요", &["I …", "Yes, I …", "My answer is …"]),
+                ("② 이유·예시", "왜 그런지, 예를 들어 2문장", &["Because …", "For example, …", "Also, …"]),
+                ("③ 마무리", "한 문장으로 정리해요", &["So, …", "That's why …", "Anyway, …"]),
+            ];
+            ui.columns(3, |cols| {
+                for (i, (title, desc, frames)) in steps.iter().enumerate() {
+                    let ui = &mut cols[i];
+                    egui::Frame::new().fill(subtle_fill()).corner_radius(12.0).inner_margin(10.0).show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(RichText::new(*title).strong().color([ACCENT, crate::art::VIOLET, GOOD][i]));
+                        ui.label(RichText::new(*desc).small().color(muted()));
+                        ui.add_space(4.0);
+                        // The lesson's useful phrase for this step first, then general frames.
+                        let phrase = se.useful_phrases.get(i);
+                        if let Some(p) = phrase {
+                            let r = ui.add(egui::Label::new(RichText::new(&p.text).strong()).sense(egui::Sense::click())).on_hover_text(format!("{} · 누르면 영작 노트에 넣어요", p.ko));
+                            if r.clicked() {
+                                insert = Some(p.text.clone());
+                            }
+                            crate::grammar::ko_label(ui, &p.ko, 13.0, muted());
+                        }
+                        ui.horizontal_wrapped(|ui| {
+                            for f in frames.iter() {
+                                if ui.add(egui::Button::new(RichText::new(*f).small()).small()).on_hover_text("누르면 영작 노트에 넣어요").clicked() {
+                                    insert = Some(f.to_string());
+                                }
+                            }
+                        });
                     });
                 }
-            }
-            ui.add_space(4.0);
-            ui.checkbox(&mut self.selfx.show_model, "모범 답안 보기");
+            });
+            ui.add_space(8.0);
+            // ✏ 영작 노트: write first (optional), then say it looking at it.
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("✏ 영작 노트 (선택)").strong());
+                let n = self.selfx.draft.split_whitespace().count();
+                ui.label(RichText::new(format!("{n} / {target}단어")).color(if n >= target { GOOD } else { muted() }));
+            });
+            ui.add(
+                egui::TextEdit::multiline(&mut self.selfx.draft)
+                    .desired_rows(3)
+                    .desired_width(f32::INFINITY)
+                    .font(egui::FontId::proportional(17.0))
+                    .hint_text("말하기 전에 키워드나 문장을 영어로 적어 보세요. 말할 때 보면서 말해도 좋아요."),
+            );
+            ui.horizontal(|ui| {
+                if !self.selfx.draft.trim().is_empty() && ui.button("🔊 내 영작 들어보기").clicked() {
+                    self.voice.say(&self.selfx.draft);
+                }
+                ui.checkbox(&mut self.selfx.show_model, "모범 답안 보기");
+            });
             if self.selfx.show_model {
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, &se.model_answer);
                     ui.label(RichText::new(&se.model_answer).italics());
                 });
+                // Sentences with today's words, to borrow into my own answer.
+                let examples: Vec<LessonWord> = focus.iter().filter(|w| !w.example.is_empty()).take(3).cloned().collect();
+                if !examples.is_empty() {
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(format!("💡 오늘 단어가 들어간 문장 {}개 · 누르면 영작 노트에 넣어요", examples.len())).color(warn()).strong());
+                    for w in &examples {
+                        ui.horizontal_wrapped(|ui| {
+                            speaker_button(ui, &mut self.voice, &w.example);
+                            chip(ui, &format!("💬 {}", w.word), ACCENT);
+                            let r = ui.add(egui::Label::new(RichText::new(&w.example).size(16.0)).sense(egui::Sense::click())).on_hover_text("누르면 영작 노트에 넣어요");
+                            if r.clicked() {
+                                insert = Some(w.example.clone());
+                            }
+                            if !w.example_ko.is_empty() {
+                                crate::grammar::ko_label(ui, &w.example_ko, 14.0, muted());
+                            }
+                        });
+                    }
+                }
             }
         });
+        if let Some(t) = insert {
+            let d = &mut self.selfx.draft;
+            if !d.is_empty() && !d.ends_with(' ') {
+                d.push(' ');
+            }
+            d.push_str(&t);
+        }
         ui.add_space(6.0);
         self.focus_words_hint(ui);
         ui.add_space(8.0);
@@ -169,7 +256,10 @@ impl App {
                         let pick = self.selfx.offline_pick.take();
                         self.selfx = SelfExprState { offline_pick: pick, ..Default::default() };
                     }
-                } else if let Some(t) = self.selfx.capture.ui(ui, &mut self.voice, 90.0) {
+                } else if let Some(t) = {
+                    ui.label(RichText::new("🎤 영작한 내 답을 말해요 (30~60초)").size(17.0).strong());
+                    self.selfx.capture.ui(ui, &mut self.voice, 90.0)
+                } {
                     self.selfx.answer = Some(t.clone());
                     spoken = Some(t.clone());
                     self.selfx.feedback = None;
@@ -191,7 +281,8 @@ impl App {
                     }
                 }
                 if let Some(a) = &self.selfx.answer {
-                    ui.label(RichText::new(format!("내가 한 말: \"{a}\"")).color(muted()));
+                    let n = a.split_whitespace().count();
+                    ui.label(RichText::new(format!("내가 한 말 ({n}단어 / 목표 {target}): \"{a}\"")).color(if n >= target { GOOD } else { muted() }));
                 }
                 if let Some(e) = &self.selfx.error {
                     error_label(ui, e);
