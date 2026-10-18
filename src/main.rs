@@ -26,6 +26,7 @@ mod stt;
 mod theme;
 mod voice;
 mod widgets;
+mod wordbank;
 mod youtube;
 
 #[cfg(test)]

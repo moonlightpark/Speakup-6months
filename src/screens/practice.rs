@@ -203,10 +203,13 @@ impl App {
     }
 
     pub fn words_ui(&mut self, ui: &mut Ui) {
-        if self.run_queue_ui(ui) || !self.lesson_ready_ui(ui) {
+        if self.run_queue_ui(ui) {
             return;
         }
-        let lesson = self.lesson.clone().unwrap_or_default();
+        // Built-in word database + chunk list: no waiting for Claude. The rest of today's
+        // lesson (sentences, speaking…) is still prepared in the background meanwhile.
+        self.ensure_lesson();
+        let lesson = self.word_set();
         // Chunks first: whole spoken phrases pay off in conversation sooner than single words.
         let rows: Vec<(String, String)> = lesson
             .phrases
@@ -223,8 +226,18 @@ impl App {
             &rows,
             "words",
         ) {
+            // Words and chunks already passed (saved in the deck) are said once, without the
+            // example, so restarting the app doesn't make the learner redo them 3 times.
+            let passed = |kind: ItemKind, text: &str| {
+                let id = srs::make_id(kind, text);
+                self.store.items.iter().any(|i| i.id == id)
+            };
             let mut specs = Vec::new();
             for w in &lesson.phrases {
+                if passed(ItemKind::Sentence, &w.word) {
+                    specs.push(Spec { reps: 1, tip: "✓ 통과한 표현 — 한 번만 확인".into(), recall: false, ..recall_spec(&w.word, &w.meaning_ko) });
+                    continue;
+                }
                 specs.push(Spec {
                     item_id: None,
                     new_item: Some(StudyItem {
@@ -259,6 +272,10 @@ impl App {
             let slang: Vec<&LessonWord> = lesson.expressions.iter().collect();
             // Names that slip into a lesson ("Seoul") are not drilled as vocabulary.
             for (w, is_expr) in lesson.words.iter().filter(|w| !is_proper_noun(&w.word, &w.meaning_ko)).map(|w| (w, false)).chain(slang.into_iter().map(|w| (w, true))) {
+                if passed(ItemKind::Word, &w.word) {
+                    specs.push(Spec { reps: 1, tip: "✓ 통과한 단어 — 한 번만 확인".into(), is_word: true, recall: false, ..recall_spec(&w.word, &w.meaning_ko) });
+                    continue;
+                }
                 specs.push(Spec {
                     item_id: None,
                     new_item: Some(StudyItem {
@@ -291,7 +308,7 @@ impl App {
                 });
             }
             // Then each chunk once more from the Korean alone.
-            specs.extend(lesson.phrases.iter().map(|w| recall_spec(&w.word, &w.meaning_ko)));
+            specs.extend(lesson.phrases.iter().filter(|w| !passed(ItemKind::Sentence, &w.word)).map(|w| recall_spec(&w.word, &w.meaning_ko)));
             self.queue = Some(DrillQueue::new("words", "vocab", "새 단어", specs));
         }
     }

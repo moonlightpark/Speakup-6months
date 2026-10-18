@@ -346,6 +346,45 @@ impl App {
             .collect()
     }
 
+    /// Today's 새 단어 set: words from the built-in 6,000-word database for the learner's level,
+    /// plus the day's chunks and expression. Picked once a day and kept in the profile.
+    pub fn word_set(&mut self) -> WordSet {
+        if let Some(ws) = &self.store.profile.today.word_set {
+            return ws.clone();
+        }
+        let p = &self.store.profile;
+        let phase = curriculum::phase_of_week(curriculum::week_number(p));
+        let n = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day } else { phase.new_words } as usize;
+        let items = &self.store.items;
+        let knows = |t: &str| items.iter().any(|i| i.text.eq_ignore_ascii_case(t));
+        let lw = |e: crate::expressions::Expr| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() };
+        let ws = WordSet {
+            words: crate::wordbank::pick(p.level, n, knows).iter().map(|w| w.lesson_word()).collect(),
+            phrases: crate::expressions::pick_chunks(content::CHUNKS_PER_DAY, knows).into_iter().map(lw).collect(),
+            expressions: crate::expressions::pick_for_today(curriculum::day_number(p), knows).into_iter().map(lw).collect(),
+        };
+        crate::applog!("words: 오늘의 단어 {}개 (레벨 {:.1}) · {:?}", ws.words.len(), p.level, ws.words.iter().map(|w| &w.word).collect::<Vec<_>>());
+        self.store.profile.today.word_set = Some(ws.clone());
+        self.store.save_profile();
+        ws
+    }
+
+    /// Makes today's lesson (sentences, writing, prefetch) use the same words as the 새 단어 menu.
+    fn sync_lesson_words(&mut self) {
+        if !self.store.profile.placement_done || !self.lesson.as_ref().is_some_and(|l| l.date == Some(today())) {
+            return;
+        }
+        let ws = self.word_set();
+        if let Some(l) = &mut self.lesson {
+            if l.words != ws.words || l.phrases != ws.phrases || l.expressions != ws.expressions {
+                l.words = ws.words;
+                l.phrases = ws.phrases;
+                l.expressions = ws.expressions;
+                self.store.save_lesson(l);
+            }
+        }
+    }
+
     /// Days (out of the 6-month program) on which a routine step was completed, today included.
     pub fn activity_days(&self, key: &str) -> u32 {
         let t = today();
@@ -469,7 +508,6 @@ impl App {
         let week = curriculum::week_number(p);
         let day = curriculum::day_number(p);
         let phase = curriculum::phase_of_week(week);
-        let n_words = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day } else { phase.new_words };
         match self.claude() {
             Some(c) => {
                 let wk = curriculum::week(week);
@@ -489,7 +527,8 @@ impl App {
                     known: self.store.items.iter().filter(|i| i.kind == ItemKind::Word).map(|i| i.text.clone()).collect(),
                     known_phrases: self.store.items.iter().filter(|i| i.is_chunk()).map(|i| i.text.clone()).collect(),
                     weak: self.store.items.iter().filter(|i| i.weak).take(8).map(|i| i.text.clone()).collect(),
-                    n_words,
+                    // Words come from the built-in database (`word_set`), not from Claude.
+                    n_words: 0,
                     n_sentences: phase.sentences,
                     avoid_sentences,
                     avoid_questions: past.iter().map(|l| l.self_expression.question.clone()).filter(|q| !q.is_empty()).collect(),
@@ -1208,6 +1247,7 @@ impl eframe::App for App {
         self.poll_jobs();
         self.apply_support_stage(ctx);
         crate::grammar::pump(ctx, self.claude(), self.store.settings.ko_role_colors);
+        self.sync_lesson_words();
         self.prefetch_lesson();
         self.track_time(ctx);
         if self.lesson_job.running() || self.ytdlp_job.running() || self.voice.player.is_playing() {

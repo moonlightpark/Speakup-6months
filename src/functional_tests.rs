@@ -220,7 +220,13 @@ fn launch(name: &str) -> T {
         s.profile.placement_done = true;
         s.profile.start_date = today();
         s.record_level(3.0, "test setup");
+        s.profile.today = DayProgress { date: Some(today()), word_set: Some(mock_word_set()), ..Default::default() };
     })
+}
+
+/// Today's 새 단어 set fixed to the mock lesson's two words (normally picked from the word bank).
+fn mock_word_set() -> WordSet {
+    WordSet { words: serde_json::from_value(lesson_json()["words"].clone()).unwrap(), ..Default::default() }
 }
 
 impl T {
@@ -727,8 +733,12 @@ fn ft16_offline_mode_uses_builtin_lesson() {
     t.steps(3);
     let l = t.app().lesson.clone().expect("built-in lesson without API key");
     assert_eq!(l.source, "built-in");
+    // Words come from the built-in 6,000-word database, picked for the learner's level.
     assert_eq!(l.words.len(), 8, "phase 1 = 8 words");
-    assert!(t.has("introduce"));
+    let first = crate::wordbank::pick(t.app().store.profile.level, 1, |_| false)[0];
+    assert_eq!(l.words[0].word, first.word);
+    assert!(t.has(&first.word) && t.has(&first.meaning_ko));
+    assert_eq!(t.app().store.profile.today.word_set.as_ref().map(|w| w.words.clone()), Some(l.words.clone()), "lesson uses the same words");
     t.nav("💼  회화 · 비즈니스");
     assert!(t.has("Claude API 키가 필요합니다"));
     assert!(t.prompts().is_empty(), "no API calls without a key");
@@ -1064,18 +1074,23 @@ fn ft27_chunks_first_high_frequency_words_and_one_expression_a_day() {
     assert!(prompt.contains("from the 2,000 most frequent words"), "beginners get the top-2,000 band");
     assert!(prompt.contains("expressions: exactly 1 item"), "idioms/slang ≈ 5%: one a day");
     assert!(req["output_config"]["format"]["schema"]["properties"]["phrases"].is_object());
-    assert!(t.has("🔗 It depends on"));
-    // The chunk is drilled first, then its example, then the words.
+    // The 새 단어 set itself is picked locally: 4 chunks, 1 expression, words from the word bank.
+    let ws = t.app().store.profile.today.word_set.clone().expect("word set picked");
+    let chunks = crate::expressions::CHUNKS;
+    assert_eq!(ws.phrases.iter().map(|w| w.word.as_str()).collect::<Vec<_>>(), chunks[..4].iter().map(|c| c.0).collect::<Vec<_>>());
+    assert_eq!(ws.expressions.len(), 1);
+    assert_eq!(ws.words[0].word, crate::wordbank::pick(t.app().store.profile.level, 1, |_| false)[0].word);
+    assert!(t.has(&format!("🔗 {}", chunks[0].0)));
+    // The chunk is drilled first, then its example, then the next chunk.
     t.click("▶ 시작하기");
-    assert!(t.has("It depends on"));
     for _ in 0..3 {
-        t.say("It depends on", 1.0);
+        t.say(chunks[0].0, 1.0);
     }
     t.click("다음 ▶");
-    t.say("It depends on the weather.", 1.5);
+    t.say(chunks[0].2, 1.5);
     t.click("다음 ▶");
-    assert!(t.has("deadline"));
-    let item = t.app().store.items.iter().find(|i| i.text == "It depends on").cloned().expect("chunk saved for review");
+    assert!(t.has(chunks[1].0));
+    let item = t.app().store.items.iter().find(|i| i.text == chunks[0].0).cloned().expect("chunk saved for review");
     assert!(item.is_chunk() && !item.is_vocab_word() && item.kind == ItemKind::Sentence);
 }
 
@@ -1206,4 +1221,40 @@ fn ft33_progress_card_shows_each_activity() {
     for text in ["1.6%  (3/182일) · 오늘 ✓", "0.5%  (1/182일) · 오늘 ✓", "0.5%  (1/182일)", "0.0%  (0/182일)", "📘 리딩 (동화·소설)", "💼 비즈니스 회화"] {
         assert!(t.has(text), "progress card should show {text:?}");
     }
+}
+
+#[test]
+fn ft34_passed_words_are_said_once_after_a_restart() {
+    let dir = temp_dir("restart-words");
+    // First run: pass "deadline" 3 times, then quit in the middle of the list.
+    {
+        let mut t = launch_at(dir.clone(), true, |s| {
+            s.profile.placement_done = true;
+            s.profile.today = DayProgress { date: Some(today()), word_set: Some(mock_word_set()), ..Default::default() };
+        });
+        t.nav("📚  새 단어");
+        t.click("▶ 시작하기");
+        for _ in 0..3 {
+            t.say("deadline", 0.8);
+        }
+        t.click("다음 ▶");
+        assert!(t.app().store.items.iter().any(|i| i.text == "deadline"));
+        t.app().store.save_profile();
+        t.dir = temp_dir("restart-words-first"); // keep the data folder for the second run
+    }
+    // Restart: same words today; "deadline" once (no example), then "schedule" as usual.
+    let mut t = launch_at(dir, true, |_| {});
+    assert_eq!(t.app().store.profile.today.word_set, Some(mock_word_set()), "today's words survive a restart");
+    t.nav("📚  새 단어");
+    t.click("▶ 시작하기");
+    assert!(t.has("통과한 단어"));
+    let reviews = t.app().store.items.iter().find(|i| i.text == "deadline").unwrap().attempts;
+    t.say("deadline", 0.8);
+    t.click("다음 ▶");
+    assert!(t.has("schedule") && !t.has("The deadline is Friday."), "passed word: one pass, no example");
+    assert_eq!(t.app().store.items.iter().find(|i| i.text == "deadline").unwrap().attempts, reviews, "not reviewed again today");
+    for _ in 0..2 {
+        t.say("schedule", 0.8);
+    }
+    assert!(t.query_next().is_none(), "new words still need 3 passes");
 }
