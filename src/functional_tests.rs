@@ -1382,7 +1382,7 @@ fn ft37_click_a_word_in_the_list_to_practise_it() {
     t.click("다음 ▶");
     t.say("Let me check my schedule.", 1.5);
     t.click("다음 ▶");
-    assert!(t.has("잘했어요!"));
+    assert!(t.has("잘했어요!") && !t.has("다음 단어 ▶"), "last word in the list: no next");
     assert!(t.app().store.items.iter().any(|i| i.text == "schedule"), "saved for review");
     assert_eq!(t.app().store.word_stat("schedule").passes, 3);
     assert!(!t.app().step_done("words"), "one word doesn't finish today's step");
@@ -1397,6 +1397,17 @@ fn ft37_click_a_word_in_the_list_to_practise_it() {
     assert_eq!(t.app().store.word_stat("schedule").passes, 6);
     t.click("다음 ▶");
     assert_eq!(t.app().store.items.iter().find(|i| i.text == "schedule").unwrap().attempts, reviews, "not reviewed twice");
+    // "다음 단어" goes on from a clicked word to the next one in the list.
+    t.click("그만하기");
+    t.click("deadline");
+    for _ in 0..3 {
+        t.say("deadline", 0.8);
+    }
+    t.click("다음 ▶");
+    t.say("The deadline is Friday.", 1.5);
+    t.click("다음 ▶");
+    t.click("다음 단어 ▶");
+    assert!(t.has("새 단어 · schedule") && t.has("1 / 2"), "the next word, in full");
 }
 
 #[test]

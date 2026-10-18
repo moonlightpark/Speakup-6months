@@ -33,9 +33,9 @@ pub struct DrillQueue {
     pub results: Vec<(String, f32)>,
     /// When the celebration started (egui time), so it plays once from the beginning.
     pub finished_at: Option<f64>,
-    /// The rest of the list after a clicked row: the celebration's "다음 문장" practises the
-    /// first of these next, one at a time.
-    pub then: Vec<Spec>,
+    /// The rest of the list after a clicked row, as (title, drills) per row: the celebration's
+    /// "다음 단어 / 다음 문장" practises the first of these next, one row at a time.
+    pub then: Vec<(String, Vec<Spec>)>,
 }
 
 impl DrillQueue {
@@ -117,6 +117,7 @@ impl App {
             let weak: Vec<String> = q.results.iter().filter(|r| r.1 < pass).map(|r| r.0.clone()).collect();
             let title = q.title.clone();
             let has_next = !q.then.is_empty();
+            let q_category = q.category;
             let now = ui.input(|i| i.time);
             let t = (now - *q.finished_at.get_or_insert(now)) as f32;
             // Animated celebration, with the title and score as real labels on top of it.
@@ -150,7 +151,8 @@ impl App {
                 if ui.button("닫기").clicked() {
                     close = true;
                 }
-                if has_next && ui.add(egui::Button::new(RichText::new("다음 문장 ▶").size(17.0)).min_size(Vec2::new(140.0, 40.0))).clicked() {
+                let next_label = if q_category == "vocab" { "다음 단어 ▶" } else { "다음 문장 ▶" };
+                if has_next && ui.add(egui::Button::new(RichText::new(next_label).size(17.0)).min_size(Vec2::new(140.0, 40.0))).clicked() {
                     go_next = true;
                 }
             });
@@ -159,10 +161,9 @@ impl App {
             } else if go_next {
                 if let Some(q) = self.queue.take() {
                     let mut rest = q.then;
-                    let spec = rest.remove(0);
-                    let prefix = q.title.split(" · ").next().unwrap_or("").to_string();
-                    crate::applog!("{prefix}: 다음 문장 '{}'", spec.target);
-                    let mut next = DrillQueue::new("", q.category, &format!("{prefix} · {}", spec.target.chars().take(30).collect::<String>()), vec![spec]);
+                    let (title, specs) = rest.remove(0);
+                    crate::applog!("다음 항목: '{title}'");
+                    let mut next = DrillQueue::new("", q.category, &title, specs);
                     next.then = rest;
                     self.queue = Some(next);
                 }
@@ -376,7 +377,11 @@ impl App {
             // (the passes still count toward 기억 완료; the review schedule isn't touched twice).
             let specs = self.entry_specs(w, kind, reps, true);
             crate::applog!("words: 리스트에서 '{}' 바로 연습", w.word);
-            self.queue = Some(DrillQueue::new("", "vocab", &format!("새 단어 · {}", w.word), specs));
+            let mut q = DrillQueue::new("", "vocab", &format!("새 단어 · {}", w.word), specs);
+            // "다음 단어" then goes on down the list.
+            let i = picked.unwrap_or(0);
+            q.then = entries[i + 1..].iter().map(|(w, kind)| (format!("새 단어 · {}", w.word), self.entry_specs(w, *kind, reps, true))).collect();
+            self.queue = Some(q);
             return;
         }
         if start {
@@ -576,7 +581,7 @@ impl App {
             crate::applog!("reading: 리스트에서 '{}' 바로 연습", spec.target);
             let title = format!("문장 읽기 · {}", spec.target.chars().take(30).collect::<String>());
             let mut q = DrillQueue::new("", "reading", &title, vec![Spec { reps, ..spec }]);
-            q.then = row_specs[i + 1..].iter().map(|s| Spec { reps, ..s.clone() }).collect();
+            q.then = row_specs[i + 1..].iter().map(|s| (format!("문장 읽기 · {}", s.target.chars().take(30).collect::<String>()), vec![Spec { reps, ..s.clone() }])).collect();
             self.queue = Some(q);
             return;
         }
