@@ -1737,3 +1737,26 @@ fn ft49_full_lists_by_day_include_finished_ones() {
     t.click("1일차 (0/2)");
     assert!(t.has_exact(&format!("💬 {}", idiom(1))));
 }
+
+#[test]
+fn ft50_menu_tags_lead_through_todays_order() {
+    use crate::app::StepTag;
+    let mut t = launch_at(temp_dir("steptags"), false, |s| s.profile.placement_done = true);
+    // First day: nothing to review yet, so 새 단어 is no. 1 and tagged "시작".
+    let tags = t.app().step_tags();
+    assert_eq!(tags[0], (Screen::Words, 1, StepTag::Next { first_run: true }));
+    assert_eq!(StepTag::Next { first_run: true }.text(1), "1 시작");
+    assert!(tags[1..].iter().all(|x| x.2 == StepTag::Todo) && tags.len() == 8, "{tags:?}");
+    assert!(t.has("▶  오늘의 학습 시작 · 1. 📚 새 단어"));
+    t.nav("▶  오늘의 학습 시작 · 1. 📚 새 단어");
+    assert_eq!(t.app().screen, Screen::Words);
+    // Finishing a step marks it ✓ and points on to the next one.
+    t.app_mut().complete_step("words");
+    t.steps(2);
+    let tags = t.app().step_tags();
+    assert_eq!((tags[0].2, tags[1]), (StepTag::Done, (Screen::Reading, 2, StepTag::Next { first_run: false })));
+    assert_eq!(StepTag::Done.text(1), "✓ 1");
+    assert!(t.has("다음은 2. 📖 문장 소리내어 읽기"));
+    t.nav("🏠  홈");
+    assert!(t.has("▶  오늘의 학습 이어하기 · 2. 📖 문장 소리내어 읽기"));
+}

@@ -278,7 +278,12 @@ impl App {
         if !p.today.done.iter().any(|d| d == key) {
             p.today.done.push(key.to_string());
             let label = STEPS.iter().find(|s| s.0 == key).map(|s| s.1).unwrap_or(key);
-            self.toast(format!("✅ 완료: {label}"));
+            // Point on to the next step in today's order.
+            let msg = match self.next_step() {
+                Some((n, next, _)) => format!("✅ 완료: {label} · 다음은 {n}. {next}"),
+                None => format!("✅ 완료: {label} · 🎉 오늘 학습을 모두 마쳤어요!"),
+            };
+            self.toast(msg);
         }
         self.store.save_profile();
         self.update_history();
@@ -379,6 +384,34 @@ impl App {
                 _ => true,
             })
             .collect()
+    }
+
+    /// Today's study order for the side menu tags: (screen, number in today's order, state).
+    /// The first unfinished step is the one to do now ("시작" on the very first day).
+    pub fn step_tags(&self) -> Vec<(Screen, usize, StepTag)> {
+        let first_run = self.store.profile.days_studied == 0 && self.store.profile.today.done.is_empty();
+        let mut next_given = false;
+        self.todays_steps()
+            .iter()
+            .enumerate()
+            .map(|(i, (key, _, screen))| {
+                let tag = if self.step_done(key) {
+                    StepTag::Done
+                } else if !next_given {
+                    next_given = true;
+                    StepTag::Next { first_run }
+                } else {
+                    StepTag::Todo
+                };
+                (*screen, i + 1, tag)
+            })
+            .collect()
+    }
+
+    /// The step to do now: (number, label, screen).
+    pub fn next_step(&self) -> Option<(usize, &'static str, Screen)> {
+        let steps = self.todays_steps();
+        self.step_tags().iter().find(|t| matches!(t.2, StepTag::Next { .. })).map(|t| (t.1, steps[t.1 - 1].1, t.0))
     }
 
     /// Today's 새 단어 set: words from the built-in 6,000-word database for the learner's level,
@@ -775,6 +808,7 @@ impl App {
             ),
             ("내 학습", &[(Screen::Feedback, "🔬  피드백 센터"), (Screen::Vocabulary, "📒  내 단어장"), (Screen::History, "📅  학습 기록"), (Screen::Progress, "📈  레벨 · 평가"), (Screen::Settings, "⚙  설정")]),
         ];
+        let tags = self.step_tags();
         for (group, items) in groups {
             ui.label(RichText::new(*group).size(12.0).color(muted()).strong());
             ui.add_space(2.0);
@@ -794,6 +828,9 @@ impl App {
                     ui.painter().rect_filled(egui::Rect::from_min_size(r.min + Vec2::new(-14.0, 8.0), Vec2::new(4.0, r.height() - 16.0)), 2.0, crate::art::CYAN);
                 } else if resp.hovered() {
                     ui.painter().set(bg, egui::Shape::rect_filled(resp.rect, 10.0, Color32::from_white_alpha(10)));
+                }
+                if let Some((_, n, tag)) = tags.iter().find(|t| t.0 == *s) {
+                    paint_step_tag(ui, resp.rect, *n, *tag);
                 }
                 if resp.clicked() {
                     self.go(*s);
@@ -862,9 +899,9 @@ impl App {
                         ui.label(RichText::new(format!("🎯 {}", phase.goal_ko)).color(Color32::from_rgb(200, 214, 255)));
                         ui.add_space(10.0);
                         ui.horizontal(|ui| {
-                            let first_open = steps.iter().find(|s| !self.step_done(s.0)).map(|s| s.2);
-                            if let Some(s) = first_open {
-                                if primary_button(ui, if done == 0 { "▶  오늘의 학습 시작" } else { "▶  오늘의 학습 이어하기" }).clicked() {
+                            if let Some((n, label, s)) = self.next_step() {
+                                let what = if done == 0 { "▶  오늘의 학습 시작" } else { "▶  오늘의 학습 이어하기" };
+                                if primary_button(ui, &format!("{what} · {n}. {label}")).on_hover_text("왼쪽 메뉴의 번호 태그 순서대로 하면 돼요").clicked() {
                                     self.go(s);
                                 }
                             } else {
@@ -1509,4 +1546,44 @@ mod format_tests {
         assert_eq!(super::thousands(999), "999");
         assert_eq!(super::thousands(1234567), "1,234,567");
     }
+}
+
+/// Where a step of today's order stands, for the side menu tag.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum StepTag {
+    Done,
+    /// The one to do now; `first_run` on the very first day of study.
+    Next { first_run: bool },
+    Todo,
+}
+
+impl StepTag {
+    pub fn text(self, n: usize) -> String {
+        match self {
+            StepTag::Done => format!("✓ {n}"),
+            StepTag::Next { first_run: true } => format!("{n} 시작"),
+            StepTag::Next { first_run: false } => format!("{n} 지금"),
+            StepTag::Todo => n.to_string(),
+        }
+    }
+}
+
+/// A small pill in the top-right corner of a menu item: today's order number, "지금"/"시작"
+/// on the step to do now, ✓ when done.
+fn paint_step_tag(ui: &egui::Ui, item: egui::Rect, n: usize, tag: StepTag) {
+    let (fill, text_color) = match tag {
+        StepTag::Done => (GOOD.gamma_multiply(0.85), Color32::WHITE),
+        StepTag::Next { .. } => (crate::art::PINK, Color32::WHITE),
+        StepTag::Todo => (themed(Color32::from_rgb(58, 66, 92), Color32::from_rgb(214, 220, 236)), themed(Color32::from_rgb(210, 216, 232), Color32::from_rgb(60, 68, 90))),
+    };
+    let size = if matches!(tag, StepTag::Next { .. }) { 12.0 } else { 11.0 };
+    let galley = ui.painter().layout_no_wrap(tag.text(n), egui::FontId::proportional(size), text_color);
+    let pad = Vec2::new(6.0, 2.0);
+    let pill = egui::Rect::from_min_size(egui::pos2(item.right() - galley.size().x - 2.0 * pad.x - 4.0, item.top() + 3.0), galley.size() + 2.0 * pad);
+    let p = ui.painter();
+    if matches!(tag, StepTag::Next { .. }) {
+        p.rect_filled(pill.expand(2.5), 9.0, crate::art::PINK.gamma_multiply(0.3));
+    }
+    p.rect_filled(pill, 8.0, fill);
+    p.galley(pill.min + pad, galley, text_color);
 }
