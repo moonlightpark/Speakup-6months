@@ -760,7 +760,7 @@ fn ft16_offline_mode_uses_builtin_lesson() {
     assert!(t.has(&first.word) && t.has(&first.meaning_ko));
     assert_eq!(t.app().store.profile.today.word_set.as_ref().map(|w| w.words.clone()), Some(l.words.clone()), "lesson uses the same words");
     t.nav("💼  회화 · 비즈니스");
-    assert!(t.has("Claude API 키가 필요합니다"));
+    assert!(t.has("📴 오프라인 대본 모드") && t.has("Claude API 키가 없어서"), "offline scripts without a key");
     assert!(t.prompts().is_empty(), "no API calls without a key");
 }
 
@@ -1562,13 +1562,61 @@ fn ft44_a_failed_lesson_request_is_not_repeated_until_retry() {
     t.app_mut().lesson = None;
     t.app_mut().api_url = "http://127.0.0.1:9/v1/messages".into(); // nothing listens: fails at once
     t.nav("💬  자기 표현");
-    t.wait("lesson error", |a| a.lesson_error.is_some());
+    // No network (like no credit): straight on with the built-in lesson and offline scripts.
+    t.wait("built-in lesson", |a| a.lesson.as_ref().is_some_and(|l| l.date == Some(today())));
+    let n = t.mock.requests.lock().unwrap().len();
     for _ in 0..30 {
         t.steps(1);
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(t.app().lesson_error.is_some() && !t.app().lesson_job.running(), "no new request after the failure");
-    assert!(t.has("다시 시도") && t.has("내장 레슨으로 진행"));
-    t.click("내장 레슨으로 진행");
-    assert!(t.app().lesson.as_ref().is_some_and(|l| l.date == Some(today())));
+    assert!(!t.app().lesson_job.running() && t.mock.requests.lock().unwrap().len() == n, "no new request after the failure");
+    assert_eq!(t.app().lesson.as_ref().map(|l| l.source.as_str()), Some("built-in"));
+    assert!(t.app().talk_offline() && t.has("📴 오프라인 대본 모드") && t.has("Claude API를 지금 쓸 수 없어서"));
+    // 🔄 Claude 다시 연결 tries the API again.
+    t.click("🔄 Claude 다시 연결");
+    assert!(!t.app().talk_offline());
+}
+
+#[test]
+fn ft45_offline_scripts_ask_questions_and_hold_a_conversation() {
+    let mut t = launch_at(temp_dir("offtalk"), false, |s| s.profile.placement_done = true);
+    let level = t.app().store.profile.level;
+    // 자기 표현: a built-in question for the level, with useful phrases.
+    t.nav("💬  자기 표현");
+    let q = crate::offline_talk::question_by_text(&t.app().lesson.as_ref().unwrap().self_expression.question).expect("today's question is a built-in one");
+    assert_eq!(crate::offline_talk::band_for(level), q.band);
+    assert!(t.has("📴 오프라인 대본 모드") && t.has_exact(&q.question) && t.has_exact(&q.useful_phrases[0].text));
+    t.say(&format!("{} {}", q.useful_phrases[0].text.replace("...", "coffee"), q.model_answer), 8.0);
+    assert!(t.has("말한 단어") && t.has("모범 답안") && t.has_exact(&q.model_answer));
+    // Then it asks the follow-up questions one by one.
+    for (i, f) in q.follow_ups.iter().enumerate() {
+        assert!(t.has(&format!("💬 이어지는 질문 {}/3", i + 1)) && t.has_exact(&f.question));
+        t.say(&f.sample_answer, 3.0);
+        assert!(t.has_exact(&f.sample_answer));
+        t.click(if i < 2 { "다음 질문 ▶" } else { "완료 ▶" });
+    }
+    assert!(t.has("✅ 이어지는 질문 3개 완료") && t.app().step_done("speaking"));
+    t.click("🔀 다른 질문");
+    assert!(!t.has_exact(&q.question), "another question");
+    // 회화: today's scene follows its script; the app asks and the conversation goes on.
+    t.nav("💼  회화 · 비즈니스");
+    let title = t.app().lesson.as_ref().unwrap().business.title.clone();
+    let sc = crate::offline_talk::scenario_by_title(&title).expect("today's scene has a script");
+    t.click("▶ 대화 시작");
+    assert!(t.has_exact(&sc.script[0].ai) && t.has_exact(&sc.script[0].replies[0].text), "opening line + reply hints");
+    for k in 0..sc.script.len() - 1 {
+        t.say(&sc.script[k].replies[0].text, 2.0);
+        assert!(t.has_exact(&sc.script[k + 1].ai), "turn {}", k + 1);
+    }
+    assert!(t.has("🎉 대화 완료!") && t.app().step_done("business"));
+    assert!(t.app().store.corrections.is_empty(), "script hints are not saved as mistakes");
+    // 상황 모음: the level's scripted conversations.
+    t.click("🎭 상황 모음");
+    let scenes = crate::offline_talk::scenarios(level);
+    assert!(t.has(&format!("완료한 상황 0/{}", scenes.len())) || t.has(&format!("완료한 상황 1/{}", scenes.len())));
+    t.click(&scenes[1].title);
+    assert!(t.has_exact(&scenes[1].script[0].ai));
+    t.say("Sorry, I don't know.", 1.5);
+    assert!(t.has(&scenes[1].script[0].replies.iter().map(|r| r.text.clone()).find(|r| t.has(&format!("✓ 더 자연스럽게: {r}"))).unwrap_or_default()), "a hint for a reply far off");
+    assert!(t.prompts().is_empty(), "no API calls");
 }

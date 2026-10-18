@@ -106,6 +106,9 @@ pub struct App {
     edit_key: bool,
     pub ytdlp_job: Pending<std::path::PathBuf>,
     pub api_url: String,
+    /// The Claude API answered "can't be used" (no credit / key / network): speaking screens
+    /// use the built-in offline scripts until an answer comes back.
+    pub api_down: std::sync::Arc<std::sync::atomic::AtomicBool>,
     last_activity: Instant,
     last_tick: Instant,
     last_save: Instant,
@@ -204,6 +207,7 @@ impl App {
             edit_key: false,
             ytdlp_job: Pending::default(),
             api_url: crate::claude::API_URL.to_string(),
+            api_down: Default::default(),
             last_activity: Instant::now(),
             last_tick: Instant::now(),
             last_save: Instant::now(),
@@ -216,8 +220,13 @@ impl App {
         app
     }
 
+    /// Speaking screens use the built-in scripts: no key, or the API said it can't be used.
+    pub fn talk_offline(&self) -> bool {
+        self.store.settings.effective_api_key().is_none() || self.api_down.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn claude(&self) -> Option<Claude> {
-        self.store.settings.effective_api_key().map(|k| Claude { url: self.api_url.clone(), api_key: k, model: self.store.settings.model.clone(), lang: self.lang })
+        self.store.settings.effective_api_key().map(|k| Claude { url: self.api_url.clone(), api_key: k, model: self.store.settings.model.clone(), lang: self.lang, down: self.api_down.clone() })
     }
 
     /// Korean support fades over the program (see `curriculum::support_stage`).
@@ -627,7 +636,18 @@ impl App {
         let phase = curriculum::phase_of_week(week);
         let n_words = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day } else { phase.new_words };
         let past = self.store.past_lessons(400);
-        let l = content::builtin_lesson(week, curriculum::day_number(p), &self.store.items, &past, n_words as usize, phase.sentences as usize);
+        let day = curriculum::day_number(p);
+        let mut l = content::builtin_lesson(week, day, &self.store.items, &past, n_words as usize, phase.sentences as usize);
+        // Self-expression and the day's conversation from the level's offline scripts (with
+        // useful phrases, follow-up questions and a turn-by-turn script).
+        let used_q = |q: &str| past.iter().any(|x| x.self_expression.question == q);
+        if let Some(q) = crate::offline_talk::pick_question(p.level, used_q, day.max(0) as usize) {
+            l.self_expression = q.to_self_expression();
+        }
+        let used_s = |t: &str| past.iter().any(|x| x.business.title == t);
+        if let Some(sc) = crate::offline_talk::pick_scenario(p.level, used_s, day.max(0) as usize) {
+            l.business = sc.to_business();
+        }
         self.store.save_lesson(&l);
         self.lesson = Some(l);
     }
@@ -641,6 +661,12 @@ impl App {
                     }
                     self.store.save_lesson(&l);
                     self.lesson = Some(l);
+                }
+                Err(e) if self.api_down.load(std::sync::atomic::Ordering::Relaxed) => {
+                    // No credit / key / network: go on with the built-in lesson and scripts.
+                    crate::applog!("lesson: Claude를 쓸 수 없어 내장 레슨으로 진행 · {e:#}");
+                    self.use_builtin_lesson();
+                    self.toast("Claude API를 쓸 수 없어 내장 레슨·대본으로 진행해요");
                 }
                 Err(e) => {
                     crate::applog!("lesson: 레슨 생성 실패, 다시 시도를 기다림 · {e:#}");

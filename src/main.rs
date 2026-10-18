@@ -21,6 +21,7 @@ mod mic_permission;
 mod neural_tts;
 mod passages;
 mod models;
+mod offline_talk;
 mod scoring;
 mod screens;
 mod srs;

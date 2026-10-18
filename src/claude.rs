@@ -9,6 +9,8 @@ use anyhow::{Result, anyhow, bail};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 pub const API_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -26,6 +28,9 @@ pub struct Claude {
     pub api_key: String,
     pub model: String,
     pub lang: &'static LanguagePack,
+    /// Set when the API can't be used at all (no credit, bad key, no network) and cleared by
+    /// the next answer; shared with the app so the speaking screens switch to offline scripts.
+    pub down: Arc<AtomicBool>,
 }
 
 /// A JSON-schema object whose properties are all required (structured outputs needs
@@ -86,6 +91,7 @@ impl Claude {
         });
         let client = reqwest::blocking::Client::builder().timeout(Duration::from_secs(300)).build()?;
         let mut last_err = anyhow!("요청 실패");
+        let mut network_failed = false;
         let t0 = std::time::Instant::now();
         let what: String = user.chars().take(60).collect::<String>().replace('\n', " ");
         for attempt in 0..3 {
@@ -105,22 +111,39 @@ impl Claude {
                 Err(e) => {
                     crate::applog!("claude: 네트워크 오류 · {e}");
                     last_err = anyhow!("네트워크 오류: {e}");
+                    network_failed = true;
                     continue;
                 }
             };
             let status = resp.status().as_u16();
             let text = resp.text().unwrap_or_default();
             crate::applog!("claude: {status} · {:.1}초 · {}B · \"{what}…\"", t0.elapsed().as_secs_f32(), text.len());
+            network_failed = false;
             match status {
-                200 => return parse_response(&text),
-                401 | 403 => bail!("Claude API 키가 올바르지 않습니다 (설정에서 확인하세요)."),
-                400 | 404 => bail!("Claude API 요청 오류 ({status}): {}", api_error_message(&text)),
+                200 => {
+                    self.down.store(false, Ordering::Relaxed);
+                    return parse_response(&text);
+                }
+                401 | 403 => {
+                    self.down.store(true, Ordering::Relaxed);
+                    bail!("Claude API 키가 올바르지 않습니다 (설정에서 확인하세요).")
+                }
+                400 | 404 => {
+                    let msg = api_error_message(&text);
+                    if msg.contains("credit balance") {
+                        self.down.store(true, Ordering::Relaxed);
+                    }
+                    bail!("Claude API 요청 오류 ({status}): {msg}")
+                }
                 429 | 500..=599 => {
                     last_err = anyhow!("Claude API가 일시적으로 바쁩니다 ({status}). 잠시 후 다시 시도하세요.");
                     continue;
                 }
                 _ => bail!("Claude API 오류 ({status}): {}", api_error_message(&text)),
             }
+        }
+        if network_failed {
+            self.down.store(true, Ordering::Relaxed);
         }
         Err(last_err)
     }
@@ -611,7 +634,7 @@ mod tests {
     #[test]
     #[ignore]
     fn bad_key_gives_korean_auth_error() {
-        let c = Claude { url: API_URL.into(), api_key: "sk-ant-invalid".into(), model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let c = Claude { url: API_URL.into(), api_key: "sk-ant-invalid".into(), model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
         let err = c.pronunciation_coach("think", "sink", &["think".into()]).unwrap_err().to_string();
         println!("{err}");
         assert!(err.contains("API 키"), "{err}");
@@ -622,7 +645,7 @@ mod tests {
     #[ignore]
     fn real_api_proper_noun() {
         let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
         let name = c.word_in_context("Daegu", "I grew up in Daegu, but now I live in Seoul.").unwrap();
         let word = c.word_in_context("grew", "I grew up in Daegu, but now I live in Seoul.").unwrap();
         println!("Daegu → {name:?}\ngrew → {word:?}");
@@ -635,7 +658,7 @@ mod tests {
     #[ignore]
     fn real_api_listen_and_respond() {
         let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
         let qs = c.listen_questions(3.0, "Shopping and money", &[]).expect("questions");
         for q in &qs {
             println!("Q: {} / {} / {}", q.question, q.question_ko, q.sample_answer);
@@ -651,7 +674,7 @@ mod tests {
     #[ignore]
     fn real_api_lesson_chunks() {
         let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
         let req = LessonRequest {
             day: 4, week: 1, phase: "1단계".into(), theme: "Shopping and money".into(), business: "Prices".into(), grammar: "how much/many".into(),
             level: 3.0, known: vec![], known_phrases: vec!["It depends on".into()], weak: vec![], n_words: 8, n_sentences: 5,
@@ -673,7 +696,7 @@ mod tests {
     #[ignore]
     fn real_api_grammar_roles() {
         let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
         let g = c.chunk_gloss("I am a boy.").expect("gloss");
         println!("{}", g.iter().map(|c| format!("{}={}({})", c.en, c.ko, c.role)).collect::<Vec<_>>().join(" / "));
         assert_eq!(g[0].role, "subject");
@@ -690,7 +713,7 @@ mod tests {
     #[ignore]
     fn real_api_all_features() {
         let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH };
+        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
         let t = std::time::Instant::now();
         let req = LessonRequest {
             day: 3, week: 1, phase: "1단계".into(), theme: "Introducing yourself".into(),

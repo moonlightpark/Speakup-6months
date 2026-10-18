@@ -6,6 +6,7 @@ use crate::claude::{RoleplayTurn, SpeechFeedback};
 use crate::curriculum;
 use crate::models::*;
 use crate::widgets::*;
+use chrono::Datelike;
 use egui::{Color32, RichText, Ui, Vec2};
 
 #[derive(Default)]
@@ -16,6 +17,24 @@ pub struct SelfExprState {
     pub feedback: Option<SpeechFeedback>,
     pub error: Option<String>,
     pub show_model: bool,
+    /// Offline: the built-in question being practised (its English text).
+    pub offline_pick: Option<String>,
+    /// Offline: feedback worked out on the device (words, speed, useful phrases used).
+    pub local: Option<LocalFeedback>,
+    /// Offline: follow-up questions answered so far, the current answer, and which question
+    /// was already read out.
+    pub follow: usize,
+    pub follow_capture: Capture,
+    pub follow_answer: Option<String>,
+    pub follow_said: Option<usize>,
+}
+
+/// Self-expression feedback without Claude.
+#[derive(Clone, Debug, Default)]
+pub struct LocalFeedback {
+    pub words: usize,
+    pub wpm: f32,
+    pub used: Vec<String>,
 }
 
 pub struct ChatLine {
@@ -44,6 +63,8 @@ pub struct RoleplayState {
     pub scenario: Option<BusinessScenario>,
     /// This conversation was already counted toward the scene's practice count.
     pub counted: bool,
+    /// The conversation follows a built-in script (Claude not available).
+    pub offline: bool,
 }
 
 /// Splits a paragraph into sentences for read-aloud drills.
@@ -74,7 +95,10 @@ impl App {
             return;
         }
         let se = self.lesson.as_ref().map(|l| l.self_expression.clone()).unwrap_or_default();
-        let claude = self.claude();
+        let offline = self.talk_offline();
+        let oq = if offline { self.offline_question(&se.question) } else { None };
+        let se = oq.map(|q| q.to_self_expression()).unwrap_or(se);
+        let claude = self.claude().filter(|_| !offline);
         if let Some(r) = self.selfx.job.poll() {
             match r {
                 Ok(f) => {
@@ -91,6 +115,19 @@ impl App {
 
         page_title(ui, "💬 자기 표현", "질문에 30~60초 동안 내 이야기를 영어로 말해 보세요. 완벽하지 않아도 괜찮아요 — 말한 뒤 더 자연스러운 표현으로 다시 읽습니다.");
         ui.add_space(8.0);
+        if offline {
+            let mut other = false;
+            self.offline_banner(ui, "레벨에 맞게 미리 준비한 질문과 이어지는 질문으로 연습해요.", |ui| other = ui.button("🔀 다른 질문").clicked());
+            if other {
+                let qs = crate::offline_talk::questions(self.store.profile.level);
+                let i = qs.iter().position(|q| q.question == se.question).map(|i| i + 1).unwrap_or(0);
+                if let Some(q) = qs.get(i % qs.len().max(1)) {
+                    self.selfx = SelfExprState { offline_pick: Some(q.question.clone()), ..Default::default() };
+                }
+                return;
+            }
+            ui.add_space(6.0);
+        }
         card(ui, |ui| {
             ui.horizontal(|ui| {
                 speaker_button(ui, &mut self.voice, &se.question);
@@ -123,6 +160,12 @@ impl App {
             ui.vertical_centered(|ui| {
                 if self.selfx.job.running() {
                     spinner_label(ui, "Claude가 답변을 분석하고 있어요…");
+                } else if self.selfx.local.is_some() {
+                    // Offline: answered; the follow-up questions below take the mic now.
+                    if ui.button("↻ 처음 질문에 다시 답하기").clicked() {
+                        let pick = self.selfx.offline_pick.take();
+                        self.selfx = SelfExprState { offline_pick: pick, ..Default::default() };
+                    }
                 } else if let Some(t) = self.selfx.capture.ui(ui, &mut self.voice, 90.0) {
                     self.selfx.answer = Some(t.clone());
                     self.selfx.feedback = None;
@@ -133,8 +176,13 @@ impl App {
                             self.selfx.job.spawn(move || c.speech_feedback(&q, &t, lvl));
                         }
                         None => {
+                            // Offline: what can be measured on the device.
                             self.store.log_attempt("self-expression", &se.question, &t, 0.0);
-                            self.selfx.error = Some("Claude API 키가 없어 AI 피드백을 받을 수 없어요. 모범 답안을 따라 읽어 보세요.".into());
+                            let said = format!(" {} ", normalize_words(&t));
+                            let words = t.split_whitespace().count();
+                            let secs = self.selfx.capture.last_secs.max(0.5);
+                            let used = se.useful_phrases.iter().filter(|p| key_words_used(&said, &p.text)).map(|p| p.text.clone()).collect();
+                            self.selfx.local = Some(LocalFeedback { words, wpm: words as f32 * 60.0 / secs, used });
                         }
                     }
                 }
@@ -181,10 +229,42 @@ impl App {
             if ui.add(egui::Button::new(RichText::new("▶ 자연스러운 버전 소리 내어 읽기").size(17.0)).fill(ACCENT).min_size(Vec2::new(0.0, 42.0))).clicked() {
                 drill_text = Some((f.natural_version.clone(), f.new_expressions.clone()));
             }
-        } else if self.selfx.error.is_some() && claude.is_none() && !se.model_answer.is_empty() {
-            if ui.button("▶ 모범 답안 소리 내어 읽기").clicked() {
-                drill_text = Some((se.model_answer.clone(), Vec::new()));
+        } else if let (Some(lf), Some(q)) = (self.selfx.local.clone(), oq) {
+            ui.add_space(8.0);
+            let target = crate::offline_talk::target_words(self.store.profile.level);
+            card(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (label, v, good) in [
+                        ("말한 단어", format!("{}", lf.words), lf.words >= target),
+                        ("말하기 속도", format!("{:.0} WPM", lf.wpm), lf.wpm >= 80.0),
+                        ("쓴 표현", format!("{}/{}", lf.used.len(), se.useful_phrases.len()), !lf.used.is_empty()),
+                    ] {
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new(v).size(26.0).strong().color(if good { GOOD } else { warn() }));
+                            ui.label(RichText::new(label).color(muted()));
+                        });
+                        ui.add_space(14.0);
+                    }
+                });
+                ui.label(RichText::new(if lf.words >= target {
+                    "👏 충분히 길게 말했어요! 모범 답안과 비교해 보고, 아래 이어지는 질문에도 답해 보세요.".to_string()
+                } else {
+                    format!("조금 더 길게 말해 봐요 (이 레벨 목표 약 {target}단어). '쓸 수 있는 표현'을 넣어 이유나 예를 덧붙이면 쉬워요.")
+                }));
+                ui.add_space(6.0);
+                ui.label(RichText::new("모범 답안").color(ACCENT));
+                ui.horizontal_wrapped(|ui| {
+                    speaker_button(ui, &mut self.voice, &q.model_answer);
+                    ui.label(RichText::new(&q.model_answer).size(17.0));
+                });
+                crate::grammar::ko_label(ui, &q.model_answer_ko, 15.0, muted());
+            });
+            ui.add_space(8.0);
+            if ui.add(egui::Button::new(RichText::new("▶ 모범 답안 소리 내어 읽기").size(17.0)).fill(ACCENT).min_size(Vec2::new(0.0, 42.0))).clicked() {
+                drill_text = Some((q.model_answer.clone(), se.useful_phrases.clone()));
             }
+            ui.add_space(8.0);
+            self.follow_up_ui(ui, q);
         }
         if let Some((text, expressions)) = drill_text {
             let mut phrases: Vec<Phrase> = split_sentences(&text).into_iter().map(|s| Phrase { text: s, ko: String::new() }).collect();
@@ -193,11 +273,119 @@ impl App {
             if let Some(q) = self.queue.as_mut() {
                 q.step = "speaking";
             }
-            self.selfx = SelfExprState::default();
+            let pick = self.selfx.offline_pick.take();
+            self.selfx = SelfExprState { offline_pick: pick, ..Default::default() };
+        }
+    }
+
+    /// The built-in question for today offline: one picked with 🔀, the lesson's own if it is
+    /// a built-in one, else one for the level.
+    fn offline_question(&mut self, lesson_q: &str) -> Option<&'static crate::offline_talk::TalkQuestion> {
+        if let Some(q) = self.selfx.offline_pick.as_deref().and_then(crate::offline_talk::question_by_text) {
+            return Some(q);
+        }
+        let q = crate::offline_talk::question_by_text(lesson_q).or_else(|| crate::offline_talk::pick_question(self.store.profile.level, |_| false, today().ordinal() as usize))?;
+        self.selfx.offline_pick = Some(q.question.clone());
+        Some(q)
+    }
+
+    /// "Offline scripts" notice, with a way back to Claude when a key is set.
+    fn offline_banner(&mut self, ui: &mut Ui, what: &str, extra: impl FnOnce(&mut Ui)) {
+        let has_key = self.store.settings.effective_api_key().is_some();
+        let mut retry = false;
+        card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("📴 오프라인 대본 모드").strong().color(warn()));
+                ui.label(RichText::new(format!(
+                    "{} {what} ({} 레벨)",
+                    if has_key { "Claude API를 지금 쓸 수 없어서(크레딧·네트워크)" } else { "Claude API 키가 없어서" },
+                    cefr_of(self.store.profile.level)
+                )));
+            });
+            ui.horizontal(|ui| {
+                extra(ui);
+                if has_key && ui.button("🔄 Claude 다시 연결").clicked() {
+                    retry = true;
+                }
+            });
+        });
+        if retry {
+            self.api_down.store(false, std::sync::atomic::Ordering::Relaxed);
+            self.lesson_error = None;
+        }
+    }
+
+    /// Offline follow-up questions on the same topic, asked one at a time.
+    fn follow_up_ui(&mut self, ui: &mut Ui, q: &'static crate::offline_talk::TalkQuestion) {
+        let n = q.follow_ups.len();
+        let i = self.selfx.follow;
+        let t = crate::art::since_event(ui, egui::Id::new("cheer_follow_ups"), i as u64);
+        let Some(f) = q.follow_ups.get(i) else {
+            if n > 0 {
+                crate::art::cheer_strip(ui, t, &format!("🎉 이어지는 질문 {n}개에 모두 답했어요!"));
+                card(ui, |ui| {
+                    ui.label(RichText::new(format!("✅ 이어지는 질문 {n}개 완료")).strong().color(GOOD));
+                });
+                if !self.step_done("speaking") {
+                    self.complete_step("speaking");
+                }
+            }
+            return;
+        };
+        if self.selfx.follow_said != Some(i) {
+            self.selfx.follow_said = Some(i);
+            self.voice.say(&f.question);
+        }
+        let mut next = false;
+        card(ui, |ui| {
+            ui.label(RichText::new(format!("💬 이어지는 질문 {}/{n}", i + 1)).color(ACCENT).strong());
+            ui.horizontal_wrapped(|ui| {
+                speaker_button(ui, &mut self.voice, &f.question);
+                ui.label(RichText::new(&f.question).size(20.0).strong());
+            });
+            crate::grammar::ko_label(ui, &f.question_ko, 15.0, muted());
+            ui.add_space(4.0);
+            match self.selfx.follow_answer.clone() {
+                None => {
+                    ui.vertical_centered(|ui| {
+                        if let Some(a) = self.selfx.follow_capture.ui(ui, &mut self.voice, 60.0) {
+                            self.store.log_attempt("self-expression", &f.question, &a, 0.0);
+                            self.selfx.follow_answer = Some(a);
+                        }
+                    });
+                }
+                Some(a) => {
+                    ui.label(RichText::new(format!("내가 한 말: \"{a}\"")).color(muted()));
+                    ui.label(RichText::new("예시 답변").color(ACCENT));
+                    ui.horizontal_wrapped(|ui| {
+                        speaker_button(ui, &mut self.voice, &f.sample_answer);
+                        ui.label(RichText::new(&f.sample_answer).size(17.0));
+                    });
+                    next = ui.add(egui::Button::new(RichText::new(if i + 1 < n { "다음 질문 ▶" } else { "완료 ▶" }).size(16.0)).fill(ACCENT)).clicked();
+                }
+            }
+        });
+        if next {
+            self.selfx.follow += 1;
+            self.selfx.follow_answer = None;
         }
     }
 
     fn scenario(&self) -> BusinessScenario {
+        let offline = self.talk_offline();
+        if self.roleplay.mode == 2 && offline {
+            let ss = crate::offline_talk::scenarios(self.store.profile.level);
+            return ss.get(self.roleplay.collection.min(ss.len().saturating_sub(1))).map(|s| s.to_business()).unwrap_or_default();
+        }
+        if self.roleplay.mode == 0 && offline {
+            // Today's scene: the lesson's own when it has a script, else one for the level.
+            let lesson = self.lesson.as_ref().map(|l| l.business.clone()).unwrap_or_default();
+            if crate::offline_talk::scenario_by_title(&lesson.title).is_some() {
+                return lesson;
+            }
+            let day = today().ordinal() as usize;
+            return crate::offline_talk::pick_scenario(self.store.profile.level, |_| false, day).map(|s| s.to_business()).unwrap_or(lesson);
+        }
         if self.roleplay.mode == 2 {
             let (title, ko, ai, usr) = crate::content::ROLEPLAYS[self.roleplay.collection.min(crate::content::ROLEPLAYS.len() - 1)];
             return BusinessScenario { title: title.into(), scenario_ko: ko.into(), ai_role: ai.into(), user_role: usr.into(), ..Default::default() };
@@ -234,6 +422,21 @@ impl App {
 
     /// Opens a conversation for `sc` right away (the AI speaks first).
     fn start_conversation(&mut self, sc: BusinessScenario) {
+        if self.talk_offline() {
+            let Some(script) = crate::offline_talk::scenario_by_title(&sc.title) else {
+                self.roleplay.error = Some("이 대화는 Claude가 필요해요. 오프라인에서는 '오늘의 비즈니스'나 '상황 모음'의 대본 대화로 연습하세요.".into());
+                return;
+            };
+            crate::applog!("business: 오프라인 대본 대화 시작 · {}", sc.title);
+            let first = &script.script[0];
+            self.roleplay.started = true;
+            self.roleplay.offline = true;
+            self.roleplay.scenario = Some(sc);
+            self.voice.say(&first.ai);
+            self.roleplay.lines.push(ChatLine { user: false, text: first.ai.clone(), ko: first.ai_ko.clone(), correction: String::new(), correction_ko: String::new() });
+            self.roleplay.suggestions = first.replies.clone();
+            return;
+        }
         let Some(c) = self.claude() else {
             self.roleplay.error = Some("AI 회화 상대는 Claude API 키가 필요합니다. 설정에서 키를 입력하세요.".into());
             return;
@@ -268,6 +471,33 @@ impl App {
         self.roleplay = RoleplayState { mode: old.mode, collection: old.collection, custom: old.custom, ..Default::default() };
     }
 
+    /// The other person's next line (from Claude or the offline script).
+    fn apply_turn(&mut self, t: RoleplayTurn) {
+        if let Some(last) = self.roleplay.lines.iter_mut().rev().find(|l| l.user) {
+            last.correction = t.correction.clone();
+            last.correction_ko = t.correction_ko.clone();
+            let original = last.text.clone();
+            // A script's hint is another way to say it, not a mistake.
+            if !self.roleplay.offline {
+                self.store.add_correction("회화", &original, &t.correction, &t.correction_ko);
+            }
+        }
+        self.voice.say(&t.reply);
+        self.roleplay.lines.push(ChatLine { user: false, text: t.reply, ko: t.reply_ko, correction: String::new(), correction_ko: String::new() });
+        self.roleplay.suggestions = t.suggestions;
+        if t.finished {
+            self.roleplay.finished = true;
+            self.roleplay.summary = t.summary_ko;
+        }
+        let user_turns = self.roleplay.lines.iter().filter(|l| l.user).count();
+        if self.roleplay.finished || user_turns >= 4 {
+            self.count_conversation();
+            if !self.step_done("business") {
+                self.complete_step("business");
+            }
+        }
+    }
+
     pub fn business_ui(&mut self, ui: &mut Ui) {
         if self.run_queue_ui(ui) || !self.lesson_ready_ui(ui) {
             return;
@@ -276,31 +506,11 @@ impl App {
         let level = self.store.profile.level;
         if let Some(r) = self.roleplay.job.poll() {
             match r {
-                Ok(t) => {
-                    if let Some(last) = self.roleplay.lines.iter_mut().rev().find(|l| l.user) {
-                        last.correction = t.correction.clone();
-                        last.correction_ko = t.correction_ko.clone();
-                        let original = last.text.clone();
-                        self.store.add_correction("회화", &original, &t.correction, &t.correction_ko);
-                    }
-                    self.voice.say(&t.reply);
-                    self.roleplay.lines.push(ChatLine { user: false, text: t.reply, ko: t.reply_ko, correction: String::new(), correction_ko: String::new() });
-                    self.roleplay.suggestions = t.suggestions;
-                    if t.finished {
-                        self.roleplay.finished = true;
-                        self.roleplay.summary = t.summary_ko;
-                    }
-                    let user_turns = self.roleplay.lines.iter().filter(|l| l.user).count();
-                    if self.roleplay.finished || user_turns >= 4 {
-                        self.count_conversation();
-                        if !self.step_done("business") {
-                            self.complete_step("business");
-                        }
-                    }
-                }
+                Ok(t) => self.apply_turn(t),
                 Err(e) => self.roleplay.error = Some(format!("{e:#}")),
             }
         }
+        let offline = self.talk_offline();
 
         page_title(ui, "💼 회화 · 비즈니스 영어", "");
         ui.horizontal_wrapped(|ui| {
@@ -313,21 +523,37 @@ impl App {
                 self.reset_roleplay();
             }
         });
+        if offline {
+            ui.add_space(4.0);
+            self.offline_banner(ui, "레벨에 맞게 미리 써 둔 대본으로 상대가 질문하고 대화를 이어 가요.", |_| {});
+            if matches!(self.roleplay.mode, 1 | 3) {
+                card(ui, |ui| {
+                    ui.label("☕ 자유 회화와 ✏ 나만의 상황은 Claude가 필요해요. 오프라인에서는 💼 오늘의 비즈니스나 🎭 상황 모음의 대본 대화로 연습하세요.");
+                });
+                return;
+            }
+        }
         if !self.roleplay.started && self.roleplay.mode == 2 {
             // Scenes coloured by finished conversations (like the 새 단어 list); a click starts one.
             let mut pick = None;
+            // Offline: the level's scripted conversations instead of Claude's scenes.
+            let scenes: Vec<(String, String)> = if offline {
+                crate::offline_talk::scenarios(self.store.profile.level).iter().map(|s| (s.title.clone(), s.scenario_ko.clone())).collect()
+            } else {
+                crate::content::ROLEPLAYS.iter().map(|r| (r.0.to_string(), r.1.to_string())).collect()
+            };
             card(ui, |ui| {
-                let counts: Vec<u32> = crate::content::ROLEPLAYS.iter().map(|r| self.store.word_stat(&Self::scene_key(r.0)).passes).collect();
+                let counts: Vec<u32> = scenes.iter().map(|r| self.store.word_stat(&Self::scene_key(&r.0)).passes).collect();
                 ui.horizontal_wrapped(|ui| {
                     let done = counts.iter().filter(|c| **c >= WORD_DONE_PASSES).count();
                     ui.label(RichText::new(format!("완료한 상황 {done}/{}", counts.len())).strong());
                     ui.label(RichText::new("· 상황을 클릭하면 바로 대화가 시작돼요 (대화 4번 이상 = 1회)").color(muted()));
                 });
                 ui.add_space(6.0);
-                for (i, (title, ko, _, _)) in crate::content::ROLEPLAYS.iter().enumerate() {
+                for (i, (title, ko)) in scenes.iter().enumerate() {
                     let (color, label) = crate::screens::practice::word_mark(counts[i]);
                     ui.horizontal_wrapped(|ui| {
-                        let r = ui.add(egui::Label::new(RichText::new(*title).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 바로 대화 시작");
+                        let r = ui.add(egui::Label::new(RichText::new(title).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 바로 대화 시작");
                         if r.hovered() {
                             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                         }
@@ -335,12 +561,12 @@ impl App {
                             pick = Some(i);
                         }
                         ui.label(RichText::new(label).small().color(color));
-                        ui.label(RichText::new(*ko).color(muted()));
+                        ui.label(RichText::new(ko).color(muted()));
                     });
                 }
                 ui.add_space(4.0);
                 if ui.button("🎲 랜덤으로 시작").clicked() {
-                    pick = Some(rand::random_range(0..crate::content::ROLEPLAYS.len()));
+                    pick = Some(rand::random_range(0..scenes.len().max(1)));
                 }
             });
             if let Some(i) = pick {
@@ -408,11 +634,15 @@ impl App {
             return;
         }
 
-        let Some(c) = claude else {
+        let c = claude.filter(|_| !offline);
+        if c.is_none() && !offline {
             ui.add_space(8.0);
             error_label(ui, "AI 회화 상대는 Claude API 키가 필요합니다. 설정에서 키를 입력하세요. (핵심 표현 연습은 가능해요)");
             return;
-        };
+        }
+        if let Some(e) = self.roleplay.error.clone().filter(|_| !self.roleplay.started) {
+            error_label(ui, &e);
+        }
 
         if !self.roleplay.started {
             ui.add_space(8.0);
@@ -485,6 +715,7 @@ impl App {
                 });
             }
         }
+        let mut turn_now = None;
         ui.vertical_centered(|ui| {
             if self.roleplay.job.running() {
                 spinner_label(ui, "상대가 답하는 중…");
@@ -498,15 +729,23 @@ impl App {
                     }
                 }
                 self.store.log_attempt(["business", "free-talk", "roleplay", "custom-roleplay"][self.roleplay.mode.min(3)], "", &t, 0.0);
-                self.roleplay.lines.push(ChatLine { user: true, text: t, ko: String::new(), correction: String::new(), correction_ko: String::new() });
+                self.roleplay.lines.push(ChatLine { user: true, text: t.clone(), ko: String::new(), correction: String::new(), correction_ko: String::new() });
                 self.roleplay.error = None;
-                let history: Vec<(bool, String)> = self.roleplay.lines.iter().map(|l| (l.user, l.text.clone())).collect();
-                let scc = sc.clone();
-                self.roleplay.job.spawn(move || c.roleplay_turn(&scc, &history, level));
+                let user_turns = self.roleplay.lines.iter().filter(|l| l.user).count();
+                match (&c, crate::offline_talk::scenario_by_title(&sc.title).filter(|_| self.roleplay.offline)) {
+                    // Offline: the script answers at once.
+                    (_, Some(script)) => turn_now = Some(script.turn(user_turns, &t)),
+                    (Some(c), None) => {
+                        let history: Vec<(bool, String)> = self.roleplay.lines.iter().map(|l| (l.user, l.text.clone())).collect();
+                        let (c, scc) = (c.clone(), sc.clone());
+                        self.roleplay.job.spawn(move || c.roleplay_turn(&scc, &history, level));
+                    }
+                    (None, None) => self.roleplay.error = Some("Claude를 쓸 수 없어 대화를 이어 갈 수 없어요. 새 대화로 대본 대화를 시작하세요.".into()),
+                }
             }
             if let Some(e) = &self.roleplay.error {
                 error_label(ui, e);
-                if ui.button("다시 시도").clicked() {
+                if !self.roleplay.offline && self.claude().is_some() && ui.button("다시 시도").clicked() {
                     let history: Vec<(bool, String)> = self.roleplay.lines.iter().map(|l| (l.user, l.text.clone())).collect();
                     let c2 = self.claude().unwrap();
                     self.roleplay.job.spawn(move || c2.roleplay_turn(&sc, &history, level));
@@ -514,6 +753,9 @@ impl App {
                 }
             }
         });
+        if let Some(t) = turn_now {
+            self.apply_turn(t);
+        }
         if ui.small_button("대화 끝내기").clicked() {
             self.roleplay.finished = true;
             self.roleplay.summary = "대화를 직접 마쳤어요. 교정된 문장을 따라 말하며 정리해 보세요.".into();
@@ -548,4 +790,11 @@ mod tests {
         let s = split_sentences("I work at a bank. I love it! Do you? Yes.");
         assert_eq!(s, vec!["I work at a bank.", "I love it!", "Do you? Yes."]);
     }
+}
+
+/// The content words of a phrase (frames like "I usually ..." → "i usually") all appear in what
+/// was said.
+fn key_words_used(said: &str, phrase: &str) -> bool {
+    let words: Vec<String> = normalize_words(phrase).split(' ').filter(|w| w.len() > 1 && !w.contains("...")).map(|w| w.to_string()).collect();
+    !words.is_empty() && words.iter().all(|w| said.contains(&format!(" {w} ")))
 }
