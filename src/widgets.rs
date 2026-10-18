@@ -273,7 +273,13 @@ impl Capture {
         let c = rect.center();
         let p = ui.painter();
         let transcribing = self.rx.running();
-        if self.recording {
+        let starting = self.recording && voice.recorder.state() == crate::audio::RecState::Starting;
+        if starting {
+            // Grey until the microphone is really listening, then red.
+            p.circle_filled(c, size / 2.0, MIC_WAITING);
+            draw_mic_icon(p, c);
+            ui.ctx().request_repaint();
+        } else if self.recording {
             let lvl = voice.recorder.level().min(1.0);
             p.circle_filled(c, size / 2.0 + 4.0 + lvl * 14.0, BAD.gamma_multiply(0.25));
             p.circle_filled(c, size / 2.0, BAD);
@@ -310,8 +316,7 @@ impl Capture {
                 }
             }
         }
-        let status = if self.recording && voice.recorder.state() == crate::audio::RecState::Starting {
-            ui.ctx().request_repaint();
+        let status = if starting {
             "마이크 준비 중…".to_string()
         } else if self.recording {
             format!("듣고 있어요… {:.0}초 (다 말하면 다시 누르세요)", voice.recorder.elapsed())
@@ -328,6 +333,9 @@ impl Capture {
         result
     }
 }
+
+/// The mic button while the microphone is still opening.
+pub const MIC_WAITING: Color32 = Color32::from_gray(150);
 
 fn draw_mic_icon(p: &egui::Painter, c: egui::Pos2) {
     let w = Color32::WHITE;
