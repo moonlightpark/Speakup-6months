@@ -12,7 +12,7 @@ use crate::curriculum;
 use crate::models::*;
 use crate::scoring::{self, ScoreResult};
 use crate::widgets::*;
-use egui::{RichText, Ui, Vec2};
+use egui::{RichText, Ui};
 use rand::seq::SliceRandom;
 use std::time::Instant;
 
@@ -158,7 +158,7 @@ impl App {
         if self.speed.passage.is_none() {
             if self.speed.job.running() {
                 spinner_label(ui, "Claude가 내 레벨에 맞는 지문을 만들고 있어요…");
-            } else if ui.add(egui::Button::new(RichText::new("▶ 지문 받기").size(18.0)).fill(ACCENT).min_size(Vec2::new(180.0, 42.0))).clicked() {
+            } else if ui.add(egui::Button::new(RichText::new("▶ 지문 받기").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 self.new_passage();
             }
             let n = self.books().len();
@@ -170,7 +170,7 @@ impl App {
                 })
                 .color(muted()),
             );
-            if ui.small_button("📂 지문 폴더 열기").clicked() {
+            if ui.button("📂 지문 폴더 열기").clicked() {
                 let d = crate::passages::dir(&self.store.dir);
                 let _ = std::fs::create_dir_all(&d);
                 let _ = open::that(d);
@@ -340,7 +340,7 @@ impl App {
         });
         ui.add_space(6.0);
         if self.speed.queue.is_empty() {
-            if ui.add(egui::Button::new(RichText::new("▶ 시작 (10문제)").size(18.0)).fill(ACCENT).min_size(Vec2::new(180.0, 42.0))).clicked() {
+            if ui.add(egui::Button::new(RichText::new("▶ 시작 (10문제)").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 self.start_quick_response();
             }
             return;

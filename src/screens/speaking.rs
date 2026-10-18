@@ -7,7 +7,7 @@ use crate::curriculum;
 use crate::models::*;
 use crate::widgets::*;
 use chrono::Datelike;
-use egui::{Color32, RichText, Ui, Vec2};
+use egui::{Color32, RichText, Ui};
 
 #[derive(Default)]
 pub struct SelfExprState {
@@ -226,7 +226,7 @@ impl App {
                 });
             });
             ui.add_space(8.0);
-            if ui.add(egui::Button::new(RichText::new("▶ 자연스러운 버전 소리 내어 읽기").size(17.0)).fill(ACCENT).min_size(Vec2::new(0.0, 42.0))).clicked() {
+            if ui.add(egui::Button::new(RichText::new("▶ 자연스러운 버전 소리 내어 읽기").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 drill_text = Some((f.natural_version.clone(), f.new_expressions.clone()));
             }
         } else if let (Some(lf), Some(q)) = (self.selfx.local.clone(), oq) {
@@ -260,7 +260,7 @@ impl App {
                 crate::grammar::ko_label(ui, &q.model_answer_ko, 15.0, muted());
             });
             ui.add_space(8.0);
-            if ui.add(egui::Button::new(RichText::new("▶ 모범 답안 소리 내어 읽기").size(17.0)).fill(ACCENT).min_size(Vec2::new(0.0, 42.0))).clicked() {
+            if ui.add(egui::Button::new(RichText::new("▶ 모범 답안 소리 내어 읽기").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 drill_text = Some((q.model_answer.clone(), se.useful_phrases.clone()));
             }
             ui.add_space(8.0);
@@ -646,7 +646,7 @@ impl App {
 
         if !self.roleplay.started {
             ui.add_space(8.0);
-            if ui.add(egui::Button::new(RichText::new("▶ 대화 시작").size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 44.0))).clicked() {
+            if ui.add(egui::Button::new(RichText::new("▶ 대화 시작").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 self.start_conversation(sc.clone());
             }
             return;
@@ -756,7 +756,7 @@ impl App {
         if let Some(t) = turn_now {
             self.apply_turn(t);
         }
-        if ui.small_button("대화 끝내기").clicked() {
+        if ui.button("대화 끝내기").clicked() {
             self.roleplay.finished = true;
             self.roleplay.summary = "대화를 직접 마쳤어요. 교정된 문장을 따라 말하며 정리해 보세요.".into();
             if self.roleplay.lines.iter().filter(|l| l.user).count() >= 4 {

@@ -5,7 +5,7 @@ use crate::app::App;
 use crate::models::*;
 use crate::srs;
 use crate::widgets::*;
-use egui::{Color32, RichText, Ui, Vec2};
+use egui::{Color32, RichText, Ui};
 
 #[derive(Clone)]
 pub struct Spec {
@@ -136,7 +136,7 @@ impl App {
             ui.add_space(8.0);
             let (mut close, mut go_next) = (false, false);
             ui.horizontal(|ui| {
-                if ui.add(egui::Button::new(RichText::new("🏠 홈으로").size(17.0)).fill(ACCENT).min_size(Vec2::new(160.0, 40.0))).clicked() {
+                if ui.add(egui::Button::new(RichText::new("🏠 홈으로").size(16.0)).fill(ACCENT).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
                     close = true;
                     self.screen = crate::app::Screen::Home;
                 }
@@ -144,7 +144,7 @@ impl App {
                     close = true;
                 }
                 let next_label = if q_category == "vocab" { "다음 단어 ▶" } else { "다음 문장 ▶" };
-                if has_next && ui.add(egui::Button::new(RichText::new(next_label).size(17.0)).min_size(Vec2::new(140.0, 40.0))).clicked() {
+                if has_next && ui.add(egui::Button::new(RichText::new(next_label).size(16.0)).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
                     go_next = true;
                 }
             });
@@ -180,13 +180,13 @@ impl App {
         let Some(q) = self.queue.as_mut() else { return true };
         let mut stop = false;
         ui.horizontal(|ui| {
-            if ui.small_button("건너뛰기").clicked() {
+            if ui.button("건너뛰기").clicked() {
                 q.idx += 1;
                 if let Some(s) = q.specs.get(q.idx) {
                     q.drill = make_drill(s);
                 }
             }
-            stop = ui.small_button("그만하기").clicked();
+            stop = ui.button("그만하기").clicked();
         });
         if stop {
             self.queue = None;
@@ -245,7 +245,7 @@ impl App {
         ui.add_space(8.0);
         let done_today = self.step_done(step);
         let label = if done_today { "↻ 다시 연습하기" } else { "▶ 시작하기" };
-        let start_button = |ui: &mut Ui| ui.add(egui::Button::new(RichText::new(label).size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 44.0))).clicked();
+        let start_button = |ui: &mut Ui| ui.add(egui::Button::new(RichText::new(label).size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked();
         // The start button above the list too, so a long list need not be scrolled through first.
         ui.horizontal(|ui| {
             start |= start_button(ui);
@@ -437,7 +437,7 @@ impl App {
             } else {
                 ui.label(RichText::new("이미 배운 단어를 한 번씩 소리 내어 말해요. 첫 시도 점수로 다음 복습일이 정해집니다.").color(muted()));
                 ui.add_space(6.0);
-                start_review = ui.add(egui::Button::new(RichText::new(format!("▶ 배운 단어 {}개 복습", ids.len())).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
+                start_review = ui.add(egui::Button::new(RichText::new(format!("▶ 배운 단어 {}개 복습", ids.len())).size(16.0)).min_size(crate::widgets::ACTION_BUTTON)).clicked();
             }
         });
         if start_review {
@@ -536,7 +536,7 @@ impl App {
                     });
             }
             ui.add_space(6.0);
-            all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 단어 {total}개 이어서 연습")).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
+            all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 단어 {total}개 이어서 연습")).size(16.0)).min_size(crate::widgets::ACTION_BUTTON)).clicked();
         });
         let flat: Vec<(LessonWord, WordKind)> = days.iter().flat_map(|d| d.1.iter().cloned()).collect();
         if let Some((di, wi)) = finished {
@@ -698,7 +698,7 @@ impl App {
                     });
             }
             ui.add_space(6.0);
-            all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 문장 {total}개 이어서 연습")).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
+            all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 문장 {total}개 이어서 연습")).size(16.0)).min_size(crate::widgets::ACTION_BUTTON)).clicked();
         });
         let title = |t: &str| format!("문장 읽기 · {}", t.chars().take(30).collect::<String>());
         let flat: Vec<Spec> = days.iter().flat_map(|d| d.1.iter().map(|r| r.2.clone())).collect();
@@ -968,7 +968,7 @@ impl App {
             return;
         }
         ui.add_space(8.0);
-        if ui.add(egui::Button::new(RichText::new(format!("▶ 복습 시작 ({}개)", ids.len())).size(18.0)).fill(ACCENT).min_size(Vec2::new(220.0, 44.0))).clicked() {
+        if ui.add(egui::Button::new(RichText::new(format!("▶ 복습 시작 ({}개)", ids.len())).size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
             let s = self.store.settings.clone();
             let specs = ids
                 .iter()

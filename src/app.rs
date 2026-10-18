@@ -907,7 +907,7 @@ impl App {
                             } else {
                                 chip(ui, "🎉 오늘 학습 완료!", GOOD);
                             }
-                            if !self.store.profile.today.wrapped_up && done > 0 && ui.add(egui::Button::new(RichText::new("🌙 오늘 학습 마무리").size(15.0)).min_size(Vec2::new(0.0, 46.0)).corner_radius(12.0)).clicked() {
+                            if !self.store.profile.today.wrapped_up && done > 0 && ui.add(egui::Button::new(RichText::new("🌙 오늘 학습 마무리").size(17.0)).min_size(crate::widgets::BIG_BUTTON).corner_radius(12.0)).clicked() {
                                 self.wrap_up();
                             }
                         });
@@ -956,7 +956,7 @@ impl App {
             });
             stat_card(ui, w, &format!("{mins} / {goal}분"), "오늘 학습 시간", if mins >= goal { GOOD } else { text_strong() }, |_| {});
             stat_card(ui, w, &format!("{} {}", level_name_of(p.level), cefr_of(p.level)), &format!("레벨 {:.1} / 10", p.level), ACCENT, |ui| {
-                retest = ui.add(egui::Button::new(RichText::new("📝 레벨 테스트").small()).corner_radius(8.0)).on_hover_text("지금 실력을 다시 측정해 맞는 레벨로 이동합니다").clicked();
+                retest = ui.button("📝 레벨 테스트").on_hover_text("지금 실력을 다시 측정해 맞는 레벨로 이동합니다").clicked();
             });
             stat_card(ui, w, &format!("{} / {}", words, thousands(level_words as u64)), &format!("배운 단어 / {} 필수", cefr_of(p.level)), themed(Color32::from_rgb(190, 140, 255), Color32::from_rgb(120, 70, 220)), |ui| {
                 ui.add(egui::ProgressBar::new((words as f32 / level_words as f32).min(1.0)).desired_height(8.0).corner_radius(4.0).fill(Color32::from_rgb(190, 140, 255)));
@@ -1088,7 +1088,7 @@ impl App {
             if has_name && !self.edit_name {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("✅ {}", self.store.profile.name)).color(GOOD));
-                    if ui.small_button("변경").clicked() {
+                    if ui.button("변경").clicked() {
                         self.edit_name = true;
                     }
                 });
@@ -1101,7 +1101,7 @@ impl App {
                 ui.horizontal(|ui| {
                     let from_env = self.store.settings.api_key.trim().is_empty();
                     ui.label(RichText::new(if from_env { "✅ 환경변수 ANTHROPIC_API_KEY 사용" } else { "✅ 저장됨" }).color(GOOD));
-                    if ui.small_button("변경").clicked() {
+                    if ui.button("변경").clicked() {
                         self.edit_key = true;
                     }
                 });
@@ -1131,13 +1131,13 @@ impl App {
             if !ready {
                 ui.label(RichText::new("음성 인식 모델이 준비되면 레벨 테스트를 시작할 수 있어요.").color(muted()));
             }
-            if ui.add_enabled(ready, egui::Button::new(RichText::new("레벨 테스트 시작 ▶").size(18.0)).fill(ACCENT).min_size(Vec2::new(240.0, 46.0))).clicked() {
+            if ui.add_enabled(ready, egui::Button::new(RichText::new("레벨 테스트 시작 ▶").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 self.store.save_settings();
                 self.store.save_profile();
                 self.test = Some(LevelTest::new(true, 0));
                 self.screen = Screen::LevelTest;
             }
-            if ui.small_button("테스트 없이 초급(A2)으로 시작").clicked() {
+            if ui.button("테스트 없이 초급(A2)으로 시작").clicked() {
                 self.store.save_settings();
                 self.store.profile.placement_done = true;
                 self.store.profile.start_date = today();

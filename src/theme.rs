@@ -40,7 +40,8 @@ pub fn apply_visuals(ctx: &egui::Context) {
     ]
     .into();
     style.spacing.item_spacing = egui::vec2(10.0, 9.0);
-    style.spacing.button_padding = egui::vec2(14.0, 7.0);
+    // Plain buttons come out ~38 px tall, the same as `ACTION_BUTTON`.
+    style.spacing.button_padding = egui::vec2(16.0, 9.0);
     style.spacing.interact_size.y = 30.0;
     // (dark, light) for each themed colour.
     let pick = |d: Color32, l: Color32| if light { l } else { d };

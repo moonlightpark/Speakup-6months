@@ -177,7 +177,7 @@ impl App {
                         }
                         if self.listening.confirm_delete.as_deref() == Some(v.id.as_str()) {
                             ui.label(RichText::new("삭제할까요?").color(warn()));
-                            if ui.small_button("🗑 삭제").clicked() {
+                            if ui.button("🗑 삭제").clicked() {
                                 match youtube::delete(&self.store.youtube_dir(), &v.id) {
                                     Ok(()) => crate::applog!("listening: 받아둔 영상 삭제 · {} ({})", v.title, v.id),
                                     Err(e) => self.listening.error = Some(format!("{e:#}")),
@@ -185,7 +185,7 @@ impl App {
                                 self.listening.confirm_delete = None;
                                 deleted = true;
                             }
-                            if ui.small_button("취소").clicked() {
+                            if ui.button("취소").clicked() {
                                 self.listening.confirm_delete = None;
                             }
                         } else if ui.small_button("🗑").on_hover_text("받아둔 영상 삭제 (오디오·자막)").clicked() {
@@ -206,7 +206,7 @@ impl App {
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.label(RichText::new(&video.title).size(18.0).strong());
-            if ui.small_button("다른 영상").clicked() {
+            if ui.button("다른 영상").clicked() {
                 self.voice.player.stop();
                 self.listening.video = None;
                 self.listening.drill = None;
@@ -340,7 +340,7 @@ impl App {
         }
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("오늘 쉐도잉 통과: {}/5", self.store.profile.today.listening_passes)).color(muted()));
-            if ui.small_button("🌐 유튜브에서 열기").clicked() {
+            if ui.button("🌐 유튜브에서 열기").clicked() {
                 let _ = open::that(format!("{}&t={}s", video.url, seg.start as u32));
             }
         });

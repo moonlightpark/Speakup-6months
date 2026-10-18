@@ -4,7 +4,7 @@
 use crate::app::App;
 use crate::models::Phrase;
 use crate::widgets::*;
-use egui::{RichText, Ui, Vec2};
+use egui::{RichText, Ui};
 
 #[derive(Default)]
 pub struct FeedbackState {
@@ -59,7 +59,7 @@ impl App {
                 }
                 DrillEvent::None => {}
             }
-            if ui.small_button("그만하기").clicked() {
+            if ui.button("그만하기").clicked() {
                 self.feedback.drill = None;
                 self.feedback.queue.clear();
             }
@@ -74,7 +74,7 @@ impl App {
             });
             return;
         }
-        if ui.add(egui::Button::new(RichText::new(format!("▶ 상위 {}개 발음 연습", list.len().min(10))).size(17.0)).fill(ACCENT).min_size(Vec2::new(0.0, 40.0))).clicked() {
+        if ui.add(egui::Button::new(RichText::new(format!("▶ 상위 {}개 발음 연습", list.len().min(10))).size(16.0)).fill(ACCENT).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
             let mut words: Vec<String> = list.iter().take(10).map(|m| m.word.clone()).collect();
             let first = words.remove(0);
             self.feedback.queue = words;
@@ -103,7 +103,7 @@ impl App {
             .filter(|c| !c.practiced)
             .map(|c| Phrase { text: c.corrected.clone(), ko: c.explanation_ko.clone() })
             .collect();
-        if !pending.is_empty() && ui.add(egui::Button::new(RichText::new(format!("▶ 교정 문장 {}개 따라 말하기", pending.len().min(10))).size(17.0)).fill(ACCENT).min_size(Vec2::new(0.0, 40.0))).clicked() {
+        if !pending.is_empty() && ui.add(egui::Button::new(RichText::new(format!("▶ 교정 문장 {}개 따라 말하기", pending.len().min(10))).size(16.0)).fill(ACCENT).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
             let batch: Vec<Phrase> = pending.into_iter().take(10).collect();
             for c in self.store.corrections.iter_mut().filter(|c| batch.iter().any(|p| p.text == c.corrected)) {
                 c.practiced = true;

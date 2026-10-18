@@ -6,7 +6,7 @@ use crate::claude::LevelAssessment;
 use crate::content;
 use crate::models::*;
 use crate::widgets::*;
-use egui::{RichText, Ui, Vec2};
+use egui::{RichText, Ui};
 
 pub struct LevelTest {
     pub placement: bool,
@@ -113,7 +113,7 @@ impl App {
                     if let Some(a) = t.capture.ui(ui, &mut self.voice, 75.0) {
                         t.answer = Some(a);
                     }
-                    if ui.small_button("영어로 말하기 어려워요 (건너뛰기)").clicked() {
+                    if ui.button("영어로 말하기 어려워요 (건너뛰기)").clicked() {
                         t.answer = Some(String::new());
                     }
                 });
@@ -178,7 +178,7 @@ impl App {
                 ui.add_space(10.0);
                 ui.vertical_centered(|ui| {
                     let go = if t.retest { "이 레벨로 이동 ▶" } else { "학습 시작하기 ▶" };
-                    if ui.add(egui::Button::new(RichText::new(go).size(18.0)).fill(ACCENT).min_size(Vec2::new(220.0, 44.0))).clicked() {
+                    if ui.add(egui::Button::new(RichText::new(go).size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                         if t.retest {
                             // The learner asked to be placed by this result: use it as is.
                             self.store.record_level(a.level, "레벨 테스트 (홈에서 재측정)");
@@ -199,11 +199,11 @@ impl App {
             }
         }
         if self.screen == Screen::LevelTest {
-            if t.retest && t.result.is_some() && ui.small_button("지금 레벨 유지하기").clicked() {
+            if t.retest && t.result.is_some() && ui.button("지금 레벨 유지하기").clicked() {
                 self.screen = Screen::Home;
                 return;
             }
-            if !t.placement && t.result.is_none() && ui.small_button("◀ 나중에 하기").clicked() {
+            if !t.placement && t.result.is_none() && ui.button("◀ 나중에 하기").clicked() {
                 self.screen = Screen::Home;
                 return;
             }

@@ -6,7 +6,7 @@ use crate::claude::{AnswerJudgement, ListenQuestion};
 use crate::curriculum;
 use crate::models::*;
 use crate::widgets::*;
-use egui::{RichText, Ui, Vec2};
+use egui::{RichText, Ui};
 use rand::seq::SliceRandom;
 
 /// The same question every week, so recordings can be compared.
@@ -196,7 +196,7 @@ impl App {
         }
         let n = self.coach.listen.questions.len();
         if n == 0 {
-            if ui.add(egui::Button::new(RichText::new("▶ 질문 6개 받기").size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 42.0))).clicked() {
+            if ui.add(egui::Button::new(RichText::new("▶ 질문 6개 받기").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 self.new_listen_questions();
             }
             return;
@@ -283,7 +283,7 @@ impl App {
                     speaker_button(ui, &mut self.voice, &q.sample_answer);
                     ui.label(RichText::new(format!("예시 대답: {}", q.sample_answer)).color(muted()));
                 });
-                next = ui.add(egui::Button::new("다음 ▶").min_size(Vec2::new(120.0, 34.0))).clicked();
+                next = ui.add(egui::Button::new("다음 ▶").min_size(crate::widgets::ACTION_BUTTON)).clicked();
             }
         });
         if next {
@@ -302,7 +302,7 @@ impl App {
         });
         ui.add_space(6.0);
         let Some((topic, topic_ko)) = self.coach.ftt.topic.clone() else {
-            if ui.add(egui::Button::new(RichText::new("▶ 시작하기").size(18.0)).fill(ACCENT).min_size(Vec2::new(180.0, 42.0))).clicked() {
+            if ui.add(egui::Button::new(RichText::new("▶ 시작하기").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
                 let q = self.lesson.as_ref().map(|l| (l.self_expression.question.clone(), l.self_expression.question_ko.clone())).filter(|q| !q.0.is_empty());
                 let day = curriculum::day_number(&self.store.profile) as usize;
                 let fallback = TOPICS[day % TOPICS.len()];

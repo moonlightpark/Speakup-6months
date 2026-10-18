@@ -128,7 +128,7 @@ impl App {
                 finished = self.make_sentence_ui(ui, &task, c);
             }
         }
-        if ui.small_button("◀ 숙제 목록").clicked() {
+        if ui.button("◀ 숙제 목록").clicked() {
             self.homework.active = None;
         }
         if finished {
@@ -253,7 +253,7 @@ impl App {
                 if !task.feedback.is_empty() {
                     ui.label(RichText::new(&task.feedback).color(if task.passed > 0 { GOOD } else { warn() }));
                 }
-                if task.passed > 0 && ui.add(egui::Button::new("다음 ▶").fill(GOOD).min_size(Vec2::new(140.0, 36.0))).clicked() {
+                if task.passed > 0 && ui.add(egui::Button::new("다음 ▶").fill(GOOD).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
                     next = true;
                 }
             });

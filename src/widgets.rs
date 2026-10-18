@@ -159,9 +159,15 @@ pub fn chip(ui: &mut Ui, text: &str, color: Color32) {
         });
 }
 
+/// The two button sizes used on every screen: big call-to-action buttons (시작하기, 대화 시작 …)
+/// and action buttons (다음, 닫기, 그만하기, ◀ 목록 …; plain `ui.button`s come out this tall
+/// from the theme's padding).
+pub const BIG_BUTTON: Vec2 = Vec2::new(200.0, 46.0);
+pub const ACTION_BUTTON: Vec2 = Vec2::new(120.0, 38.0);
+
 /// Main call-to-action button.
 pub fn primary_button(ui: &mut Ui, text: &str) -> egui::Response {
-    ui.add(egui::Button::new(RichText::new(text).size(17.0).strong().color(Color32::WHITE)).fill(ACCENT).corner_radius(12.0).min_size(Vec2::new(200.0, 46.0)))
+    ui.add(egui::Button::new(RichText::new(text).size(17.0).strong().color(Color32::WHITE)).fill(ACCENT).corner_radius(12.0).min_size(BIG_BUTTON))
 }
 
 pub fn spinner_label(ui: &mut Ui, text: &str) {
@@ -755,7 +761,7 @@ impl Drill {
             reps_dots(ui, self.reps_passed, self.reps_needed);
             if self.done {
                 ui.add_space(6.0);
-                if ui.add(egui::Button::new(RichText::new("다음 ▶").size(18.0)).fill(GOOD).min_size(Vec2::new(160.0, 40.0))).clicked() {
+                if ui.add(egui::Button::new(RichText::new("다음 ▶").size(16.0)).fill(GOOD).min_size(ACTION_BUTTON)).clicked() {
                     event = DrillEvent::Completed;
                 }
             } else if self.last.is_some() {

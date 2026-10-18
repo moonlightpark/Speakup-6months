@@ -118,7 +118,7 @@ impl App {
                     if let Some(d) = self.diary_on(date) {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(format!("📝 영어 일기: {}", d.text.chars().take(60).collect::<String>()));
-                            if ui.small_button("📅 일기장에서 보기").clicked() {
+                            if ui.button("📅 일기장에서 보기").clicked() {
                                 open_diary = Some(date);
                             }
                         });

@@ -206,7 +206,7 @@ impl App {
             }
         }
         ui.horizontal(|ui| {
-            if ui.small_button("↻ 장치 목록 새로고침").clicked() {
+            if ui.button("↻ 장치 목록 새로고침").clicked() {
                 *st.devices.lock().unwrap() = None;
                 st.listing = false;
             }
