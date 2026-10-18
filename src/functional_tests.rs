@@ -369,7 +369,7 @@ fn ft04_new_words_repeat_until_passed_then_saved_to_srs() {
     t.nav("📚  새 단어");
     t.wait("lesson", |a| a.lesson.is_some());
     assert!(t.has("deadline") && t.has("마감일"));
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     // Word: needs 3 passing repetitions. One failed attempt in between doesn't count.
     t.say("deadline", 0.8);
     assert!(t.has("100점"));
@@ -415,7 +415,7 @@ fn ft05_reading_shows_direct_reading_and_failures_become_homework() {
     let mut t = launch("reading");
     t.nav("📖  문장 읽기");
     t.wait("lesson", |a| a.lesson.is_some());
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     // 직독직해: each chunk with its Korean meaning, separated by slashes.
     for text in ["I", "am", "boy.", "나", "이다", "소년", "/"] {
         assert!(t.has_exact(text), "chunk {text:?} visible");
@@ -761,7 +761,7 @@ fn ft17_history_records_each_day_and_screen_shows_it() {
     let mut t = launch("history");
     t.nav("📚  새 단어");
     t.wait("lesson", |a| a.lesson.is_some());
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     for _ in 0..3 {
         t.say("deadline", 0.8);
     }
@@ -1094,7 +1094,7 @@ fn ft27_chunks_first_high_frequency_words_and_one_expression_a_day() {
     assert_eq!(ws.words[0].word, crate::wordbank::pick(t.app().store.profile.level, 1, |_| false)[0].word);
     assert!(t.has(&format!("🔗 {}", chunks[0].0)));
     // The chunk is drilled first, then its example, then the next chunk.
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     for _ in 0..3 {
         t.say(chunks[0].0, 1.0);
     }
@@ -1131,7 +1131,7 @@ fn ft29_four_three_two_speaking() {
     let mut t = launch("ftt");
     t.nav("⚡  스피드 트레이닝");
     t.click("⏱ 4/3/2 말하기");
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     t.steps(3);
     assert!(t.has("라운드 1/3 · 4분"));
     t.say("I usually get up at seven and go to work by bus", 20.0);
@@ -1186,7 +1186,7 @@ fn ft31_korean_support_fades_over_the_months() {
     assert!(!t.app().store.settings.ko_role_colors && t.app().store.settings.ko_colors_faded);
     t.nav("📖  문장 읽기");
     t.wait("lesson", |a| a.lesson.is_some());
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     assert!(!t.has_exact("/"), "no 직독직해 until asked");
     assert!(t.has("나는 소년이다."), "Korean meaning still shown in months 3-4");
     t.click("📖 직독직해");
@@ -1200,7 +1200,7 @@ fn ft31_korean_support_fades_over_the_months() {
     t.nav("📖  문장 읽기");
     t.wait("lesson", |a| a.lesson.is_some());
     assert!(!t.has("나는 소년이다."), "list shows English only");
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     assert!(!t.has("나는 소년이다.") && t.has("한국어 뜻 보기"));
     t.say("I am a boy.", 1.0);
     assert!(t.has("나는 소년이다."), "Korean shown when checking the answer");
@@ -1257,7 +1257,7 @@ fn ft34_passed_words_are_said_once_after_a_restart() {
             s.profile.today = DayProgress { date: Some(today()), word_set: Some(mock_word_set()), ..Default::default() };
         });
         t.nav("📚  새 단어");
-        t.click("▶ 시작하기");
+        t.nav("▶ 시작하기");
         for _ in 0..3 {
             t.say("deadline", 0.8);
         }
@@ -1270,7 +1270,7 @@ fn ft34_passed_words_are_said_once_after_a_restart() {
     let mut t = launch_at(dir, true, |_| {});
     assert_eq!(t.app().store.profile.today.word_set, Some(mock_word_set()), "today's words survive a restart");
     t.nav("📚  새 단어");
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     assert!(t.has("통과한 단어"));
     let reviews = t.app().store.items.iter().find(|i| i.text == "deadline").unwrap().attempts;
     t.say("deadline", 0.8);
@@ -1307,7 +1307,7 @@ fn ft35_reading_starts_with_30_idioms_and_words_review_50_learned() {
     assert!(!t.has("I am a boy.") && t.has("1 / 2 쪽"), "25 per page");
     t.click("다음 ▶");
     assert!(t.has("I am a boy."), "the longer sentences follow the idioms");
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     assert!(t.has("It's my first time"));
     t.say("It's my first time", 1.0);
     t.click("다음 ▶");
@@ -1353,7 +1353,7 @@ fn ft36_word_list_pages_of_25_coloured_by_practice() {
     assert_eq!(word_color(10), egui::Color32::from_rgb(150, 230, 90));
     // Each passing repetition is kept in word_stats.json.
     t.click("◀ 이전");
-    t.click("▶ 시작하기");
+    t.nav("▶ 시작하기");
     t.say("word00", 0.8);
     t.say("word00", 0.8);
     assert_eq!(t.app().store.word_stat("word00").passes, 2);
@@ -1426,6 +1426,7 @@ fn ft39_reading_list_colours_click_and_home_progress() {
         s.word_stats.insert("what's done is done".into(), WordStat { passes: 12, attempts: 12, last: None });
     });
     t.nav("📖  문장 읽기");
+    assert_eq!(t.h.get_all_by_label("▶ 시작하기").count(), 2, "start button above and below the list");
     assert!(t.has("기억 완료 1/") && t.has("✓ 완료") && t.has("미완료"), "reading list coloured like 새 단어");
     // Click the first idiom: just that sentence, then it counts on the home progress card.
     t.click("💬 It's my first time");

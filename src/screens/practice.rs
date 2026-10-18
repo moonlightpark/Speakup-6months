@@ -248,6 +248,17 @@ impl App {
         let mut picked = None;
         page_title(ui, title, desc);
         ui.add_space(8.0);
+        let done_today = self.step_done(step);
+        let label = if done_today { "↻ 다시 연습하기" } else { "▶ 시작하기" };
+        let start_button = |ui: &mut Ui| ui.add(egui::Button::new(RichText::new(label).size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 44.0))).clicked();
+        // The start button above the list too, so a long list need not be scrolled through first.
+        ui.horizontal(|ui| {
+            start |= start_button(ui);
+            if done_today {
+                ui.label(RichText::new("✅ 오늘 완료했어요").color(GOOD));
+            }
+        });
+        ui.add_space(8.0);
         let pages = rows.len().div_ceil(LIST_PAGE).max(1);
         let page_id = egui::Id::new(("intro_page", step));
         let mut page = ui.data(|d| d.get_temp::<usize>(page_id)).unwrap_or(0).min(pages - 1);
@@ -312,13 +323,10 @@ impl App {
         });
         ui.data_mut(|d| d.insert_temp(page_id, page));
         ui.add_space(8.0);
-        let label = if self.step_done(step) { "↻ 다시 연습하기" } else { "▶ 시작하기" };
-        if self.step_done(step) {
+        if done_today {
             ui.label(RichText::new("✅ 오늘 완료했어요. 더 연습해도 좋아요!").color(GOOD));
         }
-        if ui.add(egui::Button::new(RichText::new(label).size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 44.0))).clicked() {
-            start = true;
-        }
+        start |= start_button(ui);
         (start, picked)
     }
 
