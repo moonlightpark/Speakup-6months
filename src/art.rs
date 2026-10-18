@@ -152,6 +152,127 @@ pub fn mascot_widget(ui: &mut Ui, size: f32, mood: Mood) {
     ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
 }
 
+// ---------------------------------------------------------------- celebration
+
+/// How long the celebration moves (seconds); afterwards it rests on its last frame.
+pub const CELEBRATION_SECS: f32 = 4.0;
+
+fn ease_out_back(x: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    let (c1, c3) = (1.70158, 2.70158);
+    1.0 + c3 * (x - 1.0).powi(3) + c1 * (x - 1.0).powi(2)
+}
+
+/// Small deterministic pseudo-random number in 0..1 for particle `i`, channel `k`.
+fn rnd(i: u32, k: u32) -> f32 {
+    let mut x = i.wrapping_mul(747_796_405).wrapping_add(k.wrapping_mul(2_891_336_453)).wrapping_add(1);
+    x ^= x >> 13;
+    x = x.wrapping_mul(1_274_126_177);
+    x ^= x >> 16;
+    (x % 10_000) as f32 / 10_000.0
+}
+
+/// A filled five-pointed star (a triangle fan, since the outline is not convex).
+pub fn star(p: &Painter, c: Pos2, r: f32, color: Color32) {
+    let mut mesh = Mesh::default();
+    mesh.colored_vertex(c, color);
+    for i in 0..=10 {
+        let rr = if i % 2 == 0 { r } else { r * 0.45 };
+        mesh.colored_vertex(c + Vec2::angled(-PI / 2.0 + PI * i as f32 / 5.0) * rr, color);
+    }
+    for i in 1..=10u32 {
+        mesh.add_triangle(0, i, i + 1);
+    }
+    p.add(Shape::mesh(mesh));
+}
+
+/// The "잘했어요!" scene, `t` seconds after it appeared: a light burst, confetti thrown up and
+/// tumbling down, the mascot popping in to cheer and 1–3 stars for `score`. Returns the rect,
+/// whose upper middle is left free for the title. Repaints only while it moves.
+pub fn celebration(ui: &mut Ui, t: f32, score: f32) -> Rect {
+    let w = ui.available_width().min(760.0);
+    let (rect, _) = ui.allocate_exact_size(vec2(w, 300.0), egui::Sense::hover());
+    let p = ui.painter_at(rect);
+    gradient_rect(&p, rect, 22.0, Color32::from_rgb(76, 58, 200), Color32::from_rgb(150, 50, 160));
+    let c = rect.center() + vec2(0.0, 10.0);
+
+    // Light burst: rings and rays spreading out.
+    if t < 1.6 {
+        for k in 0..3 {
+            let tt = (t - k as f32 * 0.18) / 1.2;
+            if (0.0..1.0).contains(&tt) {
+                p.circle_stroke(c, 30.0 + tt * w * 0.5, Stroke::new(6.0 * (1.0 - tt), Color32::from_white_alpha((150.0 * (1.0 - tt)) as u8)));
+            }
+        }
+    }
+    let rays = (1.0 - (t / 2.5)).clamp(0.0, 1.0);
+    if rays > 0.0 {
+        for i in 0..16 {
+            let a = TAU * i as f32 / 16.0 + t * 0.4;
+            let (r0, r1) = (60.0, 60.0 + 260.0 * ease_out_back((t / 0.7).min(1.0)));
+            p.line_segment([c + Vec2::angled(a) * r0, c + Vec2::angled(a) * r1], Stroke::new(3.0, Color32::from_white_alpha((40.0 * rays) as u8)));
+        }
+    }
+
+    // Stars for the first-try average, popping in one after another.
+    let n_stars = if score >= 90.0 { 3 } else if score >= 75.0 { 2 } else { 1 };
+    for i in 0..3 {
+        let pop = ease_out_back(((t - 0.5 - i as f32 * 0.25) / 0.45).max(0.0));
+        if pop <= 0.0 {
+            continue;
+        }
+        let pos = pos2(rect.center().x + (i as f32 - 1.0) * 64.0, rect.bottom() - 62.0 - if i == 1 { 14.0 } else { 0.0 });
+        let lit = i < n_stars;
+        let col = if lit { Color32::from_rgb(255, 214, 80) } else { Color32::from_white_alpha(45) };
+        if lit {
+            glow(&p, pos, 40.0 * pop, Color32::from_rgb(255, 214, 80));
+        }
+        star(&p, pos, 26.0 * pop, col);
+    }
+
+    // The mascot pops in on the left and keeps cheering.
+    let m = ease_out_back((t / 0.6).min(1.0));
+    if m > 0.0 {
+        let hop = ((t * 5.0).sin().abs() * 10.0) * (1.0 - (t / CELEBRATION_SECS).min(1.0));
+        mascot(&p, pos2(rect.left() + 95.0, rect.center().y + 20.0 - hop), 92.0 * m, Mood::Cheer, t);
+        mascot(&p, pos2(rect.right() - 95.0, rect.center().y + 30.0 - hop * 0.7), 64.0 * m, Mood::Happy, t + 1.3);
+    }
+
+    // Confetti: thrown up from the middle, then falling and tumbling, fading at the end.
+    let palette = [PINK, CYAN, WARN, GOOD, Color32::from_rgb(255, 214, 80), Color32::WHITE, VIOLET];
+    let fade = (1.0 - (t - (CELEBRATION_SECS - 0.8)) / 0.8).clamp(0.0, 1.0);
+    if fade > 0.0 {
+        for i in 0..90u32 {
+            let delay = rnd(i, 0) * 0.35;
+            let tt = t - delay;
+            if tt <= 0.0 {
+                continue;
+            }
+            let angle = -PI / 2.0 + (rnd(i, 1) - 0.5) * 2.4;
+            let speed = 260.0 + rnd(i, 2) * 360.0;
+            let drift = (tt * (2.0 + rnd(i, 3) * 3.0)).sin() * 18.0;
+            let pos = c + vec2(angle.cos() * speed * tt + drift, angle.sin() * speed * tt + 0.5 * 520.0 * tt * tt);
+            if !rect.expand(20.0).contains(pos) {
+                continue;
+            }
+            let col = palette[(i as usize) % palette.len()].gamma_multiply(fade);
+            let spin = tt * (4.0 + rnd(i, 4) * 8.0);
+            let size = 4.0 + rnd(i, 5) * 5.0;
+            if i % 3 == 0 {
+                p.circle_filled(pos, size * 0.6, col);
+            } else {
+                // A small spinning paper strip.
+                let (dx, dy) = (Vec2::angled(spin) * size, Vec2::angled(spin + PI / 2.0) * size * 0.45 * spin.cos().abs().max(0.2));
+                p.add(Shape::convex_polygon(vec![pos - dx - dy, pos + dx - dy, pos + dx + dy, pos - dx + dy], col, Stroke::NONE));
+            }
+        }
+    }
+    if t < CELEBRATION_SECS {
+        ui.ctx().request_repaint();
+    }
+    rect
+}
+
 // ---------------------------------------------------------------- scenes
 
 /// The six-month path as rolling hills with a flag at the end and a marker at `progress`.

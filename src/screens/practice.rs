@@ -31,12 +31,14 @@ pub struct DrillQueue {
     pub idx: usize,
     pub drill: Drill,
     pub results: Vec<(String, f32)>,
+    /// When the celebration started (egui time), so it plays once from the beginning.
+    pub finished_at: Option<f64>,
 }
 
 impl DrillQueue {
     pub fn new(step: &'static str, category: &'static str, title: &str, specs: Vec<Spec>) -> Self {
         let drill = specs.first().map(make_drill).unwrap_or_default();
-        Self { step, category, title: title.to_string(), specs, idx: 0, drill, results: Vec::new() }
+        Self { step, category, title: title.to_string(), specs, idx: 0, drill, results: Vec::new(), finished_at: None }
     }
 
     pub fn finished(&self) -> bool {
@@ -111,19 +113,26 @@ impl App {
             let avg = if q.results.is_empty() { 0.0 } else { q.results.iter().map(|r| r.1).sum::<f32>() / q.results.len() as f32 };
             let weak: Vec<String> = q.results.iter().filter(|r| r.1 < pass).map(|r| r.0.clone()).collect();
             let title = q.title.clone();
-            card(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.label(RichText::new("🎉 잘했어요!").size(30.0).strong());
-                    ui.label(RichText::new(format!("{title} 완료 · 첫 시도 평균 {avg:.0}점")).size(18.0));
-                });
-                if !weak.is_empty() {
-                    ui.add_space(8.0);
+            let now = ui.input(|i| i.time);
+            let t = (now - *q.finished_at.get_or_insert(now)) as f32;
+            // Animated celebration, with the title and score as real labels on top of it.
+            let rect = crate::art::celebration(ui, t, avg);
+            let pop = 1.0 + 0.2 * (1.0 - (t / 0.5).min(1.0)) + 0.05 * (t * 6.0).sin() * (1.0 - (t / crate::art::CELEBRATION_SECS).min(1.0));
+            let headline = if avg >= 90.0 { "🎉 완벽해요! 잘했어요!" } else { "🎉 잘했어요!" };
+            let top = egui::Rect::from_center_size(rect.center_top() + Vec2::new(0.0, 52.0), Vec2::new(rect.width() - 200.0, 64.0));
+            ui.put(top, egui::Label::new(RichText::new(headline).size(34.0 * pop).strong().color(Color32::WHITE)));
+            let shown = avg * (t / 1.2).min(1.0);
+            let sub = egui::Rect::from_center_size(rect.center_top() + Vec2::new(0.0, 108.0), Vec2::new(rect.width() - 200.0, 30.0));
+            ui.put(sub, egui::Label::new(RichText::new(format!("{title} 완료 · 첫 시도 평균 {shown:.0}점")).size(18.0).color(Color32::from_rgb(230, 230, 255))));
+            ui.add_space(8.0);
+            if !weak.is_empty() {
+                card(ui, |ui| {
                     ui.label(RichText::new("어려웠던 항목 (복습·숙제로 다시 나옵니다)").color(WARN));
                     for w in &weak {
                         ui.label(format!("• {w}"));
                     }
-                }
-            });
+                });
+            }
             ui.add_space(8.0);
             let mut close = false;
             ui.horizontal(|ui| {
