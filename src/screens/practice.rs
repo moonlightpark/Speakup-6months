@@ -332,6 +332,7 @@ impl App {
         if self.run_queue_ui(ui) || self.word_mission_ui(ui) {
             return;
         }
+        self.ensure_tenses();
         // Built-in word database + chunk list: no waiting for Claude. The rest of today's
         // lesson (sentences, speaking…) is still prepared in the background meanwhile.
         self.ensure_lesson();
@@ -356,7 +357,7 @@ impl App {
         let (start, picked, finished) = self.intro_card(
             ui,
             "📚 오늘의 덩어리 표현 · 새 단어",
-            &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 예문까지 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
+            &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 단어는 시제 3문장(현재 ~할까 생각 중이에요 · 과거 ~했어요 · 미래 ~할 거예요)을 3번씩 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
             &rows,
             "words",
             &marks,
@@ -893,7 +894,7 @@ impl App {
             WordKind::Word => (ItemKind::Word, "vocab", ""),
             WordKind::Expression => (ItemKind::Word, "expression", "💬 원어민 표현·유행어"),
         };
-        vec![
+        let mut specs = vec![
             Spec {
                 item_id: None,
                 new_item: (!passed).then(|| StudyItem {
@@ -913,7 +914,24 @@ impl App {
                 is_word,
                 chunks: Vec::new(),
             },
-            Spec {
+        ];
+        // Words: the same idea in three tenses, each sentence said 3 times (시제 3문장).
+        // Chunks and expressions keep their example sentence.
+        if kind == WordKind::Word {
+            let t = self.tense_for(w);
+            specs.extend(t.rows().iter().map(|(en, ko, label, frame)| Spec {
+                item_id: None,
+                new_item: None,
+                target: en.to_string(),
+                ko: ko.to_string(),
+                tip: format!("🕐 {label} · {frame} — '{}'을(를) 넣어 3번 말해요", w.word),
+                reps: 3,
+                recall: false,
+                is_word: false,
+                chunks: Vec::new(),
+            }));
+        } else {
+            specs.push(Spec {
                 item_id: None,
                 new_item: None,
                 target: w.example.clone(),
@@ -923,8 +941,9 @@ impl App {
                 recall: false,
                 is_word: false,
                 chunks: self.store.gloss_for(&w.example),
-            },
-        ]
+            });
+        }
+        specs
     }
 
     pub fn reading_ui(&mut self, ui: &mut Ui) {

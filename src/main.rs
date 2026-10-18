@@ -27,6 +27,7 @@ mod scoring;
 mod screens;
 mod srs;
 mod storage;
+mod tenses;
 mod stt;
 mod theme;
 mod voice;

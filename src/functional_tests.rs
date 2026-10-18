@@ -117,6 +117,17 @@ fn respond(body: &Value) -> Value {
         ko_roles_json(&prompt)
     } else if prompt.starts_with("Assess the learner") {
         json!({"level": 4.6, "summary_ko": "중급 수준입니다.", "strengths_ko": ["발음"], "weaknesses_ko": ["시제"], "focus_next_ko": "과거형"})
+    } else if prompt.starts_with("Tense frames:") {
+        let items: Vec<Value> = prompt
+            .lines()
+            .filter_map(|l| l.strip_prefix("- ").and_then(|r| r.split(" (").next()))
+            .map(|w| {
+                json!({"word": w, "present": format!("I'm thinking of checking the {w}."), "present_ko": "확인할까 생각 중이에요",
+                       "past": format!("I was thinking of checking the {w}."), "past_ko": "확인할까 생각했어요",
+                       "future": format!("I'll think about checking the {w}."), "future_ko": "확인할까 생각할 거예요"})
+            })
+            .collect();
+        json!({"items": items})
     } else if prompt.starts_with("Sentence mission:") {
         json!({"ok": true, "feedback_ko": "좋아요! be동사를 잘 썼어요", "better": "My deadline is on Friday."})
     } else if prompt.starts_with("Homework:") {
@@ -287,6 +298,17 @@ impl T {
         }
         self.steps(3);
     }
+    /// 시제 3문장 after a new word: each tense sentence said 3 times, then 다음.
+    #[track_caller]
+    fn say_tense_trio(&mut self) {
+        for _ in 0..3 {
+            let target = self.app().queue.as_ref().expect("in a practice").drill.target.clone();
+            for _ in 0..3 {
+                self.say(&target, 2.0);
+            }
+            self.click("다음 ▶");
+        }
+    }
     /// The learner presses the mic, says `text` (taking `secs` seconds), and stops.
     #[track_caller]
     fn say(&mut self, text: &str, secs: f32) {
@@ -386,16 +408,15 @@ fn ft04_new_words_repeat_until_passed_then_saved_to_srs() {
     assert!(t.query_next().is_none(), "two passes are not enough");
     t.say("deadline", 0.8);
     t.click("다음 ▶");
-    // Example sentence (1 rep)
-    t.say("The deadline is Friday.", 1.5);
-    t.click("다음 ▶");
-    // Second word + example
+    // 시제 3문장: present / past / future, each said 3 times.
+    assert!(t.has("🕐 현재 · ~할까 생각 중이에요") && t.app().queue.as_ref().unwrap().drill.target.contains("deadline"));
+    t.say_tense_trio();
+    // Second word + its tenses
     for _ in 0..3 {
         t.say("schedule", 0.8);
     }
     t.click("다음 ▶");
-    t.say("Let me check my schedule.", 1.5);
-    t.click("다음 ▶");
+    t.say_tense_trio();
     assert!(t.has("잘했어요!"));
     // The buttons sit below the celebration animation (300 px), not on top of it.
     let score_bottom = t.h.query_by_label_contains("첫 시도 평균").and_then(|n| n.raw_bounds()).unwrap().y1;
@@ -1401,13 +1422,12 @@ fn ft37_click_a_word_in_the_list_to_practise_it() {
     t.nav("📚  새 단어");
     // "schedule" is the 2nd entry: clicking it practises just that word (3 reps + example).
     t.click("schedule");
-    assert!(t.has("새 단어 · schedule") && t.has("1 / 2"));
+    assert!(t.has("새 단어 · schedule") && t.has("1 / 4"));
     for _ in 0..3 {
         t.say("schedule", 0.8);
     }
     t.click("다음 ▶");
-    t.say("Let me check my schedule.", 1.5);
-    t.click("다음 ▶");
+    t.say_tense_trio();
     assert!(t.has("잘했어요!") && !t.has("다음 단어 ▶"), "last word in the list: no next");
     assert!(t.app().store.items.iter().any(|i| i.text == "schedule"), "saved for review");
     assert_eq!(t.app().store.word_stat("schedule").passes, 3);
@@ -1415,7 +1435,7 @@ fn ft37_click_a_word_in_the_list_to_practise_it() {
     // Back to the list; a passed word can be practised again in full and keeps counting.
     t.click("닫기");
     t.click("schedule");
-    assert!(t.has("1 / 2"), "full practice again, with the example");
+    assert!(t.has("1 / 4"), "full practice again, with the tenses");
     let reviews = t.app().store.items.iter().find(|i| i.text == "schedule").unwrap().attempts;
     for _ in 0..3 {
         t.say("schedule", 0.8);
@@ -1430,10 +1450,9 @@ fn ft37_click_a_word_in_the_list_to_practise_it() {
         t.say("deadline", 0.8);
     }
     t.click("다음 ▶");
-    t.say("The deadline is Friday.", 1.5);
-    t.click("다음 ▶");
+    t.say_tense_trio();
     t.click("다음 단어 ▶");
-    assert!(t.has("새 단어 · schedule") && t.has("1 / 2"), "the next word, in full");
+    assert!(t.has("새 단어 · schedule") && t.has("1 / 4"), "the next word, in full");
 }
 
 #[test]
@@ -1665,8 +1684,7 @@ fn ft46_words_left_unfinished_on_earlier_days_can_be_seen_and_practised() {
         t.say("company", 0.8);
     }
     t.click("다음 ▶");
-    t.say("I said company.", 1.5);
-    t.click("다음 ▶");
+    t.say_tense_trio();
     t.click("다음 단어 ▶");
     assert!(t.has("새 단어 · health"));
     t.click("그만하기");
@@ -1874,4 +1892,34 @@ fn ft54_free_talk_categories_of_fifty_scenarios_the_app_asks_and_i_answer() {
     t.wait("AI reply", |a| a.roleplay.lines.len() >= 3);
     let p = t.prompts().into_iter().filter(|p| p.starts_with("Role-play.")).last().unwrap();
     assert!(p.contains("Follow this plan") && p.contains(&s.questions[1].q));
+}
+
+#[test]
+fn ft55_new_words_are_said_in_three_tenses_three_times_each() {
+    let mut t = launch("tenses");
+    t.nav("📚  새 단어");
+    // Claude writes the day's tense sentences once (kept in tenses.json).
+    t.wait("tense sentences", |a| a.store.tenses.contains_key("deadline"));
+    let p = t.prompts().into_iter().find(|p| p.starts_with("Tense frames:")).unwrap();
+    assert!(p.contains("- deadline (마감일)") && p.contains("~할까 생각 중이에요") && p.contains("~할까 생각했어요") && p.contains("~할까 생각할 거예요"));
+    assert!(std::fs::read_to_string(t.dir.join("tenses.json")).unwrap().contains("I was thinking of checking the deadline."));
+    t.click("deadline");
+    assert!(t.has("1 / 4"));
+    for _ in 0..3 {
+        t.say("deadline", 0.8);
+    }
+    t.click("다음 ▶");
+    for (i, (en, label)) in [("I'm thinking of checking the deadline.", "🕐 현재 · ~할까 생각 중이에요"), ("I was thinking of checking the deadline.", "🕐 과거 · ~할까 생각했어요"), ("I'll think about checking the deadline.", "🕐 미래 · ~할까 생각할 거예요")].iter().enumerate() {
+        assert!(t.has(&format!("{} / 4", i + 2)) && t.has(label) && t.app().queue.as_ref().unwrap().drill.target == *en, "{label}");
+        t.say(en, 2.0);
+        t.say(en, 2.0);
+        assert!(t.query_next().is_none(), "3 times each");
+        t.say(en, 2.0);
+        t.click("다음 ▶");
+    }
+    assert!(t.has("잘했어요!"));
+    // Without Claude: a frame fitted to the part of speech.
+    let t2 = launch_at(temp_dir("tenses-offline"), false, |s| s.profile.placement_done = true);
+    let w = LessonWord { word: "explain".into(), meaning_ko: "설명하다".into(), ..Default::default() };
+    assert_eq!(t2.app().tense_for(&w).past, "I was thinking of explaining.");
 }

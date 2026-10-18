@@ -401,6 +401,28 @@ impl Claude {
         self.call(user, schema, "low")
     }
 
+    /// 시제 3문장 for new words: one idea per word in three tenses with fixed frames.
+    pub fn tense_sentences(&self, words: &[(String, String)], level: f32) -> Result<Vec<crate::tenses::TenseSet>> {
+        let schema = obj(json!({"items": arr(obj(json!({
+            "word": s(), "present": s(), "present_ko": s(), "past": s(), "past_ko": s(), "future": s(), "future_ko": s(),
+        })))}));
+        let list: String = words.iter().map(|(w, ko)| format!("- {w} ({ko})\n")).collect();
+        let user = format!(
+            "Tense frames: for each English word below write three short, natural spoken sentences that use the word, all with the same idea, \
+             for a learner at level {level:.1}/10 (CEFR {cefr}), 5-10 words each:\n\
+             present = \"I'm thinking of …ing …\" (Korean: ~할까 생각 중이에요), past = \"I was thinking of …ing …\" (Korean: ~할까 생각했어요), \
+             future = \"I'll think about …ing …\" (Korean: ~할까 생각할 거예요). The word itself must appear in each sentence (any form). \
+             *_ko: natural Korean translations ending with those Korean frames.\n\nWords:\n{list}",
+            cefr = cefr_of(level)
+        );
+        #[derive(Deserialize)]
+        struct Out {
+            items: Vec<crate::tenses::TenseSet>,
+        }
+        let out: Out = self.call(user, schema, "low")?;
+        Ok(out.items)
+    }
+
     /// 오늘의 문장 만들기: an original sentence with one of the day's words, on the week's theme,
     /// practising the week's grammar.
     pub fn check_sentence_mission(&self, word: &str, meaning_ko: &str, theme: &str, grammar: &str, transcript: &str, level: f32) -> Result<WordUseCheck> {

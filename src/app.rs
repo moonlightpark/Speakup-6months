@@ -86,6 +86,10 @@ pub struct App {
     pub lesson_error: Option<String>,
     pub queue: Option<DrillQueue>,
     pub homework: HomeworkState,
+    /// 시제 3문장 being written by Claude, and the day it was last asked for (not retried
+    /// the same day after a failure).
+    pub tense_job: Pending<Vec<crate::tenses::TenseSet>>,
+    pub tense_tried: Option<chrono::NaiveDate>,
     /// 오늘의 문장 만들기 in progress: (word, mission).
     pub word_mission: Option<(String, crate::screens::mission::Mission)>,
     pub selfx: SelfExprState,
@@ -190,6 +194,8 @@ impl App {
             queue: None,
             homework: HomeworkState::default(),
             word_mission: None,
+            tense_job: Pending::default(),
+            tense_tried: None,
             selfx: SelfExprState::default(),
             roleplay: RoleplayState::default(),
             listening: ListeningState::default(),
@@ -447,6 +453,41 @@ impl App {
         self.store.save_profile();
         self.store.record_word_day(today(), &ws);
         ws
+    }
+
+    /// Asks Claude once a day for 시제 3문장 of today's words that have none yet, and keeps
+    /// what comes back.
+    pub fn ensure_tenses(&mut self) {
+        if let Some(r) = self.tense_job.poll() {
+            match r {
+                Ok(sets) => {
+                    crate::applog!("words: 시제 3문장 {}개 받음", sets.len());
+                    self.store.put_tenses(&sets);
+                }
+                Err(e) => crate::applog!("words: 시제 3문장 생성 실패 · {e:#}"),
+            }
+        }
+        if self.tense_job.running() || self.tense_tried == Some(today()) || self.talk_offline() {
+            return;
+        }
+        let Some(c) = self.claude() else { return };
+        let ws = self.word_set();
+        let missing: Vec<(String, String)> = ws.words.iter().filter(|w| !self.store.tenses.contains_key(&w.word.to_lowercase())).map(|w| (w.word.clone(), w.meaning_ko.clone())).take(40).collect();
+        self.tense_tried = Some(today());
+        if missing.is_empty() {
+            return;
+        }
+        let level = self.store.profile.level;
+        self.tense_job.spawn(move || c.tense_sentences(&missing, level));
+    }
+
+    /// A word's 시제 3문장: Claude's, else a frame for its part of speech.
+    pub fn tense_for(&self, w: &LessonWord) -> crate::tenses::TenseSet {
+        if let Some(t) = self.store.tenses.get(&w.word.to_lowercase()) {
+            return t.clone();
+        }
+        let pos = crate::dictionary::lookup(&w.word).map(|(b, _)| b.pos_ko.clone()).unwrap_or_default();
+        crate::tenses::template(&w.word, &pos, &w.meaning_ko)
     }
 
     /// Today's 5 focus words for 오늘의 문장 만들기 and for using while speaking: picked once a

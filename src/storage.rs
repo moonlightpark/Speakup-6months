@@ -31,6 +31,8 @@ pub struct Store {
     pub corrections: Vec<CorrectionRecord>,
     /// 직독직해 glosses by sentence text.
     pub gloss: std::collections::HashMap<String, Vec<Chunk>>,
+    /// 시제 3문장 for new words, by lower-case word (tenses.json, written by Claude).
+    pub tenses: std::collections::HashMap<String, crate::tenses::TenseSet>,
     pub history: Vec<DayRecord>,
     /// Reading library progress by book id.
     pub library: std::collections::HashMap<String, BookProgress>,
@@ -90,6 +92,7 @@ impl Store {
             mistakes: load_json(&dir.join("mistakes.json")),
             corrections: load_json(&dir.join("corrections.json")),
             gloss: load_json(&dir.join("gloss.json")),
+            tenses: load_json(&dir.join("tenses.json")),
             history: load_json(&dir.join("history.json")),
             library: load_json(&dir.join("library.json")),
             writings: load_json(&dir.join("writing.json")),
@@ -153,6 +156,13 @@ impl Store {
 
     /// Stores a gloss if its chunks really spell out the sentence (otherwise word colouring
     /// would misalign).
+    pub fn put_tenses(&mut self, sets: &[crate::tenses::TenseSet]) {
+        for t in sets.iter().filter(|t| t.is_complete()) {
+            self.tenses.insert(t.word.to_lowercase(), t.clone());
+        }
+        log_err(save_json(&self.dir.join("tenses.json"), &self.tenses));
+    }
+
     pub fn put_gloss(&mut self, text: &str, chunks: &[Chunk]) {
         if chunks_match(text, chunks) {
             self.gloss.insert(text.trim().to_string(), chunks.to_vec());
