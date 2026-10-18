@@ -54,7 +54,7 @@ impl Default for Settings {
             reps_new: 3,
             reps_review: 2,
             reps_weak: 5,
-            new_words_per_day: 0, // 0 = follow the curriculum phase
+            new_words_per_day: 0, // 0 = 35 a day (wordbank::NEW_PER_DAY)
             ytdlp_path: String::new(),
             // 60 min in the app (+30 min of podcasts/YouTube) ≈ 200-300 h in 6 months.
             daily_goal_minutes: 60,
@@ -116,6 +116,12 @@ pub struct DayProgress {
     /// chunk/expression lists) so it stays the same after a restart.
     #[serde(default)]
     pub word_set: Option<WordSet>,
+    /// Learned words already reviewed today in the 새 단어 menu (not offered again after a restart).
+    #[serde(default)]
+    pub words_reviewed: Vec<String>,
+    /// Today's idiom sentences for 문장 읽기 (numbers in `assets/idioms1300.json`).
+    #[serde(default)]
+    pub idioms: Option<Vec<u32>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]

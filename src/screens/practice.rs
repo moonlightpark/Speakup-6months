@@ -143,6 +143,11 @@ impl App {
                 q.results.push((q.drill.target.clone(), first));
                 let spec_item = q.specs[q.idx].item_id.clone();
                 let new_item = q.specs[q.idx].new_item.take();
+                if q.step == "words_review" {
+                    if let Some(id) = &spec_item {
+                        self.store.profile.today.words_reviewed.push(id.clone());
+                    }
+                }
                 q.idx += 1;
                 if let Some(s) = q.specs.get(q.idx) {
                     q.drill = make_drill(s);
@@ -310,29 +315,104 @@ impl App {
             // Then each chunk once more from the Korean alone.
             specs.extend(lesson.phrases.iter().filter(|w| !passed(ItemKind::Sentence, &w.word)).map(|w| recall_spec(&w.word, &w.meaning_ko)));
             self.queue = Some(DrillQueue::new("words", "vocab", "새 단어", specs));
+            return;
+        }
+        // Then up to 50 learned words, said once each (Order.md: 하루 새 단어 35 + 배운 단어 50).
+        ui.add_space(14.0);
+        let ids = self.word_review_ids();
+        let done = self.store.profile.today.words_reviewed.len();
+        let goal = crate::wordbank::REVIEW_PER_DAY;
+        let mut start_review = false;
+        card(ui, |ui| {
+            ui.label(RichText::new(format!("🔁 배운 단어 복습  {}/{goal}", done.min(goal))).size(18.0).strong());
+            if ids.is_empty() {
+                let msg = if done >= goal { "오늘 복습을 다 했어요!" } else { "복습할 배운 단어가 아직 없어요. 새 단어를 배우면 내일부터 쌓입니다." };
+                ui.label(RichText::new(msg).color(MUTED));
+            } else {
+                ui.label(RichText::new("이미 배운 단어를 한 번씩 소리 내어 말해요. 첫 시도 점수로 다음 복습일이 정해집니다.").color(MUTED));
+                ui.add_space(6.0);
+                start_review = ui.add(egui::Button::new(RichText::new(format!("▶ 배운 단어 {}개 복습", ids.len())).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
+            }
+        });
+        if start_review {
+            let specs: Vec<Spec> = ids
+                .iter()
+                .filter_map(|id| self.store.items.iter().find(|i| &i.id == id))
+                .map(|i| Spec {
+                    item_id: Some(i.id.clone()),
+                    new_item: None,
+                    target: i.text.clone(),
+                    ko: i.meaning_ko.clone(),
+                    tip: "🔁 배운 단어 복습".into(),
+                    reps: 1,
+                    recall: false,
+                    is_word: true,
+                    chunks: Vec::new(),
+                })
+                .collect();
+            self.queue = Some(DrillQueue::new("words_review", "vocab", "배운 단어 복습", specs));
         }
     }
 
     pub fn reading_ui(&mut self, ui: &mut Ui) {
-        if self.run_queue_ui(ui) || !self.lesson_ready_ui(ui) {
+        if self.run_queue_ui(ui) {
             return;
         }
-        let lesson = self.lesson.clone().unwrap_or_default();
-        let rows: Vec<(String, String)> = lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone())).collect();
+        // 30 idiom sentences from the built-in list come first (no waiting); the day's easy
+        // longer sentences follow once the lesson is ready.
+        self.ensure_lesson();
+        let idioms = self.idiom_set();
+        let lesson = self.lesson.clone().filter(|l| l.date == Some(today())).unwrap_or_default();
+        let is_known = |t: &str| {
+            let id = srs::make_id(ItemKind::Sentence, t);
+            self.store.items.iter().any(|i| i.id == id)
+        };
+        let known_texts: Vec<String> = idioms.iter().map(|i| i.en.clone()).chain(lesson.sentences.iter().map(|s| s.text.clone())).filter(|t| is_known(t)).collect();
+        let known = |t: &str| known_texts.iter().any(|k| k == t);
+        let rows: Vec<(String, String)> = idioms
+            .iter()
+            .map(|i| (format!("💬 {}", i.en), i.ko.clone()))
+            .chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone())))
+            .collect();
         let reps = self.store.settings.reps_new;
         if self.intro_card(
             ui,
             "📖 문장 소리 내어 읽기 (쉐도잉)",
-            &format!("원어민 음성을 듣고 리듬·연음까지 따라 하세요. 각 문장을 {reps}번 통과해야 다음으로 넘어갑니다."),
+            &format!(
+                "💬 오늘의 숙어 문장 {}개를 한 번씩 소리 내어 읽고, 이어서 읽기 쉬운 긴 문장을 원어민처럼 따라 읽어요(각 {reps}번 통과).",
+                idioms.len()
+            ),
             &rows,
             "reading",
         ) {
-            let mut specs: Vec<Spec> = lesson
-                .sentences
+            let mut specs: Vec<Spec> = idioms
                 .iter()
-                .map(|s| Spec {
+                .map(|i| Spec {
                     item_id: None,
-                    new_item: Some(StudyItem {
+                    // Saved once; afterwards spaced repetition brings it back.
+                    new_item: (!known(&i.en)).then(|| StudyItem {
+                        kind: ItemKind::Sentence,
+                        text: i.en.clone(),
+                        meaning_ko: i.ko.clone(),
+                        example: i.also.first().cloned().unwrap_or_default(),
+                        category: "idiom".into(),
+                        ..Default::default()
+                    }),
+                    target: i.en.clone(),
+                    ko: i.ko.clone(),
+                    tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 오늘의 숙어 문장".into()),
+                    reps: 1,
+                    recall: false,
+                    is_word: false,
+                    chunks: Vec::new(),
+                })
+                .collect();
+            for s in &lesson.sentences {
+                // Passed before (e.g. before a restart): once, without counting as a new review.
+                let passed = known(&s.text);
+                specs.push(Spec {
+                    item_id: None,
+                    new_item: (!passed).then(|| StudyItem {
                         kind: ItemKind::Sentence,
                         text: s.text.clone(),
                         meaning_ko: s.ko.clone(),
@@ -342,15 +422,19 @@ impl App {
                     target: s.text.clone(),
                     ko: s.ko.clone(),
                     tip: s.tip_ko.clone(),
-                    reps,
+                    reps: if passed { 1 } else { reps },
                     recall: false,
                     is_word: false,
                     chunks: self.store.gloss_for(&s.text),
-                })
-                .collect();
+                });
+            }
             // Finally say each sentence again from the Korean only (기억해서 말하기).
-            specs.extend(lesson.sentences.iter().filter(|s| !s.ko.is_empty()).map(|s| recall_spec(&s.text, &s.ko)));
+            specs.extend(lesson.sentences.iter().filter(|s| !s.ko.is_empty() && !known(&s.text)).map(|s| recall_spec(&s.text, &s.ko)));
             self.queue = Some(DrillQueue::new("reading", "reading", "문장 읽기", specs));
+        }
+        if lesson.sentences.is_empty() {
+            ui.add_space(8.0);
+            self.lesson_ready_ui(ui);
         }
     }
 

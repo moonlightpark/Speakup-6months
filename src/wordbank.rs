@@ -45,6 +45,11 @@ pub fn all() -> &'static [BankWord] {
     })
 }
 
+/// New words a day: 35 × 182 days ≈ the whole 6,000-word list in six months.
+pub const NEW_PER_DAY: usize = 35;
+/// Learned words reviewed a day in the 새 단어 menu.
+pub const REVIEW_PER_DAY: usize = 50;
+
 /// First rank worth teaching at this level: the words well below the learner's expected
 /// vocabulary are assumed known (beginners start at rank 1).
 pub fn start_rank(level: f32) -> u32 {

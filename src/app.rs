@@ -353,8 +353,7 @@ impl App {
             return ws.clone();
         }
         let p = &self.store.profile;
-        let phase = curriculum::phase_of_week(curriculum::week_number(p));
-        let n = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day } else { phase.new_words } as usize;
+        let n = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day as usize } else { crate::wordbank::NEW_PER_DAY };
         let items = &self.store.items;
         let knows = |t: &str| items.iter().any(|i| i.text.eq_ignore_ascii_case(t));
         let lw = |e: crate::expressions::Expr| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() };
@@ -367,6 +366,34 @@ impl App {
         self.store.profile.today.word_set = Some(ws.clone());
         self.store.save_profile();
         ws
+    }
+
+    /// Learned words for today's review in the 새 단어 menu (up to 50): due ones first, then weak
+    /// ones, then the ones due soonest. Today's new words and words already reviewed today are left out.
+    pub fn word_review_ids(&self) -> Vec<String> {
+        let today_words: Vec<String> = self.store.profile.today.word_set.iter().flat_map(|w| w.words.iter().map(|x| x.word.to_lowercase())).collect();
+        let done = &self.store.profile.today.words_reviewed;
+        let t = today();
+        let mut v: Vec<&StudyItem> = self
+            .store
+            .items
+            .iter()
+            .filter(|i| i.is_vocab_word() && !today_words.contains(&i.text.to_lowercase()) && !done.contains(&i.id) && i.added < t)
+            .collect();
+        v.sort_by_key(|i| (i.due > t, !i.weak, i.due));
+        v.into_iter().take(crate::wordbank::REVIEW_PER_DAY.saturating_sub(done.len())).map(|i| i.id.clone()).collect()
+    }
+
+    /// Today's idiom sentences for 문장 읽기: 30 from the built-in 1,300, picked once a day.
+    pub fn idiom_set(&mut self) -> Vec<&'static crate::idioms::Idiom> {
+        if self.store.profile.today.idioms.is_none() {
+            let items = &self.store.items;
+            let picked = crate::idioms::pick(crate::idioms::PER_DAY, |t| items.iter().any(|i| i.text.eq_ignore_ascii_case(t)));
+            crate::applog!("reading: 오늘의 숙어 문장 {}개 · {:?}…", picked.len(), picked.first());
+            self.store.profile.today.idioms = Some(picked);
+            self.store.save_profile();
+        }
+        self.store.profile.today.idioms.iter().flatten().filter_map(|n| crate::idioms::by_no(*n)).collect()
     }
 
     /// Makes today's lesson (sentences, writing, prefetch) use the same words as the 새 단어 menu.
@@ -1161,7 +1188,7 @@ impl App {
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_new, 1..=6).text("새 항목 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_review, 1..=5).text("복습 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10).text("약점 항목 반복 횟수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=20).text("하루 새 단어 (0 = 단계별 자동)")).changed();
+            changed |= ui.add(egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=50).text("하루 새 단어 (0 = 35개)")).changed();
             changed |= ui.checkbox(&mut self.store.settings.ko_role_colors, "한글 지문에 문장 성분 색상 표시 (주어·동사·목적어…)").changed();
             ui.label(RichText::new("눈이 피로하면 끄세요. 직독직해 색상은 📖 직독직해 버튼으로 따로 켜고 끕니다.").color(MUTED).small());
             ui.horizontal(|ui| {

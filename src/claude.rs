@@ -173,7 +173,7 @@ impl Claude {
              example: a short everyday sentence that contains the chunk exactly.\n\
              - words: exactly {nw} new high-frequency words {frequency_band}, for the theme, each with a short natural example sentence. \
              Write them in lower case, and never use names of places, people or brands as words.\n\
-             - sentences: exactly {ns} natural spoken sentences for reading aloud / shadowing, at or slightly above the learner's level; tip_ko is one pronunciation or linking tip. {chunk_rule}\n\
+             - sentences: exactly {ns} easy-to-read, longer natural sentences (about 12-20 words, at or slightly below the learner's level) for reading aloud / shadowing right after the day's short idiom sentences; tip_ko is one pronunciation or linking tip. {chunk_rule}\n\
              - self_expression: one open question on the theme that makes the learner talk about their own life for 30-60 seconds; 4 useful_phrases; a model_answer of 3-5 sentences at the learner's level.\n\
              - business: a realistic role-play for the business focus; ai_role is who you will play; opening_line is your first line; 4 key_phrases the learner can use.\n\
              - expressions: exactly 1 item the learner hasn't seen: {expression_kind}. \

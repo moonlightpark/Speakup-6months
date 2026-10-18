@@ -220,8 +220,14 @@ fn launch(name: &str) -> T {
         s.profile.placement_done = true;
         s.profile.start_date = today();
         s.record_level(3.0, "test setup");
-        s.profile.today = DayProgress { date: Some(today()), word_set: Some(mock_word_set()), ..Default::default() };
+        s.profile.today = no_idioms_today(mock_word_set());
     })
+}
+
+/// Today's progress with the mock word set and no idiom sentences (normally 30 from the built-in list),
+/// so 문장 읽기 starts with the mock lesson's sentences.
+fn no_idioms_today(words: WordSet) -> DayProgress {
+    DayProgress { date: Some(today()), word_set: Some(words), idioms: Some(Vec::new()), ..Default::default() }
 }
 
 /// Today's 새 단어 set fixed to the mock lesson's two words (normally picked from the word bank).
@@ -734,7 +740,7 @@ fn ft16_offline_mode_uses_builtin_lesson() {
     let l = t.app().lesson.clone().expect("built-in lesson without API key");
     assert_eq!(l.source, "built-in");
     // Words come from the built-in 6,000-word database, picked for the learner's level.
-    assert_eq!(l.words.len(), 8, "phase 1 = 8 words");
+    assert_eq!(l.words.len(), 35, "35 new words a day");
     let first = crate::wordbank::pick(t.app().store.profile.level, 1, |_| false)[0];
     assert_eq!(l.words[0].word, first.word);
     assert!(t.has(&first.word) && t.has(&first.meaning_ko));
@@ -1168,6 +1174,7 @@ fn ft31_korean_support_fades_over_the_months() {
     let mut t = launch_at(temp_dir("stage1"), true, |s| {
         s.profile.placement_done = true;
         s.profile.start_date = today() - chrono::Duration::days(99);
+        s.profile.today = no_idioms_today(WordSet::default());
     });
     t.steps(2);
     assert!(!t.app().store.settings.ko_role_colors && t.app().store.settings.ko_colors_faded);
@@ -1182,6 +1189,7 @@ fn ft31_korean_support_fades_over_the_months() {
     let mut t = launch_at(temp_dir("stage2"), true, |s| {
         s.profile.placement_done = true;
         s.profile.start_date = today() - chrono::Duration::days(149);
+        s.profile.today = no_idioms_today(WordSet::default());
     });
     t.nav("📖  문장 읽기");
     t.wait("lesson", |a| a.lesson.is_some());
@@ -1257,4 +1265,47 @@ fn ft34_passed_words_are_said_once_after_a_restart() {
         t.say("schedule", 0.8);
     }
     assert!(t.query_next().is_none(), "new words still need 3 passes");
+}
+
+#[test]
+fn ft35_reading_starts_with_30_idioms_and_words_review_50_learned() {
+    let mut t = launch_at(temp_dir("idioms"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        // 60 words learned on earlier days, all due.
+        for n in 0..60 {
+            let mut i = StudyItem { kind: ItemKind::Word, text: format!("learned{n}"), meaning_ko: format!("뜻{n}"), category: "vocab".into(), ..Default::default() };
+            i.id = crate::srs::make_id(ItemKind::Word, &i.text);
+            i.added = today() - chrono::Duration::days(3);
+            i.due = today();
+            s.items.push(i);
+        }
+    });
+    // 문장 읽기: today's 30 idiom sentences from the built-in 1,300, before the lesson's sentences.
+    t.nav("📖  문장 읽기");
+    let picked = t.app().store.profile.today.idioms.clone().expect("idioms picked");
+    assert_eq!(picked, (1..=30).collect::<Vec<u32>>());
+    assert!(t.has("💬 It's my first time") && t.has("이번이 처음이야"));
+    t.wait("lesson", |a| a.lesson.is_some());
+    t.steps(2);
+    assert!(t.has("I am a boy."), "the longer sentences follow the idioms");
+    t.click("▶ 시작하기");
+    assert!(t.has("It's my first time"));
+    t.say("It's my first time", 1.0);
+    t.click("다음 ▶");
+    let saved = t.app().store.items.iter().find(|i| i.text == "It's my first time").cloned().expect("idiom saved for review");
+    assert_eq!(saved.category, "idiom");
+    assert!(t.has("What's done is done"), "next idiom after one pass");
+    // 새 단어: 35 new words, then 50 learned words to review.
+    t.click("그만하기");
+    t.nav("📚  새 단어");
+    assert_eq!(t.app().store.profile.today.word_set.as_ref().unwrap().words.len(), 35);
+    assert_eq!(t.app().word_review_ids().len(), 50);
+    assert!(t.has("🔁 배운 단어 복습  0/50"));
+    t.click("▶ 배운 단어 50개 복습");
+    let first = t.app().word_review_ids()[0].clone();
+    t.say("learned0", 0.8);
+    t.click("다음 ▶");
+    assert_eq!(t.app().store.profile.today.words_reviewed, vec![first]);
+    assert_eq!(t.app().word_review_ids().len(), 49, "reviewed words are not offered again today");
 }
