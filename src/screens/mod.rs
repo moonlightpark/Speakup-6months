@@ -2,6 +2,7 @@ pub mod audio_check;
 pub mod coach;
 pub mod homework;
 pub mod listening;
+pub mod mission;
 pub mod practice;
 pub mod progress;
 pub mod speaking;

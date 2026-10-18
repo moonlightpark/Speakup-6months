@@ -329,7 +329,7 @@ impl App {
     }
 
     pub fn words_ui(&mut self, ui: &mut Ui) {
-        if self.run_queue_ui(ui) {
+        if self.run_queue_ui(ui) || self.word_mission_ui(ui) {
             return;
         }
         // Built-in word database + chunk list: no waiting for Claude. The rest of today's
@@ -402,6 +402,7 @@ impl App {
             self.queue = Some(DrillQueue::new("words", "vocab", "새 단어", specs));
             return;
         }
+        self.sentence_making_card(ui);
         self.past_unfinished_ui(ui, reps);
         let days: Vec<(chrono::NaiveDate, Vec<DayRow>)> = self
             .word_days_list(true)
@@ -458,6 +459,100 @@ impl App {
                 .collect();
             self.queue = Some(DrillQueue::new("words_review", "vocab", "배운 단어 복습", specs));
         }
+    }
+
+    /// The week's curriculum line, theme and grammar for 오늘의 문장 만들기.
+    fn week_focus(&self) -> (u32, &'static crate::curriculum::Week) {
+        let n = crate::curriculum::week_number(&self.store.profile);
+        (n, crate::curriculum::week(n))
+    }
+
+    /// ✏ 오늘의 문장 만들기 card: the day's 5 focus words to use in sentences of my own, on the
+    /// week's theme and grammar.
+    fn sentence_making_card(&mut self, ui: &mut Ui) {
+        let words = self.focus_words();
+        if words.is_empty() {
+            return;
+        }
+        let (n, wk) = self.week_focus();
+        let made = self.store.profile.today.sentences_made.clone();
+        let done = words.iter().filter(|w| made.contains(&w.word)).count();
+        let mut start = false;
+        ui.add_space(14.0);
+        card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(format!("✏ 오늘의 문장 만들기  {done}/{}", words.len())).size(18.0).strong());
+                chip(ui, &format!("{n}주차 · {}", wk.theme_ko), crate::art::VIOLET);
+                chip(ui, &format!("문법: {}", wk.grammar), ACCENT);
+            });
+            ui.label(RichText::new(format!("오늘 단어를 넣어 '{}' 주제로 내 문장을 만들어 말해요. 이번 주 문법({})을 써 보면 더 좋아요.", wk.theme_ko, wk.grammar)).color(muted()));
+            ui.horizontal_wrapped(|ui| {
+                for w in &words {
+                    let on = made.contains(&w.word);
+                    chip(ui, &format!("{} {}", if on { "✓" } else { "✏" }, w.word), if on { GOOD } else { warn() });
+                }
+            });
+            ui.add_space(4.0);
+            let label = if done >= words.len() { "↻ 문장 더 만들기" } else { "▶ 문장 만들기 시작" };
+            start = ui.add(egui::Button::new(RichText::new(label).size(17.0)).fill(if done >= words.len() { subtle_fill() } else { ACCENT }).min_size(crate::widgets::BIG_BUTTON)).clicked();
+            if done >= words.len() {
+                ui.label(RichText::new("✅ 오늘 단어로 문장 5개를 모두 만들었어요!").color(GOOD));
+            }
+        });
+        if start {
+            let next = words.iter().find(|w| !made.contains(&w.word)).or(words.first()).map(|w| w.word.clone());
+            if let Some(w) = next {
+                crate::applog!("words: 문장 만들기 시작 · {w}");
+                self.word_mission = Some((w, Default::default()));
+            }
+        }
+    }
+
+    /// Runs 오늘의 문장 만들기 when it is open. Returns true while it is shown.
+    fn word_mission_ui(&mut self, ui: &mut Ui) -> bool {
+        let Some((word, mut m)) = self.word_mission.take() else { return false };
+        let words = self.focus_words();
+        let Some(w) = words.iter().find(|x| x.word == word).cloned() else { return false };
+        let (n, wk) = self.week_focus();
+        let made = &self.store.profile.today.sentences_made;
+        let pos = words.iter().position(|x| x.word == word).unwrap_or(0);
+        ui.label(RichText::new(format!("단어 {}/{} · 완료 {}", pos + 1, words.len(), words.iter().filter(|x| made.contains(&x.word)).count())).color(muted()));
+        let spec = crate::screens::mission::MissionSpec {
+            word: w.word.clone(),
+            meaning_ko: w.meaning_ko.clone(),
+            week: Some((format!("{n}주차 · {} ({}) · 문법: {}", wk.theme_ko, wk.theme, wk.grammar), wk.theme.to_string(), wk.grammar.to_string())),
+            starters: crate::curriculum::STARTERS[(n.clamp(1, 26) - 1) as usize].iter().map(|s| s.to_string()).collect(),
+            already_passed: false,
+        };
+        let ev = self.mission_ui(ui, &mut m, &spec);
+        let mut close = ui.button("◀ 새 단어 목록").clicked();
+        match ev {
+            Some(crate::screens::mission::MissionEvent::Checked(res)) if res.ok => {
+                if !self.store.profile.today.sentences_made.contains(&w.word) {
+                    self.store.profile.today.sentences_made.push(w.word.clone());
+                    self.store.record_word_practice(&w.word, true);
+                    self.store.save_profile();
+                }
+            }
+            Some(crate::screens::mission::MissionEvent::Next) => {
+                let made = &self.store.profile.today.sentences_made;
+                match words.iter().skip(pos + 1).chain(words.iter()).find(|x| !made.contains(&x.word)) {
+                    Some(x) => {
+                        self.word_mission = Some((x.word.clone(), Default::default()));
+                        return true;
+                    }
+                    None => {
+                        self.toast("🎉 오늘의 문장 만들기 완료! 자기 표현·회화에서도 오늘 단어를 써 보세요");
+                        close = true;
+                    }
+                }
+            }
+            _ => {}
+        }
+        if !close {
+            self.word_mission = Some((word, m));
+        }
+        true
     }
 
     /// Earlier days' 새 단어 entries not finished yet (not saved to the deck), by day, oldest first.

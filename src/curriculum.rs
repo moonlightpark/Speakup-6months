@@ -91,6 +91,37 @@ pub fn week_number(p: &Profile) -> u32 {
     (((day_number(p) - 1) / 7) as u32 + 1).min(TOTAL_WEEKS)
 }
 
+/// Sentence starters for each week's theme and grammar (same order as `WEEKS`), offered as
+/// hints when the learner makes their own sentences with the day's words.
+pub const STARTERS: [[&str; 3]; 26] = [
+    ["I'm …", "I work at …", "My … is …"],
+    ["I usually … every morning.", "I always … after work.", "On weekends, I sometimes …"],
+    ["I have a … who …", "My team's … is …", "My best friend has …"],
+    ["Could I have …, please?", "Can we … for lunch?", "I'd like to order …"],
+    ["How much is …?", "I need some …", "How many … do you have?"],
+    ["The … is next to …", "Go straight and turn …", "Take the … to …"],
+    ["I love …ing on weekends.", "I like …ing because …", "In my free time, I enjoy …"],
+    ["Last year, I went to …", "On my business trip, I …", "I stayed at … and …"],
+    ["I feel … today because …", "You should …", "I can't come in today because …"],
+    ["Tomorrow, I'm going to …", "I think it will …", "Let's meet on … at …"],
+    ["I have … for … years.", "Have you ever …?", "I've never … before."],
+    ["I think … is better than …", "In my opinion, …", "I agree, but …"],
+    ["I'm responsible for …", "I'm in charge of …", "My main role is to …"],
+    ["How about … ?", "Why don't we …?", "Let's start with …"],
+    ["Could you … , please?", "Sorry, could you repeat …?", "Thanks for … — talk soon."],
+    ["While I was …, …", "First, … Then, … Finally, …", "The project ended with …"],
+    ["If we …, we will …", "The problem is that …", "One solution is to …"],
+    ["As you can see, …", "Let me move on to …", "This slide shows …"],
+    ["Would you mind …ing …?", "Just a quick reminder that …", "I'm following up on …"],
+    ["If you … , we would …", "Could you lower … if we …?", "Our best offer is …"],
+    ["I have worked as … since …", "In my last job, I …", "My biggest strength is …"],
+    ["People who … often …", "In my culture, …", "The company, which …, …"],
+    ["It was reported that …", "… is expected to …", "Sales were … by …"],
+    ["In the future, we might …", "This app will …", "Our idea may …"],
+    ["However, …", "Although …, I believe …", "The main reason is …"],
+    ["To sum up, …", "What I learned is …", "Next time, I'll …"],
+];
+
 pub fn week(n: u32) -> &'static Week {
     &WEEKS[(n.clamp(1, TOTAL_WEEKS) - 1) as usize]
 }

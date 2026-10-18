@@ -393,6 +393,21 @@ impl Claude {
         self.call(user, schema, "low")
     }
 
+    /// 오늘의 문장 만들기: an original sentence with one of the day's words, on the week's theme,
+    /// practising the week's grammar.
+    pub fn check_sentence_mission(&self, word: &str, meaning_ko: &str, theme: &str, grammar: &str, transcript: &str, level: f32) -> Result<WordUseCheck> {
+        let schema = obj(json!({"ok": json!({"type": "boolean"}), "feedback_ko": s(), "better": s()}));
+        let user = format!(
+            "Sentence mission: the learner (level {level:.1}/10, CEFR {cefr}) had to make an original spoken sentence using \"{word}\" ({meaning_ko}), \
+             about this week's theme \"{theme}\", ideally practising this week's grammar ({grammar}).\nThey said: \"{transcript}\"\n\n\
+             ok=true if they used the word (or a form of it) correctly in a meaningful sentence; small grammar slips are fine and the theme is a suggestion. \
+             feedback_ko: one or two short, encouraging sentences in Korean; mention the week's grammar if they used it or could have. \
+             better: a natural version of their sentence (keep their idea), using the week's grammar where it fits.",
+            cefr = cefr_of(level)
+        );
+        self.call(user, schema, "low")
+    }
+
     /// Corrects a short piece of writing (diary / answer to a prompt).
     pub fn writing_feedback(&self, prompt: &str, text: &str, level: f32) -> Result<WritingFeedback> {
         let schema = obj(json!({

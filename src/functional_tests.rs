@@ -117,6 +117,8 @@ fn respond(body: &Value) -> Value {
         ko_roles_json(&prompt)
     } else if prompt.starts_with("Assess the learner") {
         json!({"level": 4.6, "summary_ko": "중급 수준입니다.", "strengths_ko": ["발음"], "weaknesses_ko": ["시제"], "focus_next_ko": "과거형"})
+    } else if prompt.starts_with("Sentence mission:") {
+        json!({"ok": true, "feedback_ko": "좋아요! be동사를 잘 썼어요", "better": "My deadline is on Friday."})
     } else if prompt.starts_with("Homework:") {
         let ok = prompt.to_lowercase().contains("they said: \"the deadline");
         json!({"ok": ok, "feedback_ko": if ok { "정확해요" } else { "단어를 넣어 주세요" }, "better": "The deadline is tomorrow."})
@@ -1373,9 +1375,9 @@ fn ft36_word_list_pages_of_25_coloured_by_practice() {
     for text in ["기억 완료 1/40", "1 / 2 쪽 (40개 중 1~25)", "미완료", "4/10회", "✓ 완료", "word24"] {
         assert!(t.has(text), "word list shows {text:?}");
     }
-    assert!(!t.has("word25"), "25 per page");
+    assert!(!t.has_exact("word25"), "25 per page");
     t.click("다음 ▶");
-    assert!(t.has("word39") && !t.has("word00") && t.has("2 / 2 쪽 (40개 중 26~40)"));
+    assert!(t.has("word39") && !t.has_exact("word00") && t.has("2 / 2 쪽 (40개 중 26~40)"));
     // Colours: red → orange/green gradient → light green.
     use crate::screens::practice::word_color;
     assert_eq!(word_color(0), egui::Color32::from_rgb(240, 80, 80));
@@ -1785,4 +1787,34 @@ fn ft51_level_screen_explains_the_seven_levels() {
     assert!(t.has("B1+ 목표: 낯선 주제도") && t.has("기본 B1, 도전 B1+"));
     t.nav("🏠  홈");
     assert!(t.has("🎯 6개월 목표: B1+ — 낯선 주제도"));
+}
+
+#[test]
+fn ft52_sentence_making_and_using_the_days_words_follow_the_curriculum() {
+    let mut t = launch("mission");
+    t.nav("📚  새 단어");
+    // The week's theme and grammar, with today's focus words.
+    assert!(t.has("✏ 오늘의 문장 만들기  0/2") && t.has("1주차 · 자기소개") && t.has("문법: be verbs, present simple"));
+    t.click("▶ 문장 만들기 시작");
+    assert!(t.has("( deadline )") && t.has("1주차 · 자기소개 (Introducing yourself) · 문법: be verbs, present simple"));
+    t.click("💡 막히면 힌트 보기");
+    assert!(t.has_exact("I'm …") && t.has_exact("I work at …"), "the week's sentence starters");
+    // Just recording something is caught; a real sentence goes to Claude with the week's focus.
+    t.say("I have no idea", 1.0);
+    assert!(t.has("'deadline'이(가) 빠졌어요"));
+    t.say("My deadline is on Friday", 2.0);
+    t.wait("sentence check", |a| a.store.profile.today.sentences_made.contains(&"deadline".to_string()));
+    let p = t.prompts().into_iter().find(|p| p.starts_with("Sentence mission:")).unwrap();
+    assert!(p.contains("\"deadline\"") && p.contains("Introducing yourself") && p.contains("be verbs, present simple"));
+    assert!(t.has("좋아요! be동사를 잘 썼어요") && t.has("My deadline is on Friday."));
+    assert_eq!(t.app().store.word_stat("deadline").passes, 1);
+    t.click("다음 ▶");
+    assert!(t.has("( schedule )"), "on to the next focus word");
+    t.click("◀ 새 단어 목록");
+    assert!(t.has("✏ 오늘의 문장 만들기  1/2"));
+    // While speaking, today's words are suggested and counted when used.
+    t.nav("💬  자기 표현");
+    assert!(t.has("💡 오늘 단어를 넣어 말해 보세요 (0/2)"));
+    t.say("My schedule is very busy this week", 3.0);
+    assert!(t.app().store.profile.today.words_used.contains(&"schedule".to_string()) && t.has("💡 오늘 단어를 넣어 말해 보세요 (1/2)"));
 }

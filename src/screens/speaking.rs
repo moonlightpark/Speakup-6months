@@ -154,8 +154,11 @@ impl App {
                 });
             }
         });
+        ui.add_space(6.0);
+        self.focus_words_hint(ui);
         ui.add_space(8.0);
 
+        let mut spoken: Option<String> = None;
         card(ui, |ui| {
             ui.vertical_centered(|ui| {
                 if self.selfx.job.running() {
@@ -168,6 +171,7 @@ impl App {
                     }
                 } else if let Some(t) = self.selfx.capture.ui(ui, &mut self.voice, 90.0) {
                     self.selfx.answer = Some(t.clone());
+                    spoken = Some(t.clone());
                     self.selfx.feedback = None;
                     self.selfx.error = None;
                     match &claude {
@@ -195,6 +199,9 @@ impl App {
             });
         });
 
+        if let Some(t) = spoken {
+            self.note_words_used(&t);
+        }
         let mut drill_text: Option<(String, Vec<Phrase>)> = None;
         if let Some(f) = self.selfx.feedback.clone() {
             ui.add_space(8.0);
@@ -337,6 +344,7 @@ impl App {
             self.voice.say(&f.question);
         }
         let mut next = false;
+        let mut follow_said: Option<String> = None;
         card(ui, |ui| {
             ui.label(RichText::new(format!("💬 이어지는 질문 {}/{n}", i + 1)).color(ACCENT).strong());
             ui.horizontal_wrapped(|ui| {
@@ -350,7 +358,8 @@ impl App {
                     ui.vertical_centered(|ui| {
                         if let Some(a) = self.selfx.follow_capture.ui(ui, &mut self.voice, 60.0) {
                             self.store.log_attempt("self-expression", &f.question, &a, 0.0);
-                            self.selfx.follow_answer = Some(a);
+                            self.selfx.follow_answer = Some(a.clone());
+                            follow_said = Some(a);
                         }
                     });
                 }
@@ -365,6 +374,9 @@ impl App {
                 }
             }
         });
+        if let Some(a) = follow_said {
+            self.note_words_used(&a);
+        }
         if next {
             self.selfx.follow += 1;
             self.selfx.follow_answer = None;
@@ -625,6 +637,7 @@ impl App {
                 }
             }
         });
+        self.focus_words_hint(ui);
         if start_now && !self.roleplay.started {
             self.start_conversation(sc.clone());
             return;
@@ -716,6 +729,7 @@ impl App {
             }
         }
         let mut turn_now = None;
+        let mut said_now: Option<String> = None;
         ui.vertical_centered(|ui| {
             if self.roleplay.job.running() {
                 spinner_label(ui, "상대가 답하는 중…");
@@ -730,6 +744,7 @@ impl App {
                 }
                 self.store.log_attempt(["business", "free-talk", "roleplay", "custom-roleplay"][self.roleplay.mode.min(3)], "", &t, 0.0);
                 self.roleplay.lines.push(ChatLine { user: true, text: t.clone(), ko: String::new(), correction: String::new(), correction_ko: String::new() });
+                said_now = Some(t.clone());
                 self.roleplay.error = None;
                 let user_turns = self.roleplay.lines.iter().filter(|l| l.user).count();
                 match (&c, crate::offline_talk::scenario_by_title(&sc.title).filter(|_| self.roleplay.offline)) {
@@ -753,6 +768,9 @@ impl App {
                 }
             }
         });
+        if let Some(t) = said_now {
+            self.note_words_used(&t);
+        }
         if let Some(t) = turn_now {
             self.apply_turn(t);
         }

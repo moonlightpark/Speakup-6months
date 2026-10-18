@@ -86,6 +86,8 @@ pub struct App {
     pub lesson_error: Option<String>,
     pub queue: Option<DrillQueue>,
     pub homework: HomeworkState,
+    /// 오늘의 문장 만들기 in progress: (word, mission).
+    pub word_mission: Option<(String, crate::screens::mission::Mission)>,
     pub selfx: SelfExprState,
     pub roleplay: RoleplayState,
     pub listening: ListeningState,
@@ -187,6 +189,7 @@ impl App {
             lesson_error: None,
             queue: None,
             homework: HomeworkState::default(),
+            word_mission: None,
             selfx: SelfExprState::default(),
             roleplay: RoleplayState::default(),
             listening: ListeningState::default(),
@@ -444,6 +447,49 @@ impl App {
         self.store.save_profile();
         self.store.record_word_day(today(), &ws);
         ws
+    }
+
+    /// Today's 5 focus words for 오늘의 문장 만들기 and for using while speaking: picked once a
+    /// day from today's words, ones already passed first.
+    pub fn focus_words(&mut self) -> Vec<LessonWord> {
+        let ws = self.word_set();
+        if self.store.profile.today.focus_words.is_empty() && !ws.words.is_empty() {
+            let passed = |w: &LessonWord| self.store.items.iter().any(|i| i.text.eq_ignore_ascii_case(&w.word));
+            let mut v: Vec<&LessonWord> = ws.words.iter().filter(|w| passed(w)).chain(ws.words.iter().filter(|w| !passed(w))).collect();
+            v.truncate(5);
+            self.store.profile.today.focus_words = v.iter().map(|w| w.word.clone()).collect();
+            self.store.save_profile();
+        }
+        let focus = &self.store.profile.today.focus_words;
+        focus.iter().filter_map(|f| ws.words.iter().find(|w| &w.word == f).cloned()).collect()
+    }
+
+    /// Counts today's focus words used in something said while speaking.
+    pub fn note_words_used(&mut self, said: &str) {
+        for w in self.focus_words() {
+            if crate::dictionary::sentence_uses(said, &w.word) && !self.store.profile.today.words_used.contains(&w.word) {
+                self.store.profile.today.words_used.push(w.word.clone());
+                self.store.record_word_practice(&w.word, true);
+                self.store.save_profile();
+                self.toast(format!("👍 오늘 단어 '{}'을(를) 말하면서 썼어요!", w.word));
+            }
+        }
+    }
+
+    /// "💡 오늘 단어를 넣어 말해 보세요" chips (green once used).
+    pub fn focus_words_hint(&mut self, ui: &mut egui::Ui) {
+        let words = self.focus_words();
+        if words.is_empty() {
+            return;
+        }
+        let used = self.store.profile.today.words_used.clone();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(format!("💡 오늘 단어를 넣어 말해 보세요 ({}/{})", used.len().min(words.len()), words.len())).color(warn()));
+            for w in &words {
+                let on = used.contains(&w.word);
+                chip(ui, &format!("{} {}", if on { "✓" } else { "💬" }, w.word), if on { GOOD } else { ACCENT });
+            }
+        });
     }
 
     /// Learned words for today's review in the 새 단어 menu (up to 50): due ones first, then weak

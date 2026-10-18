@@ -129,6 +129,11 @@ pub struct DayProgress {
     /// Today's idiom sentences for 문장 읽기 (numbers in `assets/idioms1300.json`).
     #[serde(default)]
     pub idioms: Option<Vec<u32>>,
+    /// 오늘의 문장 만들기: today's focus words (picked once), those made into a sentence, and those
+    /// used while speaking (자기 표현 · 회화).
+    pub focus_words: Vec<String>,
+    pub sentences_made: Vec<String>,
+    pub words_used: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
