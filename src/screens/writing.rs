@@ -7,7 +7,7 @@ use crate::claude::{TranslationCheck, WritingFeedback};
 use crate::models::*;
 use crate::scoring::{self, ScoreResult};
 use crate::widgets::*;
-use egui::{RichText, Ui};
+use egui::{RichText, Stroke, Ui, Vec2};
 
 /// Exercises in one daily writing set (dictation + translation; the diary is a bonus).
 pub const WRITING_GOAL: u32 = 6;
@@ -80,6 +80,9 @@ pub struct WritingState {
     pub diary_result: Option<Result<WritingFeedback, String>>,
     read_aloud: Option<Drill>,
     played: bool,
+    /// 일기장: the month shown (its first day) and the day opened.
+    pub journal_month: Option<chrono::NaiveDate>,
+    pub journal_day: Option<chrono::NaiveDate>,
 }
 
 impl WritingState {
@@ -124,10 +127,11 @@ impl App {
         let done = self.store.profile.today.writings_done;
         ui.horizontal_wrapped(|ui| {
             chip(ui, &format!("오늘 {done}/{WRITING_GOAL}개"), if done >= WRITING_GOAL { GOOD } else { ACCENT });
-            for (i, label) in ["🎧 받아쓰기", "🔁 한→영 작문", "📝 영어 일기"].iter().enumerate() {
+            for (i, label) in ["🎧 받아쓰기", "🔁 한→영 작문", "📝 영어 일기", "📅 일기장"].iter().enumerate() {
                 if ui.selectable_label(self.writing.mode == i, *label).clicked() && self.writing.mode != i {
                     self.writing.mode = i;
-                    self.writing.input.clear();
+                    // Today's diary, if already saved, comes back to keep writing.
+                    self.writing.input = if i == 2 { self.diary_on(today()).map(|w| w.text.clone()).unwrap_or_default() } else { String::new() };
                     self.writing.checked = None;
                     self.writing.translation_result = None;
                     self.writing.played = false;
@@ -141,7 +145,8 @@ impl App {
         }
         match self.writing.mode {
             0 | 1 => self.sentence_writing_ui(ui),
-            _ => self.diary_ui(ui),
+            2 => self.diary_ui(ui),
+            _ => self.journal_ui(ui),
         }
     }
 
@@ -282,26 +287,40 @@ impl App {
             }
         }
         let (prompt, prompt_ko) = self.diary_prompt();
+        let saved_today = self.diary_on(today()).is_some();
+        let mut save_diary = false;
         let st = &mut self.writing;
         card(ui, |ui| {
             ui.label(RichText::new(prompt).size(19.0).strong());
             crate::grammar::ko_label(ui, prompt_ko, 16.0, muted());
             ui.add(egui::TextEdit::multiline(&mut st.input).desired_rows(6).desired_width(f32::INFINITY).font(egui::FontId::proportional(18.0)).hint_text("영어로 3~5문장 써 보세요. 틀려도 괜찮아요!"));
-            match &claude {
-                None => {
-                    ui.label(RichText::new("영어 일기 교정은 Claude API 키가 필요합니다 (설정).").color(warn()));
+            ui.horizontal_wrapped(|ui| {
+                // Saved by date (writing.json) with or without Claude; see 📅 일기장.
+                if ui.add_enabled(!st.input.trim().is_empty(), egui::Button::new(RichText::new("💾 일기 저장").strong())).clicked() {
+                    save_diary = true;
                 }
-                Some(c) => {
-                    if st.diary.running() {
-                        spinner_label(ui, "Claude가 교정하고 있어요…");
-                    } else if ui.add_enabled(st.input.split_whitespace().count() >= 3, egui::Button::new(RichText::new("✨ Claude 교정 받기").strong()).fill(ACCENT)).clicked() {
-                        let (c, p, t) = (c.clone(), prompt.to_string(), st.input.clone());
-                        st.diary_result = None;
-                        st.diary.spawn(move || c.writing_feedback(&p, &t, level));
+                match &claude {
+                    None => {
+                        ui.label(RichText::new("영어 일기 교정은 Claude API 키가 필요합니다 (설정).").color(warn()));
+                    }
+                    Some(c) => {
+                        if st.diary.running() {
+                            spinner_label(ui, "Claude가 교정하고 있어요…");
+                        } else if ui.add_enabled(st.input.split_whitespace().count() >= 3, egui::Button::new(RichText::new("✨ Claude 교정 받기").strong()).fill(ACCENT)).clicked() {
+                            let (c, p, t) = (c.clone(), prompt.to_string(), st.input.clone());
+                            st.diary_result = None;
+                            st.diary.spawn(move || c.writing_feedback(&p, &t, level));
+                        }
                     }
                 }
+            });
+            if saved_today {
+                ui.label(RichText::new("✅ 오늘 일기가 저장되어 있어요 (📅 일기장에서 날짜별로 다시 볼 수 있어요)").color(GOOD).small());
             }
         });
+        if save_diary {
+            self.save_diary_text(prompt);
+        }
         // A2–B1: easy model sentences to borrow from while writing.
         if (2.0..5.0).contains(&level) {
             egui::CollapsingHeader::new(RichText::new(format!("📒 예제 일기 문장 {}개 보기 (초등학교 수준)", DIARY_EXAMPLES.len())).strong()).id_salt("diary_examples").show(ui, |ui| {
@@ -361,12 +380,145 @@ impl App {
         }
     }
 
-    /// Today's diary prompt: the lesson's self-expression question, else a rotating prompt.
+    /// Today's diary prompt, rotating. Fixed for the whole day (only earlier days' diaries
+    /// count), so saving and correcting today's diary keeps one entry.
     fn diary_prompt(&self) -> (&'static str, &'static str) {
-        DIARY_PROMPTS[(today().ordinal() as usize + self.store.writings.iter().filter(|w| w.kind == "diary").count()) % DIARY_PROMPTS.len()]
+        let earlier = self.store.writings.iter().filter(|w| w.kind == "diary" && w.date.is_some_and(|d| d < today())).count();
+        DIARY_PROMPTS[(today().ordinal() as usize + earlier) % DIARY_PROMPTS.len()]
+    }
+
+    /// Opens 쓰기 › 📅 일기장 at a day's diary.
+    pub fn open_journal(&mut self, date: chrono::NaiveDate) {
+        self.screen = crate::app::Screen::Writing;
+        self.writing.mode = 3;
+        self.writing.journal_month = date.with_day(1);
+        self.writing.journal_day = Some(date);
+    }
+
+    /// The diary written on a day (one per day).
+    pub fn diary_on(&self, date: chrono::NaiveDate) -> Option<&WritingRecord> {
+        self.store.writings.iter().rev().find(|w| w.kind == "diary" && w.date == Some(date))
+    }
+
+    /// Saves today's diary as written (no correction needed), replacing an earlier save today
+    /// but keeping a correction already made for the same text.
+    fn save_diary_text(&mut self, prompt: &str) {
+        let text = self.writing.input.trim().to_string();
+        let (corrected, score) = self.diary_on(today()).filter(|w| w.text == text).map(|w| (w.corrected.clone(), w.score)).unwrap_or_default();
+        self.store.writings.retain(|w| !(w.kind == "diary" && w.date == Some(today())));
+        self.store.writings.push(WritingRecord { date: Some(today()), kind: "diary".into(), prompt: prompt.into(), text, corrected, score });
+        self.store.save_writings();
+        crate::applog!("writing: 일기 저장 ({})", today());
+        self.toast("💾 오늘 일기를 저장했어요");
+    }
+
+    /// 📅 일기장: a month calendar; days with a diary are marked, click one to read it again.
+    fn journal_ui(&mut self, ui: &mut Ui) {
+        let first_of = |d: chrono::NaiveDate| d.with_day(1).unwrap_or(d);
+        let month = self.writing.journal_month.unwrap_or_else(|| first_of(today()));
+        let next_month = first_of(month + chrono::Duration::days(32));
+        let prev_month = first_of(month - chrono::Duration::days(1));
+        let total = self.store.writings.iter().filter(|w| w.kind == "diary").count();
+        let mut go = None;
+        let mut picked = None;
+        card(ui, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("◀").clicked() {
+                    go = Some(prev_month);
+                }
+                ui.label(RichText::new(format!("{}년 {}월", month.year(), month.month())).size(20.0).strong());
+                if ui.button("▶").clicked() {
+                    go = Some(next_month);
+                }
+                if ui.button("오늘").clicked() {
+                    go = Some(first_of(today()));
+                    picked = Some(today());
+                }
+                ui.label(RichText::new(format!("지금까지 쓴 일기 {total}편 · 📝 표시된 날을 클릭하면 그날 일기를 다시 봐요")).color(muted()).small());
+            });
+            ui.add_space(6.0);
+            let cell = Vec2::new(64.0, 44.0);
+            egui::Grid::new("diary_calendar").spacing(Vec2::splat(4.0)).show(ui, |ui| {
+                for (i, d) in ["일", "월", "화", "수", "목", "금", "토"].iter().enumerate() {
+                    let c = match i {
+                        0 => BAD,
+                        6 => ACCENT,
+                        _ => muted(),
+                    };
+                    ui.add_sized(Vec2::new(cell.x, 20.0), egui::Label::new(RichText::new(*d).color(c)));
+                }
+                ui.end_row();
+                let lead = month.weekday().num_days_from_sunday() as i64;
+                let days = (next_month - month).num_days();
+                for slot in 0..(lead + days + 6) / 7 * 7 {
+                    let n = slot - lead;
+                    if n < 0 || n >= days {
+                        ui.allocate_space(cell);
+                    } else {
+                        let date = month + chrono::Duration::days(n);
+                        let has = self.diary_on(date).is_some();
+                        let label = if has { format!("{}\n📝", n + 1) } else { (n + 1).to_string() };
+                        let mut b = egui::Button::new(RichText::new(label).color(if has { text_strong() } else { muted() })).min_size(cell);
+                        if has {
+                            b = b.fill(ACCENT.gamma_multiply(0.35));
+                        }
+                        if self.writing.journal_day == Some(date) {
+                            b = b.stroke(Stroke::new(2.0_f32, warn()));
+                        } else if date == today() {
+                            b = b.stroke(Stroke::new(1.0_f32, warn()));
+                        }
+                        let r = ui.add_enabled(has, b);
+                        if r.clicked() {
+                            picked = Some(date);
+                        }
+                    }
+                    if slot % 7 == 6 {
+                        ui.end_row();
+                    }
+                }
+            });
+        });
+        if let Some(m) = go {
+            self.writing.journal_month = Some(m);
+        }
+        if let Some(d) = picked {
+            self.writing.journal_day = Some(d);
+        }
+        let Some(day) = self.writing.journal_day else { return };
+        let Some(w) = self.diary_on(day).cloned() else { return };
+        ui.add_space(8.0);
+        card(ui, |ui| {
+            ui.label(RichText::new(format!("📝 {} ({}) 일기", day.format("%Y년 %m월 %d일"), ["일", "월", "화", "수", "목", "금", "토"][day.weekday().num_days_from_sunday() as usize])).size(18.0).strong());
+            if !w.prompt.is_empty() {
+                ui.label(RichText::new(format!("주제: {}", w.prompt)).color(muted()));
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new("내가 쓴 일기").strong());
+            ui.label(RichText::new(&w.text).size(17.0));
+            if ui.button("🔊 내 일기 듣기").clicked() {
+                self.voice.say(&w.text);
+            }
+            if !w.corrected.is_empty() {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("✨ Claude 교정본").strong());
+                    if w.score > 0.0 {
+                        ui.label(RichText::new(format!("{:.0}점", w.score)).color(if w.score >= 80.0 { GOOD } else { warn() }));
+                    }
+                });
+                ui.label(RichText::new(&w.corrected).size(17.0).color(GOOD));
+                if ui.button("🔊 교정본 듣기").clicked() {
+                    self.voice.say(&w.corrected);
+                }
+            }
+        });
     }
 
     fn finish_writing(&mut self, kind: &str, prompt: &str, text: &str, corrected: &str, score: f32) {
+        if kind == "diary" {
+            // One diary per day: the corrected one replaces a plain save from today.
+            self.store.writings.retain(|w| !(w.kind == "diary" && w.date == Some(today())));
+        }
         self.store.writings.push(WritingRecord { date: Some(today()), kind: kind.into(), prompt: prompt.into(), text: text.into(), corrected: corrected.into(), score });
         self.store.save_writings();
         self.store.log_attempt(&format!("writing-{kind}"), corrected, text, score);

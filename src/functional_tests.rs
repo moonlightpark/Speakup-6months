@@ -1499,3 +1499,40 @@ fn ft42_settings_switches_light_and_dark_theme() {
     crate::widgets::set_light(false); // the theme is process-wide: leave other tests in dark
     assert!(light_ok && saved.light_theme && dark_ok);
 }
+
+#[test]
+fn ft43_diary_is_kept_by_date_and_read_again_from_the_calendar() {
+    use chrono::Datelike;
+    let past = today() - chrono::Duration::days(40);
+    let mut t = launch_at(temp_dir("journal"), true, |s| {
+        s.profile.placement_done = true;
+        s.writings.push(WritingRecord { date: Some(past), kind: "diary".into(), prompt: "What did you do today?".into(), text: "I went to the zoo.".into(), corrected: "I went to the zoo with my family.".into(), score: 85.0 });
+    });
+    t.nav("✏  쓰기");
+    t.click("📝 영어 일기");
+    // Saved by date without Claude; saving again the same day keeps one entry.
+    t.app_mut().writing.input = "I played soccer.".into();
+    t.steps(2);
+    t.click("💾 일기 저장");
+    t.app_mut().writing.input = "I played soccer. It was fun.".into();
+    t.steps(2);
+    t.click("💾 일기 저장");
+    assert_eq!(t.app().diary_on(today()).map(|w| w.text.as_str()), Some("I played soccer. It was fun."));
+    assert_eq!(t.app().store.writings.iter().filter(|w| w.kind == "diary").count(), 2, "one diary per day");
+    let saved = std::fs::read_to_string(t.dir.join("writing.json")).unwrap();
+    assert!(saved.contains("It was fun.") && saved.contains(&today().to_string()));
+    assert!(t.has("✅ 오늘 일기가 저장되어 있어요"));
+    // Coming back to the diary tab brings today's text back.
+    t.click("🎧 받아쓰기");
+    t.click("📝 영어 일기");
+    assert_eq!(t.app().writing.input, "I played soccer. It was fun.");
+    // 📅 일기장: today's cell is marked; clicking it shows that day's diary.
+    t.click("📅 일기장");
+    assert!(t.has("지금까지 쓴 일기 2편"));
+    t.click(&format!("{}\n📝", today().day()));
+    assert!(t.has(&format!("📝 {}", today().format("%Y년 %m월 %d일"))) && t.has_exact("I played soccer. It was fun."));
+    // An older month: go back with ◀ (or open it from 학습 기록) and read it with Claude's correction.
+    t.app_mut().open_journal(past);
+    t.steps(3);
+    assert!(t.has(&format!("{}년 {}월", past.year(), past.month())) && t.has_exact("I went to the zoo.") && t.has_exact("I went to the zoo with my family.") && t.has("85점"));
+}

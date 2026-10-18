@@ -67,6 +67,7 @@ impl App {
                 ui.label(RichText::new("아직 기록이 없습니다. 오늘 학습을 시작해 보세요!").color(muted()));
             });
         }
+        let mut open_diary = None;
         for r in hist.iter().rev() {
             let Some(date) = r.date else { continue };
             let title = format!(
@@ -114,6 +115,14 @@ impl App {
                     if r.writings > 0 {
                         ui.label(format!("✏ 쓰기 {}개", r.writings));
                     }
+                    if let Some(d) = self.diary_on(date) {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(format!("📝 영어 일기: {}", d.text.chars().take(60).collect::<String>()));
+                            if ui.small_button("📅 일기장에서 보기").clicked() {
+                                open_diary = Some(date);
+                            }
+                        });
+                    }
                     if r.best_wpm > 0.0 {
                         ui.label(format!("⚡ 스피드 리딩 최고 {:.0} WPM", r.best_wpm));
                     }
@@ -121,6 +130,9 @@ impl App {
                 });
             });
             ui.add_space(4.0);
+        }
+        if let Some(d) = open_diary {
+            self.open_journal(d);
         }
         ui.add_space(6.0);
         if ui.button("📂 기록 파일 폴더 열기 (history.json · attempts.jsonl · level_log.csv)").clicked() {
