@@ -550,3 +550,16 @@ pub struct WritingRecord {
     pub corrected: String,
     pub score: f32,
 }
+
+/// Practice record of one 새 단어 entry (word, chunk or expression), kept in word_stats.json.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct WordStat {
+    /// Passing repetitions so far (all days together).
+    pub passes: u32,
+    pub attempts: u32,
+    pub last: Option<NaiveDate>,
+}
+
+/// Repetitions after which a word counts as memorized (기억 완료).
+pub const WORD_DONE_PASSES: u32 = 10;

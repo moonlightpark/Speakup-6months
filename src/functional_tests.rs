@@ -1289,6 +1289,8 @@ fn ft35_reading_starts_with_30_idioms_and_words_review_50_learned() {
     assert!(t.has("💬 It's my first time") && t.has("이번이 처음이야"));
     t.wait("lesson", |a| a.lesson.is_some());
     t.steps(2);
+    assert!(!t.has("I am a boy.") && t.has("1 / 2 쪽"), "25 per page");
+    t.click("다음 ▶");
     assert!(t.has("I am a boy."), "the longer sentences follow the idioms");
     t.click("▶ 시작하기");
     assert!(t.has("It's my first time"));
@@ -1309,4 +1311,38 @@ fn ft35_reading_starts_with_30_idioms_and_words_review_50_learned() {
     t.click("다음 ▶");
     assert_eq!(t.app().store.profile.today.words_reviewed, vec![first]);
     assert_eq!(t.app().word_review_ids().len(), 49, "reviewed words are not offered again today");
+}
+
+#[test]
+fn ft36_word_list_pages_of_25_coloured_by_practice() {
+    let mut t = launch_at(temp_dir("wordlist"), true, |s| {
+        s.profile.placement_done = true;
+        // 40 words today: two pages. Practice so far: 0, 4 and 12 passes.
+        let words: Vec<LessonWord> = (0..40).map(|n| LessonWord { word: format!("word{n:02}"), meaning_ko: format!("뜻{n}"), example: format!("Say word{n:02}."), example_ko: "예문".into() }).collect();
+        s.profile.today = DayProgress { date: Some(today()), word_set: Some(WordSet { words, ..Default::default() }), idioms: Some(Vec::new()), ..Default::default() };
+        s.word_stats.insert("word01".into(), WordStat { passes: 4, attempts: 5, last: None });
+        s.word_stats.insert("word02".into(), WordStat { passes: 12, attempts: 12, last: None });
+    });
+    t.nav("📚  새 단어");
+    for text in ["기억 완료 1/40", "1 / 2 쪽 (40개 중 1~25)", "미완료", "4/10회", "✓ 완료", "word24"] {
+        assert!(t.has(text), "word list shows {text:?}");
+    }
+    assert!(!t.has("word25"), "25 per page");
+    t.click("다음 ▶");
+    assert!(t.has("word39") && !t.has("word00") && t.has("2 / 2 쪽 (40개 중 26~40)"));
+    // Colours: red → orange/green gradient → light green.
+    use crate::screens::practice::word_color;
+    assert_eq!(word_color(0), egui::Color32::from_rgb(240, 80, 80));
+    assert_eq!(word_color(1), egui::Color32::from_rgb(225, 105, 20));
+    assert_eq!(word_color(9), egui::Color32::from_rgb(110, 170, 30));
+    assert_eq!(word_color(10), egui::Color32::from_rgb(150, 230, 90));
+    // Each passing repetition is kept in word_stats.json.
+    t.click("◀ 이전");
+    t.click("▶ 시작하기");
+    t.say("word00", 0.8);
+    t.say("word00", 0.8);
+    assert_eq!(t.app().store.word_stat("word00").passes, 2);
+    let saved: std::collections::HashMap<String, WordStat> = serde_json::from_str(&std::fs::read_to_string(t.dir.join("word_stats.json")).unwrap()).unwrap();
+    assert_eq!(saved["word00"].passes, 2);
+    assert_eq!(saved["word00"].last, Some(today()));
 }

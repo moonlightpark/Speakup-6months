@@ -5,7 +5,7 @@ use crate::app::App;
 use crate::models::*;
 use crate::srs;
 use crate::widgets::*;
-use egui::{RichText, Ui, Vec2};
+use egui::{Color32, RichText, Ui, Vec2};
 
 pub struct Spec {
     /// Existing SRS item being reviewed.
@@ -41,6 +41,34 @@ impl DrillQueue {
     pub fn finished(&self) -> bool {
         self.idx >= self.specs.len()
     }
+}
+
+/// Rows per page in today's lists.
+const LIST_PAGE: usize = 25;
+
+/// Colour for a 새 단어 entry by passing repetitions: red (not yet) → deep orange → deep
+/// yellow-green while repeating → light green once memorized (10+).
+pub fn word_color(passes: u32) -> Color32 {
+    match passes {
+        0 => Color32::from_rgb(240, 80, 80),
+        p if p >= WORD_DONE_PASSES => Color32::from_rgb(150, 230, 90),
+        p => {
+            let t = (p - 1) as f32 / (WORD_DONE_PASSES - 2) as f32;
+            let (a, b) = ([225.0, 105.0, 20.0], [110.0, 170.0, 30.0]);
+            let c = |i: usize| (a[i] + (b[i] - a[i]) * t).round() as u8;
+            Color32::from_rgb(c(0), c(1), c(2))
+        }
+    }
+}
+
+/// Colour and label ("미완료", "3/10회", "✓ 완료") for a 새 단어 entry.
+pub fn word_mark(passes: u32) -> (Color32, String) {
+    let label = match passes {
+        0 => "미완료".to_string(),
+        p if p >= WORD_DONE_PASSES => "✓ 완료".to_string(),
+        p => format!("{p}/{WORD_DONE_PASSES}회"),
+    };
+    (word_color(passes), label)
 }
 
 /// Korean shown, English said from memory (once) — retrieval practice at the end of a set.
@@ -174,19 +202,41 @@ impl App {
         }
     }
 
-    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str) -> bool {
+    /// Today's list (25 per page) and the start button. `marks` (same order as `rows`, may be
+    /// empty) colours each row by how far it has been practised.
+    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)]) -> bool {
         let mut start = false;
         page_title(ui, title, desc);
         ui.add_space(8.0);
+        let pages = rows.len().div_ceil(LIST_PAGE).max(1);
+        let page_id = egui::Id::new(("intro_page", step));
+        let mut page = ui.data(|d| d.get_temp::<usize>(page_id)).unwrap_or(0).min(pages - 1);
         card(ui, |ui| {
-            for (i, (en, ko)) in rows.iter().enumerate() {
-                if i > 0 {
+            if !marks.is_empty() {
+                let done = marks.iter().filter(|m| m.1.starts_with('✓')).count();
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(format!("기억 완료 {done}/{}", rows.len())).strong());
+                    ui.label(RichText::new("■ 미완료").color(word_color(0)));
+                    ui.label(RichText::new("■ 반복 중").color(word_color(1)));
+                    ui.label(RichText::new("■").color(word_color(5)));
+                    ui.label(RichText::new("■").color(word_color(9)));
+                    ui.label(RichText::new(format!("■ 완료({WORD_DONE_PASSES}회 이상)")).color(word_color(WORD_DONE_PASSES)));
+                });
+                ui.add_space(6.0);
+            }
+            for (i, (en, ko)) in rows.iter().enumerate().skip(page * LIST_PAGE).take(LIST_PAGE) {
+                if i > page * LIST_PAGE {
                     ui.add_space(8.0);
                 }
+                let mark = marks.get(i);
                 // Wrapped so a long sentence + translation stays inside the card.
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, en);
-                    ui.label(RichText::new(en).size(17.0).strong());
+                    let color = mark.map(|m| m.0).unwrap_or(Color32::WHITE);
+                    ui.label(RichText::new(en).size(17.0).strong().color(color));
+                    if let Some((c, text)) = mark {
+                        ui.label(RichText::new(text).small().color(*c));
+                    }
                     // Months 5-6: English only; the Korean is a hover away.
                     if support_stage(ui.ctx()) < 2 {
                         crate::grammar::ko_label(ui, ko, 16.0, MUTED);
@@ -195,7 +245,20 @@ impl App {
                     }
                 });
             }
+            if pages > 1 {
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(page > 0, egui::Button::new("◀ 이전")).clicked() {
+                        page -= 1;
+                    }
+                    ui.label(format!("{} / {pages} 쪽 ({}개 중 {}~{})", page + 1, rows.len(), page * LIST_PAGE + 1, ((page + 1) * LIST_PAGE).min(rows.len())));
+                    if ui.add_enabled(page + 1 < pages, egui::Button::new("다음 ▶")).clicked() {
+                        page += 1;
+                    }
+                });
+            }
         });
+        ui.data_mut(|d| d.insert_temp(page_id, page));
         ui.add_space(8.0);
         let label = if self.step_done(step) { "↻ 다시 연습하기" } else { "▶ 시작하기" };
         if self.step_done(step) {
@@ -223,6 +286,14 @@ impl App {
             .chain(lesson.words.iter().map(|w| (w.word.clone(), format!("{} — {}", w.meaning_ko, w.example))))
             .chain(lesson.expressions.iter().map(|w| (format!("💬 {}", w.word), format!("{} — {}", w.meaning_ko, w.example))))
             .collect();
+        // Practice so far per entry (word_stats.json): red → orange → green as passes add up.
+        let marks: Vec<(Color32, String)> = lesson
+            .phrases
+            .iter()
+            .chain(&lesson.words)
+            .chain(&lesson.expressions)
+            .map(|w| word_mark(self.store.word_stat(&w.word).passes))
+            .collect();
         let reps = self.store.settings.reps_new;
         if self.intro_card(
             ui,
@@ -230,6 +301,7 @@ impl App {
             &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 예문까지 말하면 저장되고 복습 일정이 잡힙니다."),
             &rows,
             "words",
+            &marks,
         ) {
             // Words and chunks already passed (saved in the deck) are said once, without the
             // example, so restarting the app doesn't make the learner redo them 3 times.
@@ -384,6 +456,7 @@ impl App {
             ),
             &rows,
             "reading",
+            &[],
         ) {
             let mut specs: Vec<Spec> = idioms
                 .iter()

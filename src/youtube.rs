@@ -157,6 +157,19 @@ pub fn fetch(ytdlp: &Path, url: &str, cache_dir: &Path) -> Result<Video> {
 }
 
 /// Previously downloaded videos, newest first.
+/// Deletes a downloaded video (audio, subtitles, video.json). Only plain YouTube ids are
+/// accepted, so nothing outside the cache folder can be removed.
+pub fn delete(cache_dir: &Path, id: &str) -> Result<()> {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(anyhow!("잘못된 영상 id: {id}"));
+    }
+    let dir = cache_dir.join(id);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)?;
+    }
+    Ok(())
+}
+
 pub fn library(cache_dir: &Path) -> Vec<Video> {
     let mut v: Vec<(std::time::SystemTime, Video)> = std::fs::read_dir(cache_dir)
         .into_iter()
@@ -254,6 +267,18 @@ pub fn merge_into_sentences(cues: &[Segment]) -> Vec<Segment> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deletes_only_inside_the_cache() {
+        let cache = std::env::temp_dir().join(format!("speakup-yt-del-{}", std::process::id()));
+        let dir = cache.join("abc_DEF-123");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("video.json"), "{}").unwrap();
+        assert!(delete(&cache, "../etc").is_err() && delete(&cache, "").is_err() && delete(&cache, "a/b").is_err());
+        delete(&cache, "abc_DEF-123").unwrap();
+        assert!(!dir.exists() && cache.exists());
+        let _ = std::fs::remove_dir_all(cache);
+    }
 
     #[test]
     fn ids() {

@@ -27,6 +27,8 @@ pub struct ListeningState {
     pub clip: Pending<(Vec<f32>, u32)>,
     pub drill: Option<Drill>,
     playing_seg: Option<usize>,
+    /// Video id whose 🗑 was pressed (asks once more before deleting).
+    confirm_delete: Option<String>,
 }
 
 impl Default for ListeningState {
@@ -46,6 +48,7 @@ impl Default for ListeningState {
             clip: Pending::default(),
             drill: None,
             playing_seg: None,
+            confirm_delete: None,
         }
     }
 }
@@ -165,11 +168,33 @@ impl App {
             if !lib.is_empty() {
                 ui.add_space(6.0);
                 ui.label(RichText::new("받아둔 영상").strong());
+                let mut deleted = false;
                 for v in lib {
-                    if ui.link(format!("▶ {} ({}문장)", v.title, v.segments.len())).clicked() {
-                        self.listening.video = Some(v);
-                        self.listening.selected = 0;
-                    }
+                    ui.horizontal(|ui| {
+                        if ui.link(format!("▶ {} ({}문장)", v.title, v.segments.len())).clicked() {
+                            self.listening.video = Some(v.clone());
+                            self.listening.selected = 0;
+                        }
+                        if self.listening.confirm_delete.as_deref() == Some(v.id.as_str()) {
+                            ui.label(RichText::new("삭제할까요?").color(WARN));
+                            if ui.small_button("🗑 삭제").clicked() {
+                                match youtube::delete(&self.store.youtube_dir(), &v.id) {
+                                    Ok(()) => crate::applog!("listening: 받아둔 영상 삭제 · {} ({})", v.title, v.id),
+                                    Err(e) => self.listening.error = Some(format!("{e:#}")),
+                                }
+                                self.listening.confirm_delete = None;
+                                deleted = true;
+                            }
+                            if ui.small_button("취소").clicked() {
+                                self.listening.confirm_delete = None;
+                            }
+                        } else if ui.small_button("🗑").on_hover_text("받아둔 영상 삭제 (오디오·자막)").clicked() {
+                            self.listening.confirm_delete = Some(v.id.clone());
+                        }
+                    });
+                }
+                if deleted {
+                    self.listening.library = None; // re-read the folder
                 }
             }
             return;
@@ -295,7 +320,8 @@ impl App {
         ui.add_space(8.0);
         ui.label(RichText::new("전체 문장").strong());
         let mut pick = None;
-        egui::ScrollArea::vertical().id_salt("segs").max_height(260.0).show(ui, |ui| {
+        // 8× the old 260 px (Order.md): the whole transcript fits without scrolling inside a small box.
+        egui::ScrollArea::vertical().id_salt("segs").max_height(2080.0).show(ui, |ui| {
             for (i, s) in video.segments.iter().enumerate() {
                 let text = if self.listening.blind { format!("{:>3}. ··· ({:.0}s)", i + 1, s.start) } else { format!("{:>3}. {}", i + 1, s.text) };
                 if ui.selectable_label(i == sel, text).clicked() {

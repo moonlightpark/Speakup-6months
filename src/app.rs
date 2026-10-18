@@ -322,6 +322,16 @@ impl App {
     /// Records a drill attempt: score, log line, and any words that weren't recognized.
     pub fn record_attempt(&mut self, category: &str, target: &str, a: &Attempt) {
         self.record_score(category, target, &a.transcript, a.score);
+        // 새 단어 entries (today's words/chunks/expression, or learned words) keep their own count.
+        if category == "vocab" {
+            let lower = target.to_lowercase();
+            let in_set = self.store.profile.today.word_set.iter().any(|w| w.words.iter().chain(&w.phrases).chain(&w.expressions).any(|x| x.word.to_lowercase() == lower));
+            let learned = self.store.items.iter().any(|i| i.kind == ItemKind::Word && i.text.to_lowercase() == lower);
+            if in_set || learned {
+                let pass = self.pass_score();
+                self.store.record_word_practice(target, a.score >= pass);
+            }
+        }
         // Only count mispronunciations on attempts that were mostly right; a mostly-wrong
         // attempt usually means the learner said something else entirely.
         if a.score >= 40.0 {

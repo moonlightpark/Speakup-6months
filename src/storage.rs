@@ -35,6 +35,8 @@ pub struct Store {
     /// Reading library progress by book id.
     pub library: std::collections::HashMap<String, BookProgress>,
     pub writings: Vec<WritingRecord>,
+    /// 새 단어 practice counts by lower-case text (word_stats.json).
+    pub word_stats: std::collections::HashMap<String, WordStat>,
 }
 
 fn load_json<T: DeserializeOwned + Default>(path: &Path) -> T {
@@ -85,8 +87,22 @@ impl Store {
             history: load_json(&dir.join("history.json")),
             library: load_json(&dir.join("library.json")),
             writings: load_json(&dir.join("writing.json")),
+            word_stats: load_json(&dir.join("word_stats.json")),
             dir,
         })
+    }
+
+    /// Counts one 새 단어 attempt (and a pass when `passed`), then saves word_stats.json.
+    pub fn record_word_practice(&mut self, text: &str, passed: bool) {
+        let st = self.word_stats.entry(text.trim().to_lowercase()).or_default();
+        st.attempts += 1;
+        st.passes += passed as u32;
+        st.last = Some(today());
+        log_err(save_json(&self.dir.join("word_stats.json"), &self.word_stats));
+    }
+
+    pub fn word_stat(&self, text: &str) -> WordStat {
+        self.word_stats.get(&text.trim().to_lowercase()).cloned().unwrap_or_default()
     }
 
     pub fn save_settings(&self) {
