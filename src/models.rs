@@ -543,6 +543,9 @@ pub struct BusinessScenario {
     pub user_role: String,
     pub opening_line: String,
     pub key_phrases: Vec<Phrase>,
+    /// Questions the AI asks in turn (자유 회화 scenarios); empty = free conversation.
+    #[serde(default)]
+    pub guide: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

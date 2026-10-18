@@ -120,6 +120,7 @@ impl TalkScenario {
             user_role: self.user_role.clone(),
             opening_line: self.script.first().map(|t| t.ai.clone()).unwrap_or_default(),
             key_phrases: self.key_phrases.clone(),
+            guide: Vec::new(),
         }
     }
 

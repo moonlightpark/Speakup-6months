@@ -13,6 +13,7 @@ mod content;
 mod curriculum;
 mod dictionary;
 mod expressions;
+mod freetalk;
 mod grammar;
 mod idioms;
 mod language;

@@ -270,8 +270,16 @@ impl Claude {
              reply_ko: Korean translation of your reply.\n\
              correction: if the learner's LAST line had a mistake or sounded unnatural, the natural way to say it (else empty string); correction_ko: brief Korean explanation (else empty).\n\
              suggestions: 2 things the learner could say next (text + ko).\n\
-             The learner has spoken {turns} times. Set finished=true and wrap up politely once the goal of the scenario is reached or after about 8 learner turns; \
+             The learner has spoken {turns} times. {plan}Set finished=true and wrap up politely once the goal of the scenario is reached or after about 8 learner turns; \
              when finished, summary_ko gives 2-3 sentences on how they did and what to practice. Otherwise summary_ko is empty.",
+            plan = if sc.guide.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "Follow this plan: ask these questions one at a time in this order (react briefly and naturally to each answer first, rephrase freely): {}. After the learner answers the last one, close the conversation warmly and set finished=true. ",
+                    sc.guide.iter().enumerate().map(|(i, q)| format!("{}) {q}", i + 1)).collect::<Vec<_>>().join(" ")
+                )
+            },
             title = sc.title,
             scenario = sc.scenario_ko,
             ai = sc.ai_role,

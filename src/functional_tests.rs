@@ -1838,3 +1838,40 @@ fn ft53_self_expression_is_a_compose_then_speak_screen() {
     assert_eq!(t.app().selfx.draft, "Because … The deadline is Friday.");
     assert!(t.has("6 / "), "draft word count");
 }
+
+#[test]
+fn ft54_free_talk_categories_of_fifty_scenarios_the_app_asks_and_i_answer() {
+    // Offline (no key): the 5 questions are asked one after another.
+    let mut t = launch_at(temp_dir("freetalk"), false, |s| s.profile.placement_done = true);
+    t.nav("💼  회화 · 비즈니스");
+    t.click("☕ 자유 회화");
+    assert!(t.has("🏠 일상생활 0/50") && t.has("✈ 여행 0/50") && t.has("👥 친구·소셜·의견 0/50"));
+    t.click_contains("✈ 여행");
+    let s = crate::freetalk::by_category("travel")[0].clone();
+    assert!(t.has_exact(&s.title) && t.has("✈ 여행 · 50개 상황"));
+    t.click(&s.title);
+    assert!(t.app().roleplay.started, "started: {:?}", t.app().roleplay.error);
+    assert!(t.has_exact(&s.questions[0].q), "q: {} lines {:?}", s.questions[0].q, t.app().roleplay.lines.iter().map(|l| l.text.clone()).collect::<Vec<_>>());
+    assert!(t.has_exact(&s.questions[0].sample), "sample: {}", s.questions[0].sample);
+    for i in 0..5 {
+        t.say(&s.questions[i].sample, 2.0);
+        let next = if i < 4 { &s.questions[i + 1].q } else { &s.closing };
+        assert!(t.has_exact(next), "turn {}", i + 1);
+    }
+    assert!(t.has("🎉 대화 완료!"));
+    t.click("↻ 새 대화");
+    assert!(t.has("✈ 여행 1/50"), "counted for the category");
+    assert!(t.prompts().is_empty());
+    // With Claude: the questions are the plan the AI follows.
+    let mut t = launch("freetalk-ai");
+    t.nav("💼  회화 · 비즈니스");
+    t.wait("lesson", |a| a.lesson.is_some());
+    t.click("☕ 자유 회화");
+    let s = crate::freetalk::by_category("daily")[0].clone();
+    t.click(&s.title);
+    assert!(t.has_exact(&s.questions[0].q));
+    t.say(&s.questions[0].sample, 2.0);
+    t.wait("AI reply", |a| a.roleplay.lines.len() >= 3);
+    let p = t.prompts().into_iter().filter(|p| p.starts_with("Role-play.")).last().unwrap();
+    assert!(p.contains("Follow this plan") && p.contains(&s.questions[1].q));
+}

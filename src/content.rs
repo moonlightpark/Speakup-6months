@@ -254,6 +254,7 @@ pub fn builtin_lesson(week: u32, day: i64, known: &[StudyItem], past: &[Lesson],
             user_role: sc.3.into(),
             opening_line: sc.4.into(),
             key_phrases: sc.5.iter().map(|(t, k)| Phrase { text: (*t).into(), ko: (*k).into() }).collect(),
+            guide: Vec::new(),
         },
         listening: ListeningPlan {
             search_queries: vec![wk.listening.into()],
