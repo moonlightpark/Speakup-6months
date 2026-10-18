@@ -1346,3 +1346,33 @@ fn ft36_word_list_pages_of_25_coloured_by_practice() {
     assert_eq!(saved["word00"].passes, 2);
     assert_eq!(saved["word00"].last, Some(today()));
 }
+
+#[test]
+fn ft37_click_a_word_in_the_list_to_practise_it() {
+    let mut t = launch("pickword");
+    t.nav("📚  새 단어");
+    // "schedule" is the 2nd entry: clicking it practises just that word (3 reps + example).
+    t.click("schedule");
+    assert!(t.has("새 단어 · schedule") && t.has("1 / 2"));
+    for _ in 0..3 {
+        t.say("schedule", 0.8);
+    }
+    t.click("다음 ▶");
+    t.say("Let me check my schedule.", 1.5);
+    t.click("다음 ▶");
+    assert!(t.has("잘했어요!"));
+    assert!(t.app().store.items.iter().any(|i| i.text == "schedule"), "saved for review");
+    assert_eq!(t.app().store.word_stat("schedule").passes, 3);
+    assert!(!t.app().step_done("words"), "one word doesn't finish today's step");
+    // Back to the list; a passed word can be practised again in full and keeps counting.
+    t.click("닫기");
+    t.click("schedule");
+    assert!(t.has("1 / 2"), "full practice again, with the example");
+    let reviews = t.app().store.items.iter().find(|i| i.text == "schedule").unwrap().attempts;
+    for _ in 0..3 {
+        t.say("schedule", 0.8);
+    }
+    assert_eq!(t.app().store.word_stat("schedule").passes, 6);
+    t.click("다음 ▶");
+    assert_eq!(t.app().store.items.iter().find(|i| i.text == "schedule").unwrap().attempts, reviews, "not reviewed twice");
+}

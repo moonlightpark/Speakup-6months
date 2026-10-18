@@ -43,6 +43,14 @@ impl DrillQueue {
     }
 }
 
+/// What a 새 단어 entry is (decides how it is saved and drilled).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum WordKind {
+    Chunk,
+    Word,
+    Expression,
+}
+
 /// Rows per page in today's lists.
 const LIST_PAGE: usize = 25;
 
@@ -204,8 +212,10 @@ impl App {
 
     /// Today's list (25 per page) and the start button. `marks` (same order as `rows`, may be
     /// empty) colours each row by how far it has been practised.
-    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)]) -> bool {
+    /// Returns (start pressed, row clicked); rows are clickable when `marks` are given.
+    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)]) -> (bool, Option<usize>) {
         let mut start = false;
+        let mut picked = None;
         page_title(ui, title, desc);
         ui.add_space(8.0);
         let pages = rows.len().div_ceil(LIST_PAGE).max(1);
@@ -233,7 +243,19 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, en);
                     let color = mark.map(|m| m.0).unwrap_or(Color32::WHITE);
-                    ui.label(RichText::new(en).size(17.0).strong().color(color));
+                    let text = RichText::new(en).size(17.0).strong().color(color);
+                    if mark.is_some() {
+                        // Click a word to practise just that one right away.
+                        let r = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text("클릭하면 이 단어만 바로 연습해요");
+                        if r.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if r.clicked() {
+                            picked = Some(i);
+                        }
+                    } else {
+                        ui.label(text);
+                    }
                     if let Some((c, text)) = mark {
                         ui.label(RichText::new(text).small().color(*c));
                     }
@@ -267,7 +289,7 @@ impl App {
         if ui.add(egui::Button::new(RichText::new(label).size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 44.0))).clicked() {
             start = true;
         }
-        start
+        (start, picked)
     }
 
     pub fn words_ui(&mut self, ui: &mut Ui) {
@@ -295,97 +317,43 @@ impl App {
             .map(|w| word_mark(self.store.word_stat(&w.word).passes))
             .collect();
         let reps = self.store.settings.reps_new;
-        if self.intro_card(
+        let (start, picked) = self.intro_card(
             ui,
             "📚 오늘의 덩어리 표현 · 새 단어",
-            &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 예문까지 말하면 저장되고 복습 일정이 잡힙니다."),
+            &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 예문까지 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
             &rows,
             "words",
             &marks,
-        ) {
-            // Words and chunks already passed (saved in the deck) are said once, without the
-            // example, so restarting the app doesn't make the learner redo them 3 times.
-            let passed = |kind: ItemKind, text: &str| {
-                let id = srs::make_id(kind, text);
-                self.store.items.iter().any(|i| i.id == id)
-            };
+        );
+        // Same order as `rows`.
+        let entries: Vec<(&LessonWord, WordKind)> = lesson
+            .phrases
+            .iter()
+            .map(|w| (w, WordKind::Chunk))
+            .chain(lesson.words.iter().map(|w| (w, WordKind::Word)))
+            .chain(lesson.expressions.iter().map(|w| (w, WordKind::Expression)))
+            .collect();
+        if let Some((w, kind)) = picked.and_then(|i| entries.get(i).copied()) {
+            // One entry on demand: full repetitions + example, even if it was passed before
+            // (the passes still count toward 기억 완료; the review schedule isn't touched twice).
+            let specs = self.entry_specs(w, kind, reps, true);
+            crate::applog!("words: 리스트에서 '{}' 바로 연습", w.word);
+            self.queue = Some(DrillQueue::new("", "vocab", &format!("새 단어 · {}", w.word), specs));
+            return;
+        }
+        if start {
             let mut specs = Vec::new();
-            for w in &lesson.phrases {
-                if passed(ItemKind::Sentence, &w.word) {
-                    specs.push(Spec { reps: 1, tip: "✓ 통과한 표현 — 한 번만 확인".into(), recall: false, ..recall_spec(&w.word, &w.meaning_ko) });
+            for (w, kind) in &entries {
+                // Names that slip into a lesson ("Seoul") are not drilled as vocabulary.
+                if *kind == WordKind::Word && is_proper_noun(&w.word, &w.meaning_ko) {
                     continue;
                 }
-                specs.push(Spec {
-                    item_id: None,
-                    new_item: Some(StudyItem {
-                        kind: ItemKind::Sentence,
-                        text: w.word.clone(),
-                        meaning_ko: w.meaning_ko.clone(),
-                        example: w.example.clone(),
-                        example_ko: w.example_ko.clone(),
-                        category: "phrase".into(),
-                        ..Default::default()
-                    }),
-                    target: w.word.clone(),
-                    ko: w.meaning_ko.clone(),
-                    tip: "🔗 덩어리 표현 — 한 단어처럼 이어서 말하세요".into(),
-                    reps,
-                    recall: false,
-                    is_word: false,
-                    chunks: Vec::new(),
-                });
-                specs.push(Spec {
-                    item_id: None,
-                    new_item: None,
-                    target: w.example.clone(),
-                    ko: w.example_ko.clone(),
-                    tip: format!("예문으로 '{}' 익히기", w.word),
-                    reps: 1,
-                    recall: false,
-                    is_word: false,
-                    chunks: self.store.gloss_for(&w.example),
-                });
-            }
-            let slang: Vec<&LessonWord> = lesson.expressions.iter().collect();
-            // Names that slip into a lesson ("Seoul") are not drilled as vocabulary.
-            for (w, is_expr) in lesson.words.iter().filter(|w| !is_proper_noun(&w.word, &w.meaning_ko)).map(|w| (w, false)).chain(slang.into_iter().map(|w| (w, true))) {
-                if passed(ItemKind::Word, &w.word) {
-                    specs.push(Spec { reps: 1, tip: "✓ 통과한 단어 — 한 번만 확인".into(), is_word: true, recall: false, ..recall_spec(&w.word, &w.meaning_ko) });
-                    continue;
-                }
-                specs.push(Spec {
-                    item_id: None,
-                    new_item: Some(StudyItem {
-                        kind: ItemKind::Word,
-                        text: w.word.clone(),
-                        meaning_ko: w.meaning_ko.clone(),
-                        example: w.example.clone(),
-                        example_ko: w.example_ko.clone(),
-                        category: if is_expr { "expression".into() } else { "vocab".into() },
-                        ..Default::default()
-                    }),
-                    target: w.word.clone(),
-                    ko: w.meaning_ko.clone(),
-                    tip: if is_expr { "💬 원어민 표현·유행어".into() } else { String::new() },
-                    reps,
-                    recall: false,
-                    is_word: true,
-                    chunks: Vec::new(),
-                });
-                specs.push(Spec {
-                    item_id: None,
-                    new_item: None,
-                    target: w.example.clone(),
-                    ko: w.example_ko.clone(),
-                    tip: format!("예문으로 '{}' 익히기", w.word),
-                    reps: 1,
-                    recall: false,
-                    is_word: false,
-                    chunks: self.store.gloss_for(&w.example),
-                });
+                specs.extend(self.entry_specs(w, *kind, reps, false));
             }
             // Then each chunk once more from the Korean alone.
-            specs.extend(lesson.phrases.iter().filter(|w| !passed(ItemKind::Sentence, &w.word)).map(|w| recall_spec(&w.word, &w.meaning_ko)));
+            specs.extend(
+                lesson.phrases.iter().filter(|w| !self.entry_passed(&w.word, WordKind::Chunk)).map(|w| recall_spec(&w.word, &w.meaning_ko)),
+            );
             self.queue = Some(DrillQueue::new("words", "vocab", "새 단어", specs));
             return;
         }
@@ -426,6 +394,61 @@ impl App {
         }
     }
 
+    /// Already saved in the deck (passed on an earlier day or before a restart).
+    fn entry_passed(&self, text: &str, kind: WordKind) -> bool {
+        let id = srs::make_id(if kind == WordKind::Chunk { ItemKind::Sentence } else { ItemKind::Word }, text);
+        self.store.items.iter().any(|i| i.id == id)
+    }
+
+    /// Drills for one 새 단어 entry: the word/chunk `reps` times, then its example once.
+    /// A passed entry in the day's run is just said once (no example) unless `full` (picked
+    /// from the list); either way it isn't added to the review schedule a second time.
+    fn entry_specs(&self, w: &LessonWord, kind: WordKind, reps: u32, full: bool) -> Vec<Spec> {
+        let passed = self.entry_passed(&w.word, kind);
+        let is_word = kind != WordKind::Chunk;
+        if passed && !full {
+            let tip = if is_word { "✓ 통과한 단어 — 한 번만 확인" } else { "✓ 통과한 표현 — 한 번만 확인" };
+            return vec![Spec { reps: 1, tip: tip.into(), is_word, recall: false, ..recall_spec(&w.word, &w.meaning_ko) }];
+        }
+        let (item_kind, category, tip) = match kind {
+            WordKind::Chunk => (ItemKind::Sentence, "phrase", "🔗 덩어리 표현 — 한 단어처럼 이어서 말하세요"),
+            WordKind::Word => (ItemKind::Word, "vocab", ""),
+            WordKind::Expression => (ItemKind::Word, "expression", "💬 원어민 표현·유행어"),
+        };
+        vec![
+            Spec {
+                item_id: None,
+                new_item: (!passed).then(|| StudyItem {
+                    kind: item_kind,
+                    text: w.word.clone(),
+                    meaning_ko: w.meaning_ko.clone(),
+                    example: w.example.clone(),
+                    example_ko: w.example_ko.clone(),
+                    category: category.into(),
+                    ..Default::default()
+                }),
+                target: w.word.clone(),
+                ko: w.meaning_ko.clone(),
+                tip: tip.into(),
+                reps,
+                recall: false,
+                is_word,
+                chunks: Vec::new(),
+            },
+            Spec {
+                item_id: None,
+                new_item: None,
+                target: w.example.clone(),
+                ko: w.example_ko.clone(),
+                tip: format!("예문으로 '{}' 익히기", w.word),
+                reps: 1,
+                recall: false,
+                is_word: false,
+                chunks: self.store.gloss_for(&w.example),
+            },
+        ]
+    }
+
     pub fn reading_ui(&mut self, ui: &mut Ui) {
         if self.run_queue_ui(ui) {
             return;
@@ -457,7 +480,9 @@ impl App {
             &rows,
             "reading",
             &[],
-        ) {
+        )
+        .0
+        {
             let mut specs: Vec<Spec> = idioms
                 .iter()
                 .map(|i| Spec {
