@@ -18,6 +18,8 @@ impl App {
             let day = curriculum::day_number(&p);
             ui.label(format!("시작일 {} · Day {day}/{TOTAL_DAYS} · 학습한 날 {}일 · 연속 {}일 · 총 {}분", p.start_date, p.days_studied, p.streak, p.study_seconds / 60));
             ui.add_space(8.0);
+            level_bands_table(ui, p.level);
+            ui.add_space(8.0);
             level_chart(ui, &p.level_history, p.start_date);
         });
         ui.add_space(6.0);
@@ -145,6 +147,48 @@ impl App {
             self.store.save_items();
         }
     }
+}
+
+/// 영어 실력 레벨 7단계: the whole ladder, with the learner's step and the 6-month goal marked.
+fn level_bands_table(ui: &mut Ui, level: f32) {
+    ui.label(RichText::new(format!("📶 영어 실력 레벨 {}단계", LEVEL_BANDS.len())).size(17.0).strong());
+    ui.label(RichText::new("레벨 점수(1~10)로 단계가 정해지고, 레벨 테스트·주차 평가 결과로 올라가요. 단계에 맞춰 단어·지문·대화 난이도가 바뀝니다.").color(muted()).small());
+    ui.add_space(4.0);
+    let current = LEVEL_BANDS.iter().position(|b| level < b.0).unwrap_or(LEVEL_BANDS.len() - 1);
+    egui::Grid::new("level_bands").num_columns(6).spacing([22.0, 6.0]).striped(true).show(ui, |ui| {
+        for h in ["단계", "이름", "CEFR", "레벨 점수", "목표 어휘", ""] {
+            ui.label(RichText::new(h).strong().color(muted()));
+        }
+        ui.end_row();
+        for (i, (upper, name, cefr, words)) in LEVEL_BANDS.iter().enumerate() {
+            let lower = if i == 0 { None } else { Some(LEVEL_BANDS[i - 1].0) };
+            let range = match (lower, *upper < f32::MAX) {
+                (None, _) => format!("{upper:.1} 미만"),
+                (Some(l), true) => format!("{l:.1} ~ {upper:.1} 미만"),
+                (Some(l), false) => format!("{l:.1} 이상"),
+            };
+            let here = i == current;
+            let color = if here { ACCENT } else { text_strong() };
+            let cell = |ui: &mut Ui, t: String| {
+                let rt = RichText::new(t).color(color);
+                ui.label(if here { rt.strong() } else { rt });
+            };
+            cell(ui, (i + 1).to_string());
+            cell(ui, name.to_string());
+            cell(ui, cefr.to_string());
+            cell(ui, range);
+            cell(ui, format!("{}단어", crate::app::thousands(*words as u64)));
+            ui.horizontal(|ui| {
+                if here {
+                    chip(ui, "◀ 지금 내 레벨", ACCENT);
+                }
+                if *cefr == "B1" {
+                    chip(ui, "🎯 6개월 목표", GOOD);
+                }
+            });
+            ui.end_row();
+        }
+    });
 }
 
 fn level_chart(ui: &mut Ui, history: &[LevelRecord], start: chrono::NaiveDate) {

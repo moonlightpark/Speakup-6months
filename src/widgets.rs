@@ -165,6 +165,40 @@ pub fn chip(ui: &mut Ui, text: &str, color: Color32) {
 pub const BIG_BUTTON: Vec2 = Vec2::new(200.0, 46.0);
 pub const ACTION_BUTTON: Vec2 = Vec2::new(120.0, 38.0);
 
+/// An eye-catching button that invites a click: a gradient that breathes with a soft glow and
+/// a band of light sweeping across now and then. Action-button height; redraws at ~20 fps
+/// while it is on screen.
+pub fn shiny_button(ui: &mut Ui, text: &str, from: Color32, to: Color32) -> egui::Response {
+    let font = egui::FontId::proportional(16.0);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, Color32::WHITE);
+    let size = Vec2::new((galley.size().x + 36.0).max(ACTION_BUTTON.x), ACTION_BUTTON.y);
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, text));
+    let t = ui.input(|i| i.time) as f32;
+    let breathe = 0.5 + 0.5 * (t * 2.4).sin();
+    let p = ui.painter();
+    // Soft glow around it, swelling and fading.
+    let glow = if resp.hovered() { 1.0 } else { breathe };
+    p.rect_filled(rect.expand(2.0 + 3.0 * glow), 14.0, from.gamma_multiply(0.18 + 0.22 * glow));
+    let r = if resp.hovered() { rect.expand(1.0) } else { rect };
+    crate::art::gradient_rect(p, r, 11.0, from, to);
+    // A light band sweeping left to right every 2.6 s.
+    let phase = (t % 2.6) / 1.1;
+    if phase < 1.0 {
+        let x = r.left() - 30.0 + (r.width() + 60.0) * phase;
+        let band = egui::Rect::from_min_max(egui::pos2((x - 14.0).max(r.left()), r.top()), egui::pos2((x + 14.0).min(r.right()), r.bottom()));
+        if band.width() > 0.0 {
+            p.rect_filled(band, 0.0, Color32::from_white_alpha(46));
+        }
+    }
+    p.galley(r.center() - galley.size() / 2.0, galley, Color32::WHITE);
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+    resp
+}
+
 /// Main call-to-action button.
 pub fn primary_button(ui: &mut Ui, text: &str) -> egui::Response {
     ui.add(egui::Button::new(RichText::new(text).size(17.0).strong().color(Color32::WHITE)).fill(ACCENT).corner_radius(12.0).min_size(BIG_BUTTON))

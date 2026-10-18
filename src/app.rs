@@ -944,11 +944,11 @@ impl App {
         let level_words = level_words(p.level);
         let mut retest = false;
         ui.horizontal_top(|ui| {
-            use crate::screens::history::stat_card;
+            use crate::screens::history::{stat_card, stat_card_centered};
             let gap = ui.spacing().item_spacing.x;
             // Five cards across the content column (each adds 32 px of margin + 2 px of border).
             let w = ((ui.available_width().min(CONTENT_WIDTH) - gap * 4.0) / 5.0 - 34.0).max(100.0);
-            stat_card(ui, w, &format!("🔥 {}일", p.streak), "연속 학습", warn(), |_| {});
+            stat_card_centered(ui, w, &format!("🔥 {}일", p.streak), "연속 학습", warn());
             stat_card(ui, w, &fmt_minutes(total_mins), &format!("6개월 목표 {}분", thousands(program_mins)), themed(Color32::from_rgb(110, 220, 200), Color32::from_rgb(15, 140, 125)), |ui| {
                 let frac = total_mins as f32 / program_mins.max(1) as f32;
                 ui.add(egui::ProgressBar::new(frac.min(1.0)).desired_height(8.0).corner_radius(4.0).fill(Color32::from_rgb(110, 220, 200)));
@@ -956,7 +956,8 @@ impl App {
             });
             stat_card(ui, w, &format!("{mins} / {goal}분"), "오늘 학습 시간", if mins >= goal { GOOD } else { text_strong() }, |_| {});
             stat_card(ui, w, &format!("{} {}", level_name_of(p.level), cefr_of(p.level)), &format!("레벨 {:.1} / 10", p.level), ACCENT, |ui| {
-                retest = ui.button("📝 레벨 테스트").on_hover_text("지금 실력을 다시 측정해 맞는 레벨로 이동합니다").clicked();
+                // Taking the test often keeps the level (and so the content) right: make it inviting.
+                retest = shiny_button(ui, "📝 레벨 테스트 ›", ACCENT, crate::art::VIOLET).on_hover_text("자주 볼수록 좋아요! 지금 실력을 다시 측정해 맞는 레벨로 이동합니다").clicked();
             });
             stat_card(ui, w, &format!("{} / {}", words, thousands(level_words as u64)), &format!("배운 단어 / {} 필수", cefr_of(p.level)), themed(Color32::from_rgb(190, 140, 255), Color32::from_rgb(120, 70, 220)), |ui| {
                 ui.add(egui::ProgressBar::new((words as f32 / level_words as f32).min(1.0)).desired_height(8.0).corner_radius(4.0).fill(Color32::from_rgb(190, 140, 255)));

@@ -1012,7 +1012,7 @@ fn ft24_home_total_time_words_and_level_retest() {
         assert!(t.has(text), "home should show {text:?}");
     }
     // Retest from the home screen moves straight to the assessed level.
-    t.click("📝 레벨 테스트");
+    t.click("📝 레벨 테스트 ›");
     assert_eq!(t.app().screen, Screen::LevelTest);
     for (s, _) in crate::content::PLACEMENT.iter().take(4) {
         t.say(s, 2.0);
@@ -1767,4 +1767,12 @@ fn ft50_menu_tags_lead_through_todays_order() {
     assert!(t.has("다음은 2. 📖 문장 소리내어 읽기"));
     t.nav("🏠  홈");
     assert!(t.has("▶  오늘의 학습 이어하기 · 2. 📖 문장 소리내어 읽기"));
+}
+
+#[test]
+fn ft51_level_screen_explains_the_seven_levels() {
+    let mut t = launch("levels");
+    t.nav("📈  레벨 · 평가");
+    assert!(t.has("📶 영어 실력 레벨 7단계") && t.has_exact("초중급") && t.has_exact("2.0 ~ 3.5 미만") && t.has_exact("9.0 이상") && t.has_exact("8,000단어"));
+    assert!(t.has("◀ 지금 내 레벨") && t.has("🎯 6개월 목표"));
 }
