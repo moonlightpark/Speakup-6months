@@ -18,15 +18,27 @@ pub fn stat_tile(ui: &mut Ui, value: &str, label: &str, color: Color32) {
 
 /// A stat tile of a fixed width with extra content under the label (progress bar, button…).
 pub fn stat_card(ui: &mut Ui, width: f32, value: &str, label: &str, color: Color32, extra: impl FnOnce(&mut Ui)) {
+    let row_id = ui.id();
     egui::Frame::new().fill(card_bg()).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0_f32, border())).show(ui, |ui| {
         // Stack value, label and extras even when the tiles sit in a horizontal row.
         ui.vertical(|ui| {
             ui.set_width(width);
-            // Same height for every tile in a row, with or without extras.
-            ui.set_min_height(if width > 130.0 { 86.0 } else { 0.0 });
+            // Same height for every tile in a row: each frame the tiles grow to the tallest
+            // content of the previous frame (a wrapped label or a button makes one taller).
+            let id = row_id.with("stat_row_h");
+            let pass = ui.ctx().cumulative_pass_nr();
+            let (seen, tallest, last) = ui.data(|d| d.get_temp::<(u64, f32, f32)>(id)).unwrap_or((pass, 0.0, 0.0));
+            let (tallest, last) = if seen == pass { (tallest, last) } else { (0.0, tallest) };
+            ui.set_min_height(last);
+            let top = ui.min_rect().top();
             ui.label(RichText::new(value).size(24.0).strong().color(color));
             ui.label(RichText::new(label).color(muted()));
             extra(ui);
+            let natural = ui.min_rect().bottom().min(ui.cursor().top()) - top;
+            if natural > last + 0.5 {
+                ui.ctx().request_repaint();
+            }
+            ui.data_mut(|d| d.insert_temp(id, (pass, tallest.max(natural), last)));
         });
     });
 }
