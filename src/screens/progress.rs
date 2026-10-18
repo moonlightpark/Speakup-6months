@@ -18,7 +18,13 @@ impl App {
             let day = curriculum::day_number(&p);
             ui.label(format!("시작일 {} · Day {day}/{TOTAL_DAYS} · 학습한 날 {}일 · 연속 {}일 · 총 {}분", p.start_date, p.days_studied, p.streak, p.study_seconds / 60));
             ui.add_space(8.0);
-            level_bands_table(ui, p.level);
+            let goal = band_index_of_cefr(&self.store.settings.goal_cefr).unwrap_or(2);
+            level_bands_table(ui, p.level, goal);
+            ui.add_space(10.0);
+            if let Some(g) = goal_consulting(ui, &p, goal, self.store.items.iter().filter(|i| i.is_vocab_word()).count()) {
+                self.store.settings.goal_cefr = LEVEL_BANDS[g].2.to_string();
+                self.store.save_settings();
+            }
             ui.add_space(8.0);
             level_chart(ui, &p.level_history, p.start_date);
         });
@@ -150,7 +156,7 @@ impl App {
 }
 
 /// 영어 실력 레벨 7단계: the whole ladder, with the learner's step and the 6-month goal marked.
-fn level_bands_table(ui: &mut Ui, level: f32) {
+fn level_bands_table(ui: &mut Ui, level: f32, goal: usize) {
     ui.label(RichText::new(format!("📶 영어 실력 레벨 {}단계", LEVEL_BANDS.len())).size(17.0).strong());
     ui.label(RichText::new("레벨 점수(1~10)로 단계가 정해지고, 레벨 테스트·주차 평가 결과로 올라가요. 단계에 맞춰 단어·지문·대화 난이도가 바뀝니다.").color(muted()).small());
     ui.add_space(4.0);
@@ -182,13 +188,158 @@ fn level_bands_table(ui: &mut Ui, level: f32) {
                 if here {
                     chip(ui, "◀ 지금 내 레벨", ACCENT);
                 }
-                if *cefr == "B1" {
-                    chip(ui, "🎯 6개월 목표", GOOD);
+                if i == goal {
+                    chip(ui, "🎯 내 목표", GOOD);
                 }
             });
             ui.end_row();
         }
     });
+}
+
+/// 🎯 목표 레벨 컨설팅: study hours still needed from the learner's level to their goal, what
+/// their own pace and a few daily amounts add up to by the end, and advice — all worked out
+/// from the profile. Returns a newly chosen goal (index in `LEVEL_BANDS`).
+fn goal_consulting(ui: &mut Ui, p: &Profile, goal: usize, words: usize) -> Option<usize> {
+    let cur = band_index(p.level);
+    let mut chosen = None;
+    let day = curriculum::day_number(p);
+    let left_days = (TOTAL_DAYS - day + 1).max(1) as f32;
+    let studied_h = p.study_seconds as f32 / 3600.0;
+    let pace_min = p.study_seconds as f32 / 60.0 / day.max(1) as f32;
+    // Hours behind the learner when they started at this band (its range's middle).
+    let (clo, chi) = CUM_HOURS[cur];
+    let base_h = (clo + chi) as f32 / 2.0;
+    let (glo, ghi) = CUM_HOURS[goal];
+    let at_end = |daily_min: f32| base_h + studied_h + daily_min * left_days / 60.0;
+    let reached = |h: f32| CUM_HOURS.iter().rposition(|(lo, _)| h >= *lo as f32).map(|i| LEVEL_BANDS[i].2).unwrap_or("A1");
+    let verdict = |h: f32| {
+        if goal <= cur {
+            ("이미 도달", GOOD)
+        } else if h >= ghi as f32 {
+            ("목표 확실", GOOD)
+        } else if h >= glo as f32 {
+            ("목표 가능", GOOD)
+        } else if h >= glo as f32 * 0.85 {
+            ("목표 근접", warn())
+        } else {
+            ("목표 어려움", BAD)
+        }
+    };
+    egui::Frame::new().fill(subtle_fill()).corner_radius(12.0).inner_margin(14.0).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("🎯 목표 레벨 컨설팅").size(17.0).strong());
+            ui.label(RichText::new("내 목표:").color(muted()));
+            for (i, b) in LEVEL_BANDS.iter().enumerate().skip(1) {
+                let text = RichText::new(format!("🎯 {}", b.2)).strong();
+                if ui.selectable_label(i == goal, if i == goal { text.color(GOOD) } else { text }).on_hover_text(format!("{} — {}", b.1, GOAL_DESC[i])).clicked() && i != goal {
+                    chosen = Some(i);
+                }
+            }
+        });
+        ui.label(RichText::new(format!("{} 목표: {}", LEVEL_BANDS[goal].2, GOAL_DESC[goal])).color(ACCENT));
+        ui.add_space(6.0);
+
+        // 1. Hours to each level (reference).
+        ui.label(RichText::new("레벨별 누적 학습 시간 (케임브리지 영어 등의 추정치 · 수업+연습 합계, 개인차가 큰 참고값)").strong());
+        egui::Grid::new("cum_hours").num_columns(3).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
+            for (i, (lo, hi)) in CUM_HOURS.iter().enumerate().skip(1) {
+                let mark = if i == cur { "◀ 지금" } else if i == goal { "🎯 목표" } else { "" };
+                let color = if i == cur { ACCENT } else if i == goal { GOOD } else { text_strong() };
+                ui.label(RichText::new(LEVEL_BANDS[i].2).strong().color(color));
+                ui.label(RichText::new(format!("{lo}~{hi}시간")).color(color));
+                ui.label(RichText::new(mark).color(color).small());
+                ui.end_row();
+            }
+        });
+        ui.add_space(6.0);
+
+        // 2. What is still needed.
+        if goal <= cur {
+            ui.label(RichText::new(format!("👏 이미 목표({})에 도달했어요. 목표를 한 단계 올려 보세요!", LEVEL_BANDS[goal].2)).color(GOOD).strong());
+        } else {
+            let need_lo = (glo as f32 - chi as f32 - studied_h).max(0.0);
+            let need_hi = (ghi as f32 - clo as f32 - studied_h).max(0.0);
+            ui.label(RichText::new(format!(
+                "지금은 {}({} · 레벨 {:.1})이고 앱에서 {:.0}시간 공부했어요. {}까지 약 {:.0}~{:.0}시간 더 필요해요.",
+                LEVEL_BANDS[cur].2, LEVEL_BANDS[cur].1, p.level, studied_h, LEVEL_BANDS[goal].2, need_lo, need_hi
+            )));
+            for (i, (lo, hi)) in CUM_HOURS.iter().enumerate().skip(cur + 1).take(goal - cur) {
+                if i != goal {
+                    ui.label(RichText::new(format!("· {}까지 약 {:.0}~{:.0}시간", LEVEL_BANDS[i].2, (*lo as f32 - chi as f32 - studied_h).max(0.0), (*hi as f32 - clo as f32 - studied_h).max(0.0))).color(muted()));
+                }
+            }
+        }
+        ui.add_space(6.0);
+
+        // 3. Where each daily amount leads by the end of the 6 months.
+        ui.label(RichText::new(format!("남은 {:.0}일 동안 하루 학습량에 따라 쌓이는 시간", left_days)).strong());
+        egui::Grid::new("pace_table").num_columns(4).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
+            for h in ["하루 학습량", "6개월 끝 누적(추정)", "도달 예상", ""] {
+                ui.label(RichText::new(h).color(muted()));
+            }
+            ui.end_row();
+            let rows: [(String, f32); 4] = [
+                ("앱 60분".into(), 60.0),
+                ("앱 60분 + 듣기 30분 (권장)".into(), 90.0),
+                ("하루 2시간".into(), 120.0),
+                (format!("⭐ 지금 내 속도 (하루 평균 {pace_min:.0}분)"), pace_min),
+            ];
+            for (label, m) in rows {
+                let h = at_end(m);
+                let (v, c) = verdict(h);
+                let mine = label.starts_with('⭐');
+                ui.label(if mine { RichText::new(&label).strong().color(ACCENT) } else { RichText::new(&label) });
+                ui.label(format!("약 {:.0}시간", h));
+                ui.label(RichText::new(reached(h)).strong());
+                ui.label(RichText::new(v).color(c).strong());
+                ui.end_row();
+            }
+        });
+        if goal > cur {
+            let mid = (glo + ghi) as f32 / 2.0;
+            let need_daily = ((mid - base_h - studied_h) * 60.0 / left_days).max(0.0);
+            ui.label(RichText::new(format!("➡ {} 목표에 맞추려면 남은 기간 하루 평균 약 {:.0}분이 필요해요.", LEVEL_BANDS[goal].2, need_daily)).color(ACCENT).strong());
+        }
+        ui.add_space(6.0);
+
+        // 4. Why speaking decides it.
+        let vocab_end = words as f32 + 35.0 * left_days * 0.5;
+        let goal_words = LEVEL_BANDS[goal].3;
+        ui.label(RichText::new("어려운 건 말하기 유창성이에요").strong());
+        ui.label(format!(
+            "· 어휘: 지금 {words}단어 + 하루 35개씩 남은 {:.0}일(절반만 남아도) ≈ {:.0}단어 → {} 목표 어휘 {}단어 {}",
+            left_days,
+            vocab_end,
+            LEVEL_BANDS[goal].2,
+            crate::app::thousands(goal_words as u64),
+            if vocab_end >= goal_words as f32 { "✓ 충분해요" } else { "— 단어 학습을 빼먹지 마세요" }
+        ));
+        ui.label("· 속도를 정하는 건 말하기예요. 의견과 이유를 길게 말하는 힘은 시간보다 실제로 말한 양이 쌓여야 늘어요.");
+        ui.label("· 한국 성인 학습자는 읽기·어휘가 말하기보다 앞서는 경우가 많아요. 앱의 레벨은 말하기 평가가 따라와야 올라가요.");
+        ui.add_space(6.0);
+
+        // 5. Advice for this learner.
+        ui.label(RichText::new("제안").strong());
+        let next = (cur + 1).min(LEVEL_BANDS.len() - 1);
+        if goal > next {
+            ui.label(format!("· 목표를 \"기본 {}, 도전 {}\"로 생각하세요.", LEVEL_BANDS[next].2, LEVEL_BANDS[goal].2));
+        }
+        ui.label("· 하루 90분 이상(앱 60분 + 유튜브·팟캐스트 듣기 30분), 주 5일 이상");
+        ui.label("· 자기 표현과 회화를 빼먹지 않기 (말하기 40% 비중 지키기)");
+        ui.label("· 레벨 테스트를 자주 보기 — 레벨이 맞아야 단어·대화 난이도도 맞아요");
+        if goal > cur {
+            let check = LEVEL_BANDS[cur].0.min(LEVEL_BANDS[goal - 1].0);
+            ui.label(format!("· 중간 점검: 3~4개월째(Day 90~120)에 레벨 {:.1} 이상({})이면 순조로운 흐름이에요.", check, LEVEL_BANDS[band_index(check)].2));
+        }
+        if pace_min >= 90.0 {
+            ui.label(RichText::new(format!("· 지금 하루 평균 {pace_min:.0}분으로 권장량보다 많이 하고 있어요. 이 속도면 더 높은 목표도 좋아요!")).color(GOOD));
+        } else if day > 3 {
+            ui.label(RichText::new(format!("· 지금 하루 평균 {pace_min:.0}분이에요. 조금씩 늘려 하루 90분을 목표로 해 보세요.")).color(warn()));
+        }
+    });
+    chosen
 }
 
 fn level_chart(ui: &mut Ui, history: &[LevelRecord], start: chrono::NaiveDate) {

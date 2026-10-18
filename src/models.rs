@@ -40,6 +40,8 @@ pub struct Settings {
     /// Light screen theme (설정 > 테마); dark by default.
     #[serde(default)]
     pub light_theme: bool,
+    /// The learner's own 6-month goal (CEFR of a level band: "A2" … "C1").
+    pub goal_cefr: String,
     /// From month 3 the Korean colours were switched off once (the learner may turn them back on).
     pub ko_colors_faded: bool,
 }
@@ -69,6 +71,7 @@ impl Default for Settings {
             ko_role_colors: true,
             goal_60_applied: true,
             light_theme: false,
+            goal_cefr: "B1".into(),
             ko_colors_faded: false,
         }
     }
@@ -344,6 +347,30 @@ impl StudyItem {
     pub fn is_chunk(&self) -> bool {
         self.category == "phrase"
     }
+}
+
+/// Estimated cumulative study hours to reach each band (Cambridge-style guided learning
+/// hours; a rough guide, people differ a lot), same order as `LEVEL_BANDS`.
+pub const CUM_HOURS: [(u32, u32); 7] = [(90, 100), (180, 200), (350, 400), (450, 500), (500, 600), (600, 700), (700, 800)];
+
+/// What a goal level means in practice.
+pub const GOAL_DESC: [&str; 7] = [
+    "자기소개·간단한 질문에 짧게 답하기",
+    "익숙한 일상 주제로 짧게 묻고 답하기",
+    "일상·업무 주제로 10분 동안 막히지 않고 대화하기",
+    "낯선 주제도 의견과 이유를 길게, 막힘을 줄여 말하기",
+    "원어민과 업무 회의·토론을 자연스럽게 하기",
+    "복잡한 협상·발표를 유창하게 하기",
+    "어떤 주제든 정확하고 유연하게 말하기",
+];
+
+/// Index in `LEVEL_BANDS` of a level score, or of a CEFR name.
+pub fn band_index(level: f32) -> usize {
+    LEVEL_BANDS.iter().position(|b| level < b.0).unwrap_or(LEVEL_BANDS.len() - 1)
+}
+
+pub fn band_index_of_cefr(cefr: &str) -> Option<usize> {
+    LEVEL_BANDS.iter().position(|b| b.2 == cefr)
 }
 
 pub fn cefr_of(level: f32) -> &'static str {

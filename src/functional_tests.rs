@@ -1774,5 +1774,15 @@ fn ft51_level_screen_explains_the_seven_levels() {
     let mut t = launch("levels");
     t.nav("📈  레벨 · 평가");
     assert!(t.has("📶 영어 실력 레벨 7단계") && t.has_exact("초중급") && t.has_exact("2.0 ~ 3.5 미만") && t.has_exact("9.0 이상") && t.has_exact("8,000단어"));
-    assert!(t.has("◀ 지금 내 레벨") && t.has("🎯 6개월 목표"));
+    assert!(t.has("◀ 지금 내 레벨") && t.has("🎯 내 목표"));
+    // Consulting for this learner (A2, goal B1 by default) and a goal of their own.
+    assert!(t.has("🎯 목표 레벨 컨설팅") && t.has("B1 목표: 일상·업무 주제로") && t.has("⭐ 지금 내 속도") && t.has("하루 평균 약"));
+    assert!(t.has("B1까지 약"), "hours still needed");
+    t.click("🎯 B1+");
+    assert_eq!(t.app().store.settings.goal_cefr, "B1+");
+    let saved: Settings = serde_json::from_str(&std::fs::read_to_string(t.dir.join("settings.json")).unwrap()).unwrap();
+    assert_eq!(saved.goal_cefr, "B1+");
+    assert!(t.has("B1+ 목표: 낯선 주제도") && t.has("기본 B1, 도전 B1+"));
+    t.nav("🏠  홈");
+    assert!(t.has("🎯 6개월 목표: B1+ — 낯선 주제도"));
 }

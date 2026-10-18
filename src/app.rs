@@ -979,7 +979,10 @@ impl App {
                 ui.label(RichText::new("말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15 — 말은 들은 만큼 나와요").color(muted()));
             });
             ui.label(
-                RichText::new("🎯 6개월 목표: B1 — 일상·업무 주제로 10분 동안 막히지 않고 대화하기 · 하루 권장: 앱 60분 + 유튜브·팟캐스트 듣기 30분")
+                RichText::new({
+                    let g = band_index_of_cefr(&self.store.settings.goal_cefr).unwrap_or(2);
+                    format!("🎯 6개월 목표: {} — {} · 하루 권장: 앱 60분 + 유튜브·팟캐스트 듣기 30분", LEVEL_BANDS[g].2, GOAL_DESC[g])
+                })
                     .small()
                     .color(muted()),
             );
