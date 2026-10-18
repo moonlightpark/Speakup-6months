@@ -142,7 +142,7 @@ pub fn pump(ctx: &egui::Context, claude: Option<Claude>, enabled: bool) {
                 s.save();
             }
             Err(e) => {
-                eprintln!("ko roles: {e}");
+                crate::applog!("ko roles: {e}");
                 s.failed.extend(batch);
             }
         }

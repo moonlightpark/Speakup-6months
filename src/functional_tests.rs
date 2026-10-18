@@ -1187,3 +1187,23 @@ fn ft32_old_30_minute_goal_moves_to_60() {
     assert_eq!(t.app().store.settings.daily_goal_minutes, 60);
     assert!(t.has("0 / 60분") && t.has("6개월 목표: B1"));
 }
+
+#[test]
+fn ft33_progress_card_shows_each_activity() {
+    let t = launch_at(temp_dir("activity"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today() - chrono::Duration::days(5);
+        s.profile.today.date = Some(today());
+        s.profile.today.done = vec!["words".into(), "writing".into()];
+        let day = |n: i64, steps: &[&str]| DayRecord { date: Some(today() - chrono::Duration::days(n)), steps: steps.iter().map(|s| s.to_string()).collect(), ..Default::default() };
+        // Days before the program started don't count.
+        s.history = vec![day(3, &["words", "speed"]), day(2, &["words"]), day(9, &["words"])];
+    });
+    assert!(t.has("📊 진척율"));
+    for (key, n) in [("words", 3), ("speed", 1), ("writing", 1), ("business", 0), ("library", 0)] {
+        assert_eq!(t.app().activity_days(key), n, "{key}");
+    }
+    for text in ["1.6%  (3/182일) · 오늘 ✓", "0.5%  (1/182일) · 오늘 ✓", "0.5%  (1/182일)", "0.0%  (0/182일)", "📘 리딩 (동화·소설)", "💼 비즈니스 회화"] {
+        assert!(t.has(text), "progress card should show {text:?}");
+    }
+}

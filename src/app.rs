@@ -58,6 +58,10 @@ pub const STEPS: &[(&str, &str, Screen)] = &[
     ("writing", "✏ 쓰기 (받아쓰기·작문)", Screen::Writing),
 ];
 
+/// Activities shown on the 진척율 card (Order.md: 새단어, 문장 소리내어 읽기, 스피드 리딩·말하기,
+/// 자기표현 말하기, 비즈니스 회화, 리딩, 쓰기).
+pub const PROGRESS_ACTIVITIES: [&str; 7] = ["words", "reading", "speed", "speaking", "business", "library", "writing"];
+
 /// Daily time split by skill (Order: 말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15).
 pub const SKILL_WEIGHTS: [(&str, f32); 4] = [("🎤 말하기", 0.4), ("🎧 듣기", 0.3), ("📘 읽기", 0.15), ("✏ 쓰기", 0.15)];
 
@@ -342,6 +346,37 @@ impl App {
             .collect()
     }
 
+    /// Days (out of the 6-month program) on which a routine step was completed, today included.
+    pub fn activity_days(&self, key: &str) -> u32 {
+        let t = today();
+        let past = self.store.history.iter().filter(|r| r.date.is_some_and(|d| d < t && d >= self.store.profile.start_date) && r.steps.iter().any(|s| s == key)).count();
+        past as u32 + self.step_done(key) as u32
+    }
+
+    /// 진척율 card: progress of each daily activity over the 6-month program.
+    fn activity_progress_card(&self, ui: &mut egui::Ui) {
+        let colors = [crate::art::PINK, crate::art::CYAN, WARN, GOOD, Color32::from_rgb(190, 140, 255), Color32::from_rgb(110, 220, 200), Color32::from_rgb(255, 160, 64)];
+        card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("📊 진척율").size(17.0).strong());
+                ui.label(RichText::new(format!("활동별로 마친 날 / 6개월 {TOTAL_DAYS}일")).color(MUTED));
+            });
+            ui.add_space(4.0);
+            egui::Grid::new("activity_progress").num_columns(3).spacing([14.0, 6.0]).show(ui, |ui| {
+                for (i, key) in PROGRESS_ACTIVITIES.iter().enumerate() {
+                    let Some((_, label, _)) = STEPS.iter().find(|s| s.0 == *key) else { continue };
+                    let n = self.activity_days(key);
+                    let frac = n as f32 / TOTAL_DAYS as f32;
+                    ui.label(RichText::new(*label).strong());
+                    ui.add(egui::ProgressBar::new(frac.min(1.0)).desired_width(320.0).desired_height(10.0).corner_radius(5.0).fill(colors[i % colors.len()]));
+                    let today_mark = if self.step_done(key) { " · 오늘 ✓" } else { "" };
+                    ui.label(RichText::new(format!("{:.1}%  ({n}/{TOTAL_DAYS}일){today_mark}", frac * 100.0)).color(MUTED));
+                    ui.end_row();
+                }
+            });
+        });
+    }
+
     pub fn step_done(&self, key: &str) -> bool {
         self.store.profile.today.done.iter().any(|d| d == key)
     }
@@ -540,6 +575,7 @@ impl App {
         self.voice.speaker.stop();
         if s != self.screen {
             self.queue = None;
+            crate::applog!("screen: {:?} → {s:?}", self.screen);
         }
         self.screen = s;
     }
@@ -730,6 +766,8 @@ impl App {
             self.test = Some(LevelTest::retest());
             self.go(Screen::LevelTest);
         }
+        ui.add_space(12.0);
+        self.activity_progress_card(ui);
         ui.add_space(12.0);
 
         // Skill balance: 말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15 of the daily goal.

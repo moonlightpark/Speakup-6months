@@ -86,6 +86,8 @@ impl Claude {
         });
         let client = reqwest::blocking::Client::builder().timeout(Duration::from_secs(300)).build()?;
         let mut last_err = anyhow!("요청 실패");
+        let t0 = std::time::Instant::now();
+        let what: String = user.chars().take(60).collect::<String>().replace('\n', " ");
         for attempt in 0..3 {
             if attempt > 0 {
                 std::thread::sleep(Duration::from_secs(2u64.pow(attempt)));
@@ -101,12 +103,14 @@ impl Claude {
             {
                 Ok(r) => r,
                 Err(e) => {
+                    crate::applog!("claude: 네트워크 오류 · {e}");
                     last_err = anyhow!("네트워크 오류: {e}");
                     continue;
                 }
             };
             let status = resp.status().as_u16();
             let text = resp.text().unwrap_or_default();
+            crate::applog!("claude: {status} · {:.1}초 · {}B · \"{what}…\"", t0.elapsed().as_secs_f32(), text.len());
             match status {
                 200 => return parse_response(&text),
                 401 | 403 => bail!("Claude API 키가 올바르지 않습니다 (설정에서 확인하세요)."),

@@ -40,7 +40,7 @@ pub struct Store {
 fn load_json<T: DeserializeOwned + Default>(path: &Path) -> T {
     match fs::read_to_string(path) {
         Ok(s) => serde_json::from_str(&s).unwrap_or_else(|e| {
-            eprintln!("warning: could not parse {}: {e}", path.display());
+            crate::applog!("storage: {} 읽기 실패 · {e}", path.display());
             // Keep the unreadable file so the user's data is never silently lost.
             let _ = fs::copy(path, path.with_extension("json.broken"));
             T::default()
@@ -278,7 +278,7 @@ pub fn chunks_match(text: &str, chunks: &[Chunk]) -> bool {
 
 fn log_err(r: Result<()>) {
     if let Err(e) = r {
-        eprintln!("save error: {e:#}");
+        crate::applog!("storage: 저장 실패 · {e:#}");
     }
 }
 

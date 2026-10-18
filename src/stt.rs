@@ -126,6 +126,7 @@ impl Stt {
             return rx;
         }
         if rms(&audio) < 0.004 {
+            crate::applog!("stt: 소리가 너무 작음 (rms {:.4})", rms(&audio));
             let _ = tx.send(Err(anyhow!("목소리가 들리지 않았어요. 마이크에 조금 더 크게 말해 보세요.")));
         } else if !self.is_ready() {
             let _ = tx.send(Err(anyhow!("음성 인식 모델이 아직 준비되지 않았습니다 (설정 확인).")));
@@ -148,6 +149,7 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::syn
         let p = path.as_ref().ok_or_else(|| anyhow!("모델이 선택되지 않았습니다"))?.to_string_lossy().to_string();
         let _guard = MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
         let c = WhisperContext::new_with_params(&p, WhisperContextParameters::default()).map_err(|e| anyhow!("모델 로드 실패: {e}"))?;
+        crate::applog!("stt: 모델 로드 · {p}");
         *ctx = Some(c);
         loaded.store(true, Ordering::Relaxed);
         Ok(())
@@ -157,6 +159,9 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::syn
             Ok(j) => j,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // Idle: give the memory back.
+                if ctx.is_some() {
+                    crate::applog!("stt: 쉬는 동안 음성 인식 모델 해제");
+                }
                 ctx = None;
                 loaded.store(false, Ordering::Relaxed);
                 continue;
@@ -177,6 +182,8 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::syn
                 }
             }
             Job::Transcribe(mut audio, reply) => {
+                let t0 = std::time::Instant::now();
+                let secs = audio.len() as f32 / STT_RATE as f32;
                 let result = (|| -> Result<String> {
                     ensure(&mut ctx, &path)?;
                     let ctx = ctx.as_ref().ok_or_else(|| anyhow!("모델이 로드되지 않았습니다"))?;
@@ -203,6 +210,10 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::syn
                     }
                     Ok(clean_transcript(&text))
                 })();
+                match &result {
+                    Ok(t) => crate::applog!("stt: {secs:.1}초 → {:.1}초 만에 인식 · \"{t}\"", t0.elapsed().as_secs_f32()),
+                    Err(e) => crate::applog!("stt: {secs:.1}초 인식 실패 · {e:#}"),
+                }
                 let _ = reply.send(result);
             }
         }

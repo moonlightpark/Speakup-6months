@@ -184,16 +184,25 @@ impl Recorder {
                         match open_input(&shared, &state, &name) {
                             Ok(s) => {
                                 stream = Some(s);
+                                crate::applog!("mic: 녹음 시작 · {} · {} Hz", shared.device.lock().unwrap(), shared.rate.load(Ordering::Relaxed));
                                 let mut st = state.lock().unwrap();
                                 // A Stop may already have arrived while the device was opening.
                                 if *st == RecState::Starting {
                                     *st = RecState::Recording;
                                 }
                             }
-                            Err(e) => *state.lock().unwrap() = RecState::Failed(format!("{e:#}")),
+                            Err(e) => {
+                                crate::applog!("mic: 열기 실패 · {e:#}");
+                                *state.lock().unwrap() = RecState::Failed(format!("{e:#}"));
+                            }
                         }
                     }
-                    RecCmd::Stop => close_input(&mut stream),
+                    RecCmd::Stop => {
+                        if stream.is_some() {
+                            crate::applog!("mic: 녹음 정지 · 콜백 {}회", shared.callbacks.load(Ordering::Relaxed));
+                        }
+                        close_input(&mut stream);
+                    }
                 }
             }
             close_input(&mut stream);
@@ -219,7 +228,7 @@ fn open_input(shared: &Arc<RecShared>, state: &Arc<Mutex<RecState>>, name: &str)
     shared.rate.store(config.sample_rate().0, Ordering::Relaxed);
     let st = state.clone();
     let err_fn = move |e: cpal::StreamError| {
-        eprintln!("mic stream error: {e}");
+        crate::applog!("mic: 스트림 오류 · {e}");
         let mut s = st.lock().unwrap();
         if *s == RecState::Recording {
             *s = RecState::Failed(format!("마이크 연결이 끊겼습니다: {e}"));
@@ -343,7 +352,9 @@ impl Recorder {
         let raw = std::mem::take(&mut *self.shared.buf.lock().unwrap());
         // Already 16 kHz unless the mic itself runs slower (e.g. a Bluetooth headset at 8 kHz).
         let rate = self.shared.rate.load(Ordering::Relaxed);
-        if rate > STT_RATE { raw } else { resample(&raw, rate, STT_RATE) }
+        let audio = if rate > STT_RATE { raw } else { resample(&raw, rate, STT_RATE) };
+        crate::applog!("mic: 녹음 결과 {} 샘플 ({:.1}초) · rms {:.4}", audio.len(), audio.len() as f32 / STT_RATE as f32, rms(&audio));
+        audio
     }
 
     /// Clears a failed state after the error has been shown.
@@ -531,9 +542,12 @@ fn open_output(preferred: &str) -> Option<Output> {
     let name = device.name().unwrap_or_default();
     let rate = device.default_output_config().map(|c| c.sample_rate().0).unwrap_or(0);
     match OutputStream::try_from_device(&device).or_else(|_| OutputStream::try_default()) {
-        Ok((stream, handle)) => Some(Output { _stream: stream, handle, name, rate }),
+        Ok((stream, handle)) => {
+            crate::applog!("speaker: 출력 열기 · {name} · {rate} Hz");
+            Some(Output { _stream: stream, handle, name, rate })
+        }
         Err(e) => {
-            eprintln!("audio output unavailable: {e}");
+            crate::applog!("speaker: 출력 열기 실패 · {e}");
             None
         }
     }

@@ -5,6 +5,7 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod app;
+mod applog;
 mod art;
 mod audio;
 mod claude;
@@ -31,6 +32,7 @@ mod youtube;
 mod functional_tests;
 
 fn main() -> eframe::Result<()> {
+    applog::init(&storage::data_dir());
     // Exactly sidebar + content column + margins (32 + 24) + scrollbar, so nothing is wasted.
     let width = app::SIDEBAR_WIDTH + app::CONTENT_WIDTH + 32.0 + 24.0 + 12.0;
     let options = eframe::NativeOptions {

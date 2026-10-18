@@ -10,3 +10,6 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Working files (Order.md: never committed)
+/DATA/

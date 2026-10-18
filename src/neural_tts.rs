@@ -12,7 +12,7 @@ use std::collections::{HashMap, VecDeque};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex};
 
 pub const MODEL_DIR: &str = "kokoro-multi-lang-v1_0";
@@ -216,9 +216,9 @@ fn open_engine(dir: &Path, british: bool) -> Result<KokoroTts> {
         voices: p("voices.bin"),
         tokens: p("tokens.txt"),
         data_dir: p("espeak-ng-data"),
-        // The model insists on the dictionary folder, but the Chinese lexicon is left out:
-        // only English is spoken, and it would take ~400 MB of memory.
-        dict_dir: p("dict"),
+        // The model insists on the Chinese word-segmentation dictionary, and the Chinese lexicon
+        // is left out: only English is spoken, and loading them in full takes hundreds of MB.
+        dict_dir: slim_dict(dir).unwrap_or_else(|_| p("dict")),
         lexicon: p(lexicon),
         length_scale: 1.0,
         // "en-gb" makes sherpa-onnx throw (and abort the process); the British lexicon with
@@ -228,6 +228,30 @@ fn open_engine(dir: &Path, british: bool) -> Result<KokoroTts> {
         ..Default::default()
     }))
 }
+
+/// A tiny copy of the jieba dictionary folder (`dict-slim`): the multi-language model needs one
+/// to start, but English text never reaches it, so a few entries per file are enough.
+fn slim_dict(dir: &Path) -> Result<String> {
+    let src = dir.join("dict");
+    let dst = dir.join("dict-slim");
+    let done = dst.join(".complete");
+    if !done.exists() {
+        std::fs::create_dir_all(dst.join("pos_dict"))?;
+        for f in ["jieba.dict.utf8", "idf.utf8", "user.dict.utf8"] {
+            let text = std::fs::read_to_string(src.join(f))?;
+            let head: String = text.lines().take(200).map(|l| format!("{l}\n")).collect();
+            std::fs::write(dst.join(f), head)?;
+        }
+        for f in ["hmm_model.utf8", "stop_words.utf8", "pos_dict/char_state_tab.utf8", "pos_dict/prob_emit.utf8", "pos_dict/prob_start.utf8", "pos_dict/prob_trans.utf8"] {
+            std::fs::copy(src.join(f), dst.join(f))?;
+        }
+        std::fs::write(&done, "")?;
+    }
+    Ok(dst.to_string_lossy().into_owned())
+}
+
+/// The voice model is released after this long without speech.
+const IDLE_UNLOAD: std::time::Duration = std::time::Duration::from_secs(300);
 
 fn worker(rx: Receiver<Job>, status: Arc<Mutex<NeuralStatus>>, generation: Arc<AtomicU64>, player: PlayerHandle) {
     // The engine for the current accent (the lexicon differs); switching accents reopens it.
@@ -241,29 +265,31 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<NeuralStatus>>, generation: Arc<A
             Ok(j) => j,
             Err(_) => match backlog.pop_front() {
                 Some(j) => j,
-                None => match rx.recv() {
+                None => match rx.recv_timeout(IDLE_UNLOAD) {
                     Ok(j) => j,
-                    Err(_) => break,
+                    Err(RecvTimeoutError::Timeout) => {
+                        // Idle: give the model's memory (~700 MB) back; it reloads on the next sentence.
+                        if !engines.is_empty() {
+                            engines.clear();
+                            crate::applog!("tts: 쉬는 동안 음성 엔진 해제");
+                        }
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => break,
                 },
             },
         };
         match job {
-            Job::Load(d) => match {
-                let _guard = crate::stt::MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
-                open_engine(&d, false).map(|mut e| {
-                    // The first inference is several times slower than the rest; pay it now.
-                    let _ = e.create("Hello there.", VOICES[0].0, 1.0);
-                    e
-                })
-            } {
-                Ok(e) => {
-                    engines.clear();
-                    engines.insert(false, e);
+            // The engine itself (~1 GB in memory) is opened on the first sentence, not at startup.
+            Job::Load(d) => {
+                engines.clear();
+                if ["model.onnx", "voices.bin", "tokens.txt"].iter().all(|f| d.join(f).exists()) {
                     dir = Some(d);
                     *status.lock().unwrap() = NeuralStatus::Ready;
+                } else {
+                    *status.lock().unwrap() = NeuralStatus::Error(format!("모델 파일이 없습니다: {}", d.display()));
                 }
-                Err(e) => *status.lock().unwrap() = NeuralStatus::Error(format!("{e:#}")),
-            },
+            }
             Job::Prefetch { text, voice, speed } => {
                 if dir.is_none() {
                     continue;
@@ -316,15 +342,18 @@ pub const SAMPLE_RATE: u32 = 24_000;
 fn synth(engines: &mut HashMap<bool, KokoroTts>, dir: Option<&Path>, text: &str, voice: &str, speed: f32) -> Option<Arc<Vec<f32>>> {
     let british = voice.starts_with('b');
     if !engines.contains_key(&british) {
+        // One engine at a time: both accents share the same large model.
+        engines.clear();
+        crate::applog!("tts: 음성 엔진 로드 ({})", if british { "영국" } else { "미국" });
         let _guard = crate::stt::MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
-        let e = open_engine(dir?, british).map_err(|e| eprintln!("tts: {e:#}")).ok()?;
+        let e = open_engine(dir?, british).map_err(|e| crate::applog!("tts: {e:#}")).ok()?;
         engines.insert(british, e);
     }
     let engine = engines.get_mut(&british)?;
     match engine.create(text, voice_id(voice), speed.clamp(0.5, 2.0)) {
         Ok(a) => Some(Arc::new(fade_edges(a.samples, a.sample_rate))),
         Err(e) => {
-            eprintln!("tts: {e:#}");
+            crate::applog!("tts: {e:#}");
             None
         }
     }
