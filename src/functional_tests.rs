@@ -389,6 +389,10 @@ fn ft04_new_words_repeat_until_passed_then_saved_to_srs() {
     t.say("Let me check my schedule.", 1.5);
     t.click("다음 ▶");
     assert!(t.has("잘했어요!"));
+    // The buttons sit below the celebration animation (300 px), not on top of it.
+    let score_bottom = t.h.query_by_label_contains("첫 시도 평균").and_then(|n| n.raw_bounds()).unwrap().y1;
+    let home_top = t.h.get_by_label("🏠 홈으로").raw_bounds().unwrap().y0;
+    assert!(home_top > score_bottom + 150.0, "buttons below the animation: score ends at {score_bottom}, button starts at {home_top}");
     let items = &t.app().store.items;
     let d = items.iter().find(|i| i.text == "deadline").expect("word saved to SRS");
     assert_eq!(d.kind, ItemKind::Word);

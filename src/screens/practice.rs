@@ -124,6 +124,9 @@ impl App {
             let shown = avg * (t / 1.2).min(1.0);
             let sub = egui::Rect::from_center_size(rect.center_top() + Vec2::new(0.0, 108.0), Vec2::new(rect.width() - 200.0, 30.0));
             ui.put(sub, egui::Label::new(RichText::new(format!("{title} 완료 · 첫 시도 평균 {shown:.0}점")).size(18.0).color(Color32::from_rgb(230, 230, 255))));
+            // `put` moves the layout cursor to the labels; continue below the whole animation so
+            // the buttons never sit on top of it.
+            ui.advance_cursor_after_rect(rect);
             ui.add_space(8.0);
             if !weak.is_empty() {
                 card(ui, |ui| {
