@@ -80,6 +80,7 @@ impl Speaker {
 
     /// Speaks `text`, interrupting anything already playing. `speed` is relative (1.0 = normal).
     pub fn say(&mut self, text: &str, speed: f32) {
+        let text = &speakable(text);
         if self.neural_wanted() {
             if let Some(t) = &mut self.tts {
                 let _ = t.stop();
@@ -109,11 +110,30 @@ impl Speaker {
 
     /// Synthesizes ahead of time so pressing 🔊 later plays instantly (neural voice only).
     pub fn prefetch(&self, text: &str, speed: f32) {
+        let text = &speakable(text);
         if self.neural_active() {
             if let Some(n) = &self.neural {
                 n.prefetch(text, &self.neural_voice, speed);
             }
         }
+    }
+}
+
+/// Text as it should be read aloud: icons such as 💬 🔗 🔊 ✓ are dropped, so the voice never
+/// says "speech balloon". Letters (any language), digits and ordinary punctuation are kept.
+pub fn speakable(text: &str) -> String {
+    let keep = |c: char| c.is_alphanumeric() || c.is_whitespace() || c.is_ascii_punctuation() || "‘’“”–—…·".contains(c);
+    text.chars().filter(|c| keep(*c)).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod speakable_tests {
+    #[test]
+    fn icons_are_not_read_aloud() {
+        assert_eq!(super::speakable("💬 It's my first time"), "It's my first time");
+        assert_eq!(super::speakable("🔗 It depends on"), "It depends on");
+        assert_eq!(super::speakable("✓ Done! ❤️ \u{1F9D1}\u{200D}\u{1F3EB} Nice — “quote” 3:30"), "Done! Nice — “quote” 3:30");
+        assert_eq!(super::speakable("이번이 처음이야 😆"), "이번이 처음이야");
     }
 }
 
