@@ -228,7 +228,7 @@ impl App {
                     st.testing = false;
                     let samples = self.voice.recorder.stop();
                     st.result = Some(match problem {
-                        Some(p) => Err(p.message()),
+                        Some(p) => Err(p.message(&self.voice.recorder.active_device())),
                         None if st.peak < 0.01 => Err("소리가 거의 들리지 않았어요. 마이크에 가까이 대고 말하거나 다른 마이크를 골라 보세요.".into()),
                         None => {
                             let dev = self.voice.recorder.active_device();

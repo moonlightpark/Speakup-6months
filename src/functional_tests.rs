@@ -348,7 +348,8 @@ fn ft03_lesson_generation_request_shape() {
     let mut t = launch("lessonreq");
     t.nav("📚  새 단어");
     t.wait("lesson", |a| a.lesson.is_some());
-    let req = t.mock.requests.lock().unwrap()[0].clone();
+    // Other background requests (Korean colour roles) may arrive first.
+    let req = t.mock.requests.lock().unwrap().iter().find(|r| r["messages"][0]["content"].as_str().unwrap_or("").starts_with("Create today's lesson")).cloned().expect("lesson request");
     assert_eq!(req["model"], "claude-opus-5-5");
     assert_eq!(req["fallbacks"], "default");
     assert_eq!(req["output_config"]["format"]["type"], "json_schema");

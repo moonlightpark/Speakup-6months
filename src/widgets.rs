@@ -193,7 +193,7 @@ impl Capture {
         let audio = voice.recorder.stop();
         if let Some(p) = problem {
             // Nothing real was recorded; don't let the recognizer guess at silence.
-            self.error = Some(p.message());
+            self.error = Some(p.message(&voice.recorder.active_device()));
             return;
         }
         self.last_secs = crate::audio::voiced_seconds(&audio, crate::audio::STT_RATE);

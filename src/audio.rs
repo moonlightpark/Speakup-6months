@@ -35,17 +35,22 @@ pub fn is_headset_mic(mic: &str, outputs: &[String]) -> bool {
     if mic.is_empty() {
         return false;
     }
-    let l = mic.to_lowercase();
-    if ["macbook", "built-in", "내장", "microphone array"].iter().any(|b| l.contains(b)) {
+    if is_builtin_mic(mic) {
         return false;
     }
+    let l = mic.to_lowercase();
     l.contains("hands-free") || l.contains("airpods") || outputs.iter().any(|o| o == mic)
+}
+
+/// The laptop's own microphone ("MacBook Pro 마이크", "Microphone Array (Realtek…)").
+pub fn is_builtin_mic(name: &str) -> bool {
+    let l = name.to_lowercase();
+    ["macbook", "built-in", "내장", "microphone array"].iter().any(|b| l.contains(b))
 }
 
 /// A microphone that is not part of a headset (the laptop's own mic first), if any.
 pub fn non_headset_mic(inputs: &[String], outputs: &[String]) -> Option<String> {
-    let builtin = |n: &&String| ["macbook", "built-in", "내장", "microphone array"].iter().any(|b| n.to_lowercase().contains(b));
-    inputs.iter().find(builtin).or_else(|| inputs.iter().find(|n| !is_headset_mic(n, outputs))).cloned()
+    inputs.iter().find(|n| is_builtin_mic(n)).or_else(|| inputs.iter().find(|n| !is_headset_mic(n, outputs))).cloned()
 }
 
 pub fn current_input_name(preferred: &str) -> String {
@@ -85,9 +90,14 @@ pub enum MicProblem {
 }
 
 impl MicProblem {
-    pub fn message(self) -> String {
+    /// What to tell the learner; `device` is the microphone actually in use.
+    pub fn message(self, device: &str) -> String {
         match self {
             MicProblem::NoData => "마이크에서 소리가 들어오지 않습니다. 설정 > 오디오 장치에서 다른 마이크를 골라 보세요.".into(),
+            // A separate (e.g. wireless) mic: the lid and the laptop's privacy switch don't matter.
+            MicProblem::Blocked if !device.is_empty() && !is_builtin_mic(device) => format!(
+                "선택한 마이크 '{device}'에서 소리가 들어오지 않습니다(입력 신호 0). 무선 마이크라면 송신기가 켜져 있고 수신기와 연결됐는지, 음소거가 아닌지 확인한 뒤 다시 녹음해 보세요."
+            ),
             MicProblem::Blocked if crate::mic_permission::lid_closed() => {
                 "노트북 덮개가 닫혀 있어 내장 마이크가 꺼져 있습니다(입력 신호 0). 덮개를 열거나, 헤드셋·이어폰 마이크를 연결한 뒤 설정 > 오디오 장치에서 그 마이크를 고르세요.".into()
             }
@@ -111,6 +121,11 @@ fn decimate_push(out: &mut Vec<f32>, dec: &mut (f32, f32, f64), v: f32, step: f6
         *dec = (0.0, 0.0, dec.2 - step);
     }
 }
+
+/// A stream that has delivered only zeros this long is reopened (up to twice).
+const SILENT_REOPEN: Duration = Duration::from_millis(700);
+/// Seconds of all-zero input before the learner is told the mic is blocked.
+const BLOCKED_AFTER: f32 = 2.5;
 
 /// Longest recording kept (4/3/2 speaking needs 4 minutes); later samples are dropped.
 const MAX_REC_SECS: usize = 260;
@@ -177,10 +192,37 @@ impl Recorder {
         let (shared, state) = (r.shared.clone(), r.state.clone());
         std::thread::spawn(move || {
             let mut stream: Option<cpal::Stream> = None;
-            for cmd in rx {
+            // (device name, when the stream opened, reopens so far) for the silent-stream check.
+            let mut current: Option<(String, Instant, u32)> = None;
+            loop {
+                let cmd = match rx.recv_timeout(Duration::from_millis(100)) {
+                    Ok(c) => c,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        // A wireless mic woken from sleep (e.g. DJI Mic 2) can open a stream that
+                        // only ever delivers zeros, while opening it again right away works.
+                        if let Some((name, opened, reopens)) = &mut current {
+                            let silent = shared.callbacks.load(Ordering::Relaxed) > 0 && !shared.signal.load(Ordering::Relaxed);
+                            if stream.is_some() && *state.lock().unwrap() == RecState::Recording && silent && opened.elapsed() > SILENT_REOPEN && *reopens < 2 {
+                                *reopens += 1;
+                                crate::applog!("mic: 입력 신호 0 → 다시 열기 ({}번째) · {name}", reopens);
+                                close_input(&mut stream);
+                                shared.buf.lock().unwrap().clear();
+                                *shared.dec.lock().unwrap() = (0.0, 0.0, 0.0);
+                                match open_input(&shared, &state, name) {
+                                    Ok(s) => stream = Some(s),
+                                    Err(e) => crate::applog!("mic: 다시 열기 실패 · {e:#}"),
+                                }
+                                *opened = Instant::now();
+                            }
+                        }
+                        continue;
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                };
                 match cmd {
                     RecCmd::Start(name) => {
                         close_input(&mut stream);
+                        current = Some((name.clone(), Instant::now(), 0));
                         match open_input(&shared, &state, &name) {
                             Ok(s) => {
                                 stream = Some(s);
@@ -198,6 +240,7 @@ impl Recorder {
                         }
                     }
                     RecCmd::Stop => {
+                        current = None;
                         if stream.is_some() {
                             crate::applog!("mic: 녹음 정지 · 콜백 {}회", shared.callbacks.load(Ordering::Relaxed));
                         }
@@ -309,7 +352,8 @@ impl Recorder {
         }
         if self.shared.callbacks.load(Ordering::Relaxed) == 0 {
             Some(MicProblem::NoData)
-        } else if !self.shared.signal.load(Ordering::Relaxed) {
+        } else if !self.shared.signal.load(Ordering::Relaxed) && self.elapsed() >= BLOCKED_AFTER {
+            // Only after the silent stream has been reopened (see SILENT_REOPEN) without success.
             Some(MicProblem::Blocked)
         } else {
             None
@@ -878,6 +922,21 @@ mod tests {
             assert!(audio.len() < 16_000 * 2, "one recording's worth of audio");
         }
         println!("rss growth over {n} recordings: {} KB", rss() as i64 - rss0 as i64);
+    }
+
+    /// How long a (wireless) mic sends silence after opening, depending on how long it was idle.
+    #[test]
+    #[ignore]
+    fn real_mic_wakeup() {
+        let mut r = Recorder::new(std::env::var("SPEAKUP_TEST_MIC").unwrap_or_default());
+        for idle in [0u64, 0, 5, 15, 40] {
+            std::thread::sleep(Duration::from_secs(idle));
+            r.start();
+            std::thread::sleep(Duration::from_millis(3500));
+            let audio = r.stop();
+            let first = audio.iter().position(|s| s.abs() > 1e-6).map(|i| format!("{:.2}s", i as f32 / STT_RATE as f32)).unwrap_or("never".into());
+            println!("idle {idle:>2}s → first sound at {first} of {:.1}s", audio.len() as f32 / STT_RATE as f32);
+        }
     }
 
     #[test]
