@@ -11,6 +11,7 @@ mod audio;
 mod claude;
 mod content;
 mod curriculum;
+mod dictionary;
 mod expressions;
 mod grammar;
 mod idioms;

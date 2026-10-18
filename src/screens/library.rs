@@ -325,43 +325,66 @@ impl App {
                                 role_legend(ui, &chunks);
                                 chunk_view(ui, &chunks, None, 17.0);
                             }
-                            // Word lookup
-                            if claude.is_some() {
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.label(RichText::new("단어 뜻:").color(MUTED).small());
-                                    for w in sentence.split_whitespace() {
-                                        let clean: String = w.chars().filter(|c| c.is_alphabetic() || *c == '\'' || *c == '-').collect();
-                                        if clean.len() < 3 {
-                                            continue;
-                                        }
-                                        if ui.small_button(&clean).clicked() {
-                                            if let Some(c) = claude.clone() {
-                                                let (cw, cs) = (clean.clone(), sentence.clone());
-                                                r.word_result = Some((clean.clone(), sentence.clone(), Err("…".into())));
-                                                r.word.spawn(move || c.word_in_context(&cw, &cs));
-                                            }
-                                        }
+                            // Word lookup: the built-in 6,000-word dictionary first (instant, no API).
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(RichText::new("단어 뜻:").color(MUTED).small());
+                                for w in sentence.split_whitespace() {
+                                    let clean: String = w.chars().filter(|c| c.is_alphabetic() || *c == '\'' || *c == '’' || *c == '-').collect();
+                                    if clean.len() < 2 {
+                                        continue;
                                     }
-                                });
-                            }
-                            if let Some((w, _, res)) = &r.word_result {
+                                    if ui.small_button(&clean).clicked() {
+                                        r.word_result = Some(match crate::dictionary::lookup(&clean) {
+                                            Some((b, inflected)) => {
+                                                let base = if inflected { format!(" · '{clean}'의 기본형") } else { String::new() };
+                                                let m = WordMeaning {
+                                                    meaning_ko: b.meaning_ko.clone(),
+                                                    note_ko: format!("{}{base} · 📖 사전", b.pos_ko),
+                                                    example: b.example.clone(),
+                                                    example_ko: b.example_ko.clone(),
+                                                    proper_noun: false,
+                                                };
+                                                (b.word.clone(), sentence.clone(), Ok(m))
+                                            }
+                                            None => (clean.clone(), sentence.clone(), Err(NOT_IN_DICTIONARY.into())),
+                                        });
+                                    }
+                                }
+                            });
+                            if let Some((w, s, res)) = r.word_result.clone() {
                                 match res {
                                     Ok(m) => {
                                         ui.horizontal_wrapped(|ui| {
-                                            ui.label(RichText::new(w).strong().color(GLOSS));
+                                            ui.label(RichText::new(&w).strong().color(GLOSS));
                                             ui.label(&m.meaning_ko);
                                             if !m.note_ko.is_empty() {
                                                 ui.label(RichText::new(&m.note_ko).color(MUTED).small());
                                             }
-                                            if m.proper_noun || is_proper_noun(w, &m.meaning_ko) {
+                                            if m.proper_noun || is_proper_noun(&w, &m.meaning_ko) {
                                                 ui.label(RichText::new("지명·이름 — 단어장에 넣지 않아요").color(MUTED).small());
                                             } else if ui.small_button("＋ 단어장").clicked() {
                                                 save_word = Some((w.clone(), m.clone()));
                                             }
                                         });
+                                        if !m.example.is_empty() {
+                                            ui.label(RichText::new(format!("예) {} — {}", m.example, m.example_ko)).color(MUTED).small());
+                                        }
                                     }
-                                    Err(_) if r.word.running() => spinner_label(ui, "뜻 찾는 중…"),
-                                    Err(e) => error_label(ui, e),
+                                    Err(_) if r.word.running() => spinner_label(ui, "문맥 속 뜻을 묻는 중…"),
+                                    Err(e) if e == NOT_IN_DICTIONARY => {
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label(RichText::new(&w).strong().color(GLOSS));
+                                            ui.label(RichText::new(NOT_IN_DICTIONARY).color(MUTED));
+                                            // Only on request: names and rarer words can still be asked about.
+                                            if let Some(c) = claude.clone() {
+                                                if ui.small_button("🔎 문맥 뜻 묻기").clicked() {
+                                                    r.word_result = Some((w.clone(), s.clone(), Err("…".into())));
+                                                    r.word.spawn(move || c.word_in_context(&w, &s));
+                                                }
+                                            }
+                                        });
+                                    }
+                                    Err(e) => error_label(ui, &e),
                                 }
                             }
                             if let Some(d) = r.drill.as_mut() {
@@ -470,3 +493,6 @@ impl App {
 
 /// Paragraphs to read for the daily reading step.
 pub const READ_GOAL: u32 = 8;
+
+/// Shown when a word isn't in the built-in 6,000-word dictionary.
+const NOT_IN_DICTIONARY: &str = "사전에 없는 단어예요 (이름이거나 6,000단어 밖의 단어)";
