@@ -1653,3 +1653,20 @@ fn ft46_words_left_unfinished_on_earlier_days_can_be_seen_and_practised() {
     t.click("그만하기");
     assert!(t.has("📅 지난 날 못 끝낸 새 단어 1개"), "company is done now");
 }
+
+#[test]
+fn ft47_an_easy_word_can_be_marked_learned() {
+    let mut t = launch_at(temp_dir("easyword"), false, |s| s.profile.placement_done = true);
+    t.nav("📚  새 단어");
+    let ws = t.app().store.profile.today.word_set.clone().unwrap();
+    // The list starts with the chunks, then the words: mark the first entry learned.
+    let first = ws.phrases.first().or(ws.words.first()).unwrap().word.clone();
+    t.nav("✓ 학습완료");
+    let item = t.app().store.items.iter().find(|i| i.text == first).cloned().expect("saved as learned");
+    assert!(item.known && item.due > today() + chrono::Duration::days(3000), "never comes up for review");
+    assert!(t.app().store.word_stat(&first).passes >= WORD_DONE_PASSES);
+    assert!(t.has("기억 완료 1/"), "counted as done in the list");
+    // The day's run skips it.
+    t.nav("▶ 시작하기");
+    assert!(!t.app().queue.as_ref().unwrap().specs.iter().any(|s| s.target == first));
+}

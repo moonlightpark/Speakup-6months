@@ -378,6 +378,8 @@ pub struct StudyItem {
     pub best_score: f32,
     pub pass_streak: u32,
     pub weak: bool,
+    /// Marked 학습완료 as too easy: counts as learned but never comes up for review.
+    pub known: bool,
 }
 
 impl Default for StudyItem {
@@ -401,6 +403,7 @@ impl Default for StudyItem {
             best_score: 0.0,
             pass_streak: 0,
             weak: false,
+            known: false,
         }
     }
 }

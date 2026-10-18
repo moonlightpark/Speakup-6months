@@ -112,6 +112,14 @@ impl Store {
         }
     }
 
+    /// Counts a 새 단어 entry as fully practised (학습완료 for a word that is too easy).
+    pub fn mark_word_done(&mut self, text: &str) {
+        let st = self.word_stats.entry(text.trim().to_lowercase()).or_default();
+        st.passes = st.passes.max(WORD_DONE_PASSES);
+        st.last = Some(today());
+        log_err(save_json(&self.dir.join("word_stats.json"), &self.word_stats));
+    }
+
     pub fn word_stat(&self, text: &str) -> WordStat {
         self.word_stats.get(&text.trim().to_lowercase()).cloned().unwrap_or_default()
     }

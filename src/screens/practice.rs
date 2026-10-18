@@ -235,10 +235,12 @@ impl App {
 
     /// Today's list (25 per page) and the start button. `marks` (same order as `rows`, may be
     /// empty) colours each row by how far it has been practised.
-    /// Returns (start pressed, row clicked); rows are clickable when `marks` are given.
-    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)]) -> (bool, Option<usize>) {
+    /// Returns (start pressed, row clicked, row marked 학습완료); rows are clickable when `marks`
+    /// are given, and unfinished rows get a 학습완료 button when `can_finish`.
+    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)], can_finish: bool) -> (bool, Option<usize>, Option<usize>) {
         let mut start = false;
         let mut picked = None;
+        let mut finished = None;
         page_title(ui, title, desc);
         ui.add_space(8.0);
         let done_today = self.step_done(step);
@@ -292,6 +294,9 @@ impl App {
                     }
                     if let Some((c, text)) = mark {
                         ui.label(RichText::new(text).small().color(*c));
+                        if can_finish && !text.starts_with('✓') && finish_button(ui) {
+                            finished = Some(i);
+                        }
                     }
                     // Months 5-6: English only; the Korean is a hover away.
                     if support_stage(ui.ctx()) < 2 {
@@ -320,7 +325,7 @@ impl App {
             ui.label(RichText::new("✅ 오늘 완료했어요. 더 연습해도 좋아요!").color(GOOD));
         }
         start |= start_button(ui);
-        (start, picked)
+        (start, picked, finished)
     }
 
     pub fn words_ui(&mut self, ui: &mut Ui) {
@@ -348,13 +353,14 @@ impl App {
             .map(|w| word_mark(self.store.word_stat(&w.word).passes))
             .collect();
         let reps = self.store.settings.reps_new;
-        let (start, picked) = self.intro_card(
+        let (start, picked, finished) = self.intro_card(
             ui,
             "📚 오늘의 덩어리 표현 · 새 단어",
             &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 예문까지 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
             &rows,
             "words",
             &marks,
+            true,
         );
         // Same order as `rows`.
         let entries: Vec<(&LessonWord, WordKind)> = lesson
@@ -364,6 +370,10 @@ impl App {
             .chain(lesson.words.iter().map(|w| (w, WordKind::Word)))
             .chain(lesson.expressions.iter().map(|w| (w, WordKind::Expression)))
             .collect();
+        if let Some((w, kind)) = finished.and_then(|i| entries.get(i).copied()) {
+            self.mark_learned(w, kind);
+            return;
+        }
         if let Some((w, kind)) = picked.and_then(|i| entries.get(i).copied()) {
             // One entry on demand: full repetitions + example, even if it was passed before
             // (the passes still count toward 기억 완료; the review schedule isn't touched twice).
@@ -380,7 +390,7 @@ impl App {
             let mut specs = Vec::new();
             for (w, kind) in &entries {
                 // Names that slip into a lesson ("Seoul") are not drilled as vocabulary.
-                if *kind == WordKind::Word && is_proper_noun(&w.word, &w.meaning_ko) {
+                if *kind == WordKind::Word && is_proper_noun(&w.word, &w.meaning_ko) || self.is_known(&w.word, *kind) {
                     continue;
                 }
                 specs.extend(self.entry_specs(w, *kind, reps, false));
@@ -461,6 +471,7 @@ impl App {
         let total: usize = days.iter().map(|d| d.1.len()).sum();
         let start = self.store.profile.start_date;
         let mut picked: Option<(usize, usize)> = None;
+        let mut finished: Option<(usize, usize)> = None;
         let mut all = false;
         ui.add_space(14.0);
         card(ui, |ui| {
@@ -489,6 +500,9 @@ impl App {
                                     picked = Some((di, wi));
                                 }
                                 ui.label(RichText::new(mark).small().color(color));
+                                if finish_button(ui) {
+                                    finished = Some((di, wi));
+                                }
                                 crate::grammar::ko_label(ui, &w.meaning_ko, 15.0, muted());
                             });
                         }
@@ -498,7 +512,10 @@ impl App {
             all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 단어 {total}개 이어서 연습")).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
         });
         let flat: Vec<(LessonWord, WordKind)> = days.iter().flat_map(|d| d.1.iter().cloned()).collect();
-        if let Some((di, wi)) = picked {
+        if let Some((di, wi)) = finished {
+            let (w, kind) = days[di].1[wi].clone();
+            self.mark_learned(&w, kind);
+        } else if let Some((di, wi)) = picked {
             let skip: usize = days[..di].iter().map(|d| d.1.len()).sum::<usize>() + wi;
             let (w, kind) = &flat[skip];
             let mut q = DrillQueue::new("", "vocab", &format!("새 단어 · {}", w.word), self.entry_specs(w, *kind, reps, true));
@@ -509,6 +526,29 @@ impl App {
             let specs = flat.iter().flat_map(|(w, k)| self.entry_specs(w, *k, reps, false)).collect();
             self.queue = Some(DrillQueue::new("", "vocab", "지난 날 새 단어", specs));
         }
+    }
+
+    /// 학습완료: a word too easy to drill counts as learned (deck + 기억 완료) and is never
+    /// reviewed.
+    fn mark_learned(&mut self, w: &LessonWord, kind: WordKind) {
+        if let Some(mut item) = self.entry_specs(w, kind, 1, true).into_iter().find_map(|s| s.new_item) {
+            item.known = true;
+            let i = srs::add_item(&mut self.store.items, item);
+            let far = today() + chrono::Duration::days(3650);
+            let it = &mut self.store.items[i];
+            it.known = true;
+            it.due = far;
+            it.interval_days = 3650;
+            self.store.save_items();
+        }
+        self.store.mark_word_done(&w.word);
+        crate::applog!("words: '{}' 학습완료 (쉬운 단어)", w.word);
+        self.toast(format!("✓ '{}' 학습완료", w.word));
+    }
+
+    fn is_known(&self, text: &str, kind: WordKind) -> bool {
+        let id = srs::make_id(if kind == WordKind::Chunk { ItemKind::Sentence } else { ItemKind::Word }, text);
+        self.store.items.iter().any(|i| i.id == id && i.known)
     }
 
     /// Already saved in the deck (passed on an earlier day or before a restart).
@@ -638,7 +678,7 @@ impl App {
                 }
             }))
             .collect();
-        let (start, picked) = self.intro_card(
+        let (start, picked, _) = self.intro_card(
             ui,
             "📖 문장 소리 내어 읽기 (쉐도잉)",
             &format!(
@@ -648,6 +688,7 @@ impl App {
             &rows,
             "reading",
             &marks,
+            false,
         );
         if let Some((i, spec)) = picked.and_then(|i| Some((i, row_specs.get(i).cloned()?))) {
             // One sentence on demand, repeated in full so the count moves toward 기억 완료;
@@ -744,4 +785,9 @@ impl App {
             .collect();
         self.queue = Some(DrillQueue::new("", category, title, specs));
     }
+}
+
+/// The small "학습완료" button for a word too easy to drill.
+fn finish_button(ui: &mut Ui) -> bool {
+    ui.add(egui::Button::new(RichText::new("✓ 학습완료").small()).small()).on_hover_text("아주 쉬운 단어: 연습 없이 완료로 표시해요 (복습에도 나오지 않아요)").clicked()
 }

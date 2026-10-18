@@ -423,7 +423,7 @@ impl App {
             .store
             .items
             .iter()
-            .filter(|i| i.is_vocab_word() && !today_words.contains(&i.text.to_lowercase()) && !done.contains(&i.id) && i.added < t)
+            .filter(|i| i.is_vocab_word() && !i.known && !today_words.contains(&i.text.to_lowercase()) && !done.contains(&i.id) && i.added < t)
             .collect();
         v.sort_by_key(|i| (i.due > t, !i.weak, i.due));
         v.into_iter().take(crate::wordbank::REVIEW_PER_DAY.saturating_sub(done.len())).map(|i| i.id.clone()).collect()
