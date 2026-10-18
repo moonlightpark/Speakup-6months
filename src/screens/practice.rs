@@ -121,17 +121,9 @@ impl App {
             let now = ui.input(|i| i.time);
             let t = (now - *q.finished_at.get_or_insert(now)) as f32;
             // Animated celebration, with the title and score as real labels on top of it.
-            let rect = crate::art::celebration(ui, t, avg);
-            let pop = 1.0 + 0.2 * (1.0 - (t / 0.5).min(1.0)) + 0.05 * (t * 6.0).sin() * (1.0 - (t / crate::art::CELEBRATION_SECS).min(1.0));
             let headline = if avg >= 90.0 { "🎉 완벽해요! 잘했어요!" } else { "🎉 잘했어요!" };
-            let top = egui::Rect::from_center_size(rect.center_top() + Vec2::new(0.0, 52.0), Vec2::new(rect.width() - 200.0, 64.0));
-            ui.put(top, egui::Label::new(RichText::new(headline).size(34.0 * pop).strong().color(Color32::WHITE)));
             let shown = avg * (t / 1.2).min(1.0);
-            let sub = egui::Rect::from_center_size(rect.center_top() + Vec2::new(0.0, 108.0), Vec2::new(rect.width() - 200.0, 30.0));
-            ui.put(sub, egui::Label::new(RichText::new(format!("{title} 완료 · 첫 시도 평균 {shown:.0}점")).size(18.0).color(Color32::from_rgb(230, 230, 255))));
-            // `put` moves the layout cursor to the labels; continue below the whole animation so
-            // the buttons never sit on top of it.
-            ui.advance_cursor_after_rect(rect);
+            crate::art::cheer(ui, t, avg, headline, &format!("{title} 완료 · 첫 시도 평균 {shown:.0}점"));
             ui.add_space(8.0);
             if !weak.is_empty() {
                 card(ui, |ui| {

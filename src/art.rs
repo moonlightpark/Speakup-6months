@@ -275,6 +275,81 @@ pub fn celebration(ui: &mut Ui, t: f32, score: f32) -> Rect {
 
 // ---------------------------------------------------------------- scenes
 
+/// Seconds since the event `key` (e.g. a result count) last changed for widget `id`. The first
+/// time an id is seen it is "long ago", so opening a screen does not replay an old event.
+pub fn since_event(ui: &Ui, id: egui::Id, key: u64) -> f32 {
+    let now = ui.input(|i| i.time);
+    let (k, start) = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || (key, f64::NEG_INFINITY)));
+    if k != key {
+        ui.data_mut(|d| d.insert_temp(id, (key, now)));
+        return 0.0;
+    }
+    (now - start).min(1e6) as f32
+}
+
+/// The full celebration with its headline and a line under it (as real labels, so they can be
+/// read and tested), and the layout continuing below the animation.
+pub fn cheer(ui: &mut Ui, t: f32, score: f32, headline: &str, sub: &str) {
+    let rect = celebration(ui, t, score);
+    let pop = 1.0 + 0.2 * (1.0 - (t / 0.5).min(1.0)) + 0.05 * (t * 6.0).sin() * (1.0 - (t / CELEBRATION_SECS).min(1.0));
+    let top = Rect::from_center_size(rect.center_top() + vec2(0.0, 52.0), vec2(rect.width() - 200.0, 64.0));
+    ui.put(top, egui::Label::new(egui::RichText::new(headline).size(34.0 * pop).strong().color(Color32::WHITE)));
+    let below = Rect::from_center_size(rect.center_top() + vec2(0.0, 108.0), vec2(rect.width() - 200.0, 30.0));
+    ui.put(below, egui::Label::new(egui::RichText::new(sub).size(18.0).color(Color32::from_rgb(230, 230, 255))));
+    // `put` moves the layout cursor to the labels; continue below the whole animation.
+    ui.advance_cursor_after_rect(rect);
+}
+
+/// How long a cheer strip stays on screen (seconds).
+pub const STRIP_SECS: f32 = 2.6;
+
+/// A short cheer for one good answer: a banner that pops open with a burst of confetti, a
+/// hopping mascot and `text`, then folds away. Draws nothing once `t` is past [`STRIP_SECS`].
+pub fn cheer_strip(ui: &mut Ui, t: f32, text: &str) {
+    if !(0.0..STRIP_SECS).contains(&t) {
+        return;
+    }
+    // Opens quickly, closes in the last 0.35 s.
+    let open = ease_out_back((t / 0.35).min(1.0)) * ((STRIP_SECS - t) / 0.35).clamp(0.0, 1.0);
+    let w = ui.available_width().min(760.0);
+    let h = 76.0 * open.max(0.0);
+    let (rect, _) = ui.allocate_exact_size(vec2(w, h.max(1.0)), egui::Sense::hover());
+    ui.ctx().request_repaint();
+    if h < 8.0 {
+        return;
+    }
+    let p = ui.painter_at(rect.expand(30.0));
+    gradient_rect(&p, rect, 16.0, Color32::from_rgb(76, 58, 200), Color32::from_rgb(150, 50, 160));
+    let hop = (t * 7.0).sin().abs() * 6.0;
+    mascot(&p, pos2(rect.left() + 44.0, rect.center().y - hop), 46.0 * open.min(1.0), Mood::Cheer, t);
+    let c = pos2(rect.left() + 44.0, rect.center().y);
+    let palette = [PINK, CYAN, warn(), GOOD, Color32::from_rgb(255, 214, 80), Color32::WHITE];
+    for i in 0..28u32 {
+        let tt = t - rnd(i, 0) * 0.2;
+        if tt <= 0.0 {
+            continue;
+        }
+        let a = -PI / 2.0 + (rnd(i, 1) - 0.2) * 2.2;
+        let v = 180.0 + rnd(i, 2) * 260.0;
+        let pos = c + vec2(a.cos().abs() * v * tt, a.sin() * v * 0.35 * tt + 160.0 * tt * tt);
+        if rect.contains(pos) {
+            let fade = (1.0 - t / STRIP_SECS).clamp(0.0, 1.0);
+            p.circle_filled(pos, 2.5 + rnd(i, 5) * 3.0, palette[i as usize % palette.len()].gamma_multiply(fade));
+        }
+    }
+    for k in 0..3 {
+        let sp = ease_out_back(((t - 0.25 - k as f32 * 0.15) / 0.4).max(0.0));
+        if sp > 0.0 {
+            star(&p, pos2(rect.right() - 36.0 - k as f32 * 30.0, rect.center().y), 11.0 * sp, Color32::from_rgb(255, 214, 80));
+        }
+    }
+    let size = 24.0 * (1.0 + 0.15 * (1.0 - (t / 0.4).min(1.0)));
+    let label = Rect::from_min_max(pos2(rect.left() + 84.0, rect.top()), pos2(rect.right() - 120.0, rect.bottom()));
+    ui.put(label, egui::Label::new(egui::RichText::new(text).size(size).strong().color(Color32::WHITE)));
+    ui.advance_cursor_after_rect(rect);
+}
+
+
 /// The six-month path as rolling hills with a flag at the end and a marker at `progress`.
 pub fn journey(rect: Rect, progress: f32) -> Shape {
     let mut out: Vec<Shape> = Vec::new();

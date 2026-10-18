@@ -170,6 +170,9 @@ impl App {
         }
         let st = &mut self.writing;
         let (en, ko) = st.queue[st.idx % st.queue.len()].clone();
+        // A good answer gets a short cheer (timed from when it was checked).
+        let check_key = st.checked.as_ref().map(|_| egui::Id::new((st.idx, dictation, st.input.as_str())).value()).unwrap_or(0);
+        let t_check = crate::art::since_event(ui, egui::Id::new("cheer_writing_check"), check_key);
         let mut next = false;
         let mut finished: Option<(f32, String)> = None;
         card(ui, |ui| {
@@ -210,6 +213,9 @@ impl App {
             }
             if let Some(r) = &st.checked {
                 ui.add_space(6.0);
+                if r.score >= 80.0 {
+                    crate::art::cheer_strip(ui, t_check, if r.score >= 95.0 { "🎉 완벽해요! 정답이에요!" } else { "👏 잘했어요!" });
+                }
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{:.0}점", r.score)).size(22.0).strong().color(if r.score >= 80.0 { GOOD } else { warn() }));
                     ui.label(RichText::new(if dictation { "정답과 비교 (초록 = 맞음, 빨강 = 다름)" } else { "모범 답안과 비교" }).color(muted()));
@@ -336,6 +342,15 @@ impl App {
             });
         }
         let st = &mut self.writing;
+        // Claude's correction arrives with a cheer.
+        let diary_key = match &st.diary_result {
+            Some(Ok(f)) => egui::Id::new(&f.natural_version).value(),
+            _ => 0,
+        };
+        let t_diary = crate::art::since_event(ui, egui::Id::new("cheer_diary"), diary_key);
+        if let Some(Ok(f)) = &st.diary_result {
+            crate::art::cheer_strip(ui, t_diary, &format!("📝 일기 완성! {}점 · 교정된 글을 소리 내어 읽어 봐요", f.score));
+        }
         if let Some(r) = &st.diary_result {
             card(ui, |ui| match r {
                 Ok(f) => {

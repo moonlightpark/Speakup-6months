@@ -620,7 +620,7 @@ fn ft11_speed_reading_wpm_and_quick_response() {
     let first = t.app().store.profile.speed_history[0].wpm;
     assert!((first - 150.0).abs() < 4.0, "{first}");
     assert!(t.has_exact(&format!("{first:.0} WPM")), "WPM shown");
-    assert!(t.has("정확도 100%"));
+    assert!(t.has("정확도 100%") && t.has(&format!("🎯 목표 달성! {first:.0} WPM")), "animated cheer for reaching the goal");
     t.click("↻ 같은 지문 더 빠르게");
     t.say("I like coffee. It is warm.", 1.8);
     let hist = t.app().store.profile.speed_history.clone();
@@ -637,6 +637,14 @@ fn ft11_speed_reading_wpm_and_quick_response() {
     t.steps(3);
     assert!(t.has("✅ 통과"), "fast and correct answer passes");
     assert!(t.app().store.profile.today.speed_rounds >= 2);
+    // The end of a round: the celebration (here the last of 10 answers, the others skipped).
+    let n = t.app().speed.queue.len();
+    t.app_mut().speed.stats.resize(n - 1, (1.0, 100.0, true));
+    t.app_mut().speed.idx = n - 1;
+    t.app_mut().speed.result = Some((String::new(), crate::scoring::score("go", "go"), 1.0, true));
+    t.steps(2);
+    t.click("다음 ▶");
+    assert!(t.has("🎉 완벽해요! 번개 같아요!") && t.has(&format!("빠르게 말하기 {}/{} 통과", n - 1, n - 1)));
 }
 
 #[test]
@@ -894,7 +902,7 @@ fn ft21_writing_dictation_translation_and_diary() {
     // Dictation: exact answer scores 100.
     t.app_mut().writing.input = "I like coffee".into();
     t.click("확인");
-    assert!(t.has("100점"));
+    assert!(t.has("100점") && t.has("🎉 완벽해요! 정답이에요!"), "animated cheer for a right answer");
     t.click("다음 ▶");
     assert_eq!(t.app().store.profile.today.writings_done, 1);
     // Translation: a different but correct wording is accepted by Claude.

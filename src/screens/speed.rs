@@ -259,8 +259,14 @@ impl App {
             self.speed.last = Some((t, r, wpm));
             self.speed_round_done();
         }
+        let t_read = crate::art::since_event(ui, egui::Id::new("cheer_speed_reading"), self.store.profile.speed_history.iter().filter(|s| s.kind == "reading").count() as u64);
         if let Some((_, r, wpm)) = &self.speed.last {
             let ok = r.score >= 85.0 && *wpm >= target;
+            if ok {
+                crate::art::cheer_strip(ui, t_read, &format!("🎯 목표 달성! {wpm:.0} WPM"));
+            } else if r.score >= 85.0 {
+                crate::art::cheer_strip(ui, t_read, &format!("👍 정확해요! {:.0}% — 이제 속도를 올려 봐요", r.score));
+            }
             card(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{wpm:.0} WPM")).size(34.0).strong().color(if *wpm >= target { GOOD } else { warn() }));
@@ -327,6 +333,7 @@ impl App {
 
     fn quick_response_ui(&mut self, ui: &mut Ui) {
         let pass = self.pass_score();
+        let t_done = crate::art::since_event(ui, egui::Id::new("cheer_quick_response"), self.store.profile.speed_history.iter().filter(|s| s.kind == "response").count() as u64);
         card(ui, |ui| {
             ui.label("한국어가 나오면 마이크가 자동으로 켜집니다. 생각나는 즉시 영어로 말하세요 — 말이 끝나면 자동으로 채점돼요.");
             ui.label(RichText::new("배운 단어·문장에서 출제됩니다. 제한 시간 안에 정확히 말해야 통과.").color(muted()));
@@ -343,6 +350,11 @@ impl App {
             let avg_t = self.speed.stats.iter().map(|s| s.0).sum::<f32>() / n;
             let avg_a = self.speed.stats.iter().map(|s| s.1).sum::<f32>() / n;
             let ok = self.speed.stats.iter().filter(|s| s.2).count();
+            // The round's end: the same celebration as a finished lesson.
+            let total = self.speed.stats.len().max(1);
+            let score = 100.0 * ok as f32 / total as f32;
+            crate::art::cheer(ui, t_done, score, if score >= 90.0 { "🎉 완벽해요! 번개 같아요!" } else { "🎉 잘했어요!" }, &format!("빠르게 말하기 {ok}/{total} 통과 · 평균 {avg_t:.1}초"));
+            ui.add_space(8.0);
             card(ui, |ui| {
                 ui.label(RichText::new(format!("💨 {ok}/{} 통과", self.speed.stats.len())).size(28.0).strong());
                 ui.label(format!("평균 반응 시간 {avg_t:.1}초 · 평균 정확도 {avg_a:.0}%"));

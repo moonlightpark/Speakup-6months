@@ -290,6 +290,12 @@ impl App {
             self.play_segment(i);
         }
 
+        // Each passed shadowing gets a cheer; the 5th finishes today's listening.
+        let passes = self.store.profile.today.listening_passes;
+        let t_pass = crate::art::since_event(ui, egui::Id::new("cheer_listening"), passes as u64);
+        if passes > 0 {
+            crate::art::cheer_strip(ui, t_pass, &if passes == 5 { "🎉 오늘 리스닝 목표 달성! (5문장 통과)".to_string() } else { format!("👏 통과! 원어민처럼 따라 했어요 ({passes}/5)") });
+        }
         if let Some(drill) = self.listening.drill.as_mut() {
             ui.add_space(6.0);
             let ev = card(ui, |ui| drill.ui(ui, &mut self.voice, pass, claude.as_ref()));
