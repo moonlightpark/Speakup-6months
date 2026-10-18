@@ -384,13 +384,22 @@ impl App {
     /// Today's 새 단어 set: words from the built-in 6,000-word database for the learner's level,
     /// plus the day's chunks and expression. Picked once a day and kept in the profile.
     pub fn word_set(&mut self) -> WordSet {
-        if let Some(ws) = &self.store.profile.today.word_set {
-            return ws.clone();
+        if let Some(ws) = self.store.profile.today.word_set.clone() {
+            self.store.record_word_day(today(), &ws);
+            return ws;
         }
         let p = &self.store.profile;
         let n = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day as usize } else { crate::wordbank::NEW_PER_DAY };
         let items = &self.store.items;
-        let knows = |t: &str| items.iter().any(|i| i.text.eq_ignore_ascii_case(t));
+        // New words only: learned ones and those on an earlier day's list (left unfinished
+        // there, they are in 지난 날 못 끝낸 새 단어) are skipped.
+        let earlier: std::collections::HashSet<String> = self
+            .store
+            .word_days
+            .range(..today())
+            .flat_map(|(_, s)| s.words.iter().chain(&s.phrases).chain(&s.expressions).map(|w| w.word.to_lowercase()))
+            .collect();
+        let knows = |t: &str| earlier.contains(&t.to_lowercase()) || items.iter().any(|i| i.text.eq_ignore_ascii_case(t));
         let lw = |e: crate::expressions::Expr| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() };
         let ws = WordSet {
             words: crate::wordbank::pick(p.level, n, knows).iter().map(|w| w.lesson_word()).collect(),
@@ -400,6 +409,7 @@ impl App {
         crate::applog!("words: 오늘의 단어 {}개 (레벨 {:.1}) · {:?}", ws.words.len(), p.level, ws.words.iter().map(|w| &w.word).collect::<Vec<_>>());
         self.store.profile.today.word_set = Some(ws.clone());
         self.store.save_profile();
+        self.store.record_word_day(today(), &ws);
         ws
     }
 

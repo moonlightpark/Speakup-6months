@@ -1620,3 +1620,36 @@ fn ft45_offline_scripts_ask_questions_and_hold_a_conversation() {
     assert!(t.has(&scenes[1].script[0].replies.iter().map(|r| r.text.clone()).find(|r| t.has(&format!("✓ 더 자연스럽게: {r}"))).unwrap_or_default()), "a hint for a reply far off");
     assert!(t.prompts().is_empty(), "no API calls");
 }
+
+#[test]
+fn ft46_words_left_unfinished_on_earlier_days_can_be_seen_and_practised() {
+    let yesterday = today() - chrono::Duration::days(1);
+    let lw = |w: &str, ko: &str| LessonWord { word: w.into(), meaning_ko: ko.into(), example: format!("I said {w}."), example_ko: String::new() };
+    let mut t = launch_at(temp_dir("pastwords"), false, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = yesterday;
+        s.word_days.insert(yesterday, WordSet { words: vec![lw("company", "회사"), lw("health", "건강"), lw("reason", "이유")], ..Default::default() });
+        // "reason" was passed yesterday.
+        s.items.push(StudyItem { id: crate::srs::make_id(ItemKind::Word, "reason"), kind: ItemKind::Word, text: "reason".into(), ..Default::default() });
+    });
+    t.nav("📚  새 단어");
+    assert!(t.has("📅 지난 날 못 끝낸 새 단어 2개") && t.has("1일차 ·") && t.has_exact("company") && t.has_exact("health"));
+    // Today's list is new words only (not yesterday's), and is kept by date too.
+    let today_words: Vec<String> = t.app().store.profile.today.word_set.as_ref().unwrap().words.iter().map(|w| w.word.clone()).collect();
+    assert!(!today_words.iter().any(|w| w == "company" || w == "health"), "{today_words:?}");
+    let saved = std::fs::read_to_string(t.dir.join("word_days.json")).unwrap();
+    assert!(saved.contains(&today().to_string()) && saved.contains(&yesterday.to_string()));
+    // Click one: practise it, then go on to the next unfinished word.
+    t.click("company");
+    assert!(t.has("새 단어 · company"));
+    for _ in 0..3 {
+        t.say("company", 0.8);
+    }
+    t.click("다음 ▶");
+    t.say("I said company.", 1.5);
+    t.click("다음 ▶");
+    t.click("다음 단어 ▶");
+    assert!(t.has("새 단어 · health"));
+    t.click("그만하기");
+    assert!(t.has("📅 지난 날 못 끝낸 새 단어 1개"), "company is done now");
+}

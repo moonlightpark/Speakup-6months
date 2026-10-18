@@ -37,6 +37,8 @@ pub struct Store {
     pub writings: Vec<WritingRecord>,
     /// 새 단어 practice counts by lower-case text (word_stats.json).
     pub word_stats: std::collections::HashMap<String, WordStat>,
+    /// Each day's 새 단어 list (word_days.json), so words left unfinished can be found later.
+    pub word_days: std::collections::BTreeMap<chrono::NaiveDate, WordSet>,
 }
 
 fn load_json<T: DeserializeOwned + Default>(path: &Path) -> T {
@@ -88,6 +90,7 @@ impl Store {
             library: load_json(&dir.join("library.json")),
             writings: load_json(&dir.join("writing.json")),
             word_stats: load_json(&dir.join("word_stats.json")),
+            word_days: load_json(&dir.join("word_days.json")),
             dir,
         })
     }
@@ -99,6 +102,14 @@ impl Store {
         st.passes += passed as u32;
         st.last = Some(today());
         log_err(save_json(&self.dir.join("word_stats.json"), &self.word_stats));
+    }
+
+    /// Keeps a day's 새 단어 list in word_days.json.
+    pub fn record_word_day(&mut self, date: chrono::NaiveDate, set: &WordSet) {
+        if self.word_days.get(&date) != Some(set) {
+            self.word_days.insert(date, set.clone());
+            log_err(save_json(&self.dir.join("word_days.json"), &self.word_days));
+        }
     }
 
     pub fn word_stat(&self, text: &str) -> WordStat {

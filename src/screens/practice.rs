@@ -392,6 +392,7 @@ impl App {
             self.queue = Some(DrillQueue::new("words", "vocab", "새 단어", specs));
             return;
         }
+        self.past_unfinished_ui(ui, reps);
         // Then up to 50 learned words, said once each (Order.md: 하루 새 단어 35 + 배운 단어 50).
         ui.add_space(14.0);
         let ids = self.word_review_ids();
@@ -426,6 +427,87 @@ impl App {
                 })
                 .collect();
             self.queue = Some(DrillQueue::new("words_review", "vocab", "배운 단어 복습", specs));
+        }
+    }
+
+    /// Earlier days' 새 단어 entries not finished yet (not saved to the deck), by day, oldest first.
+    fn past_unfinished(&self) -> Vec<(chrono::NaiveDate, Vec<(LessonWord, WordKind)>)> {
+        self.store
+            .word_days
+            .range(..today())
+            .map(|(d, s)| {
+                let left = s
+                    .phrases
+                    .iter()
+                    .map(|w| (w, WordKind::Chunk))
+                    .chain(s.words.iter().map(|w| (w, WordKind::Word)))
+                    .chain(s.expressions.iter().map(|w| (w, WordKind::Expression)))
+                    .filter(|(w, k)| !self.entry_passed(&w.word, *k))
+                    .map(|(w, k)| (w.clone(), k))
+                    .collect();
+                (*d, left)
+            })
+            .filter(|(_, v): &(_, Vec<_>)| !v.is_empty())
+            .collect()
+    }
+
+    /// 📅 지난 날 못 끝낸 새 단어: earlier days' unfinished words, coloured and clickable like
+    /// today's list, with one button to go through all of them.
+    fn past_unfinished_ui(&mut self, ui: &mut Ui, reps: u32) {
+        let days = self.past_unfinished();
+        if days.is_empty() {
+            return;
+        }
+        let total: usize = days.iter().map(|d| d.1.len()).sum();
+        let start = self.store.profile.start_date;
+        let mut picked: Option<(usize, usize)> = None;
+        let mut all = false;
+        ui.add_space(14.0);
+        card(ui, |ui| {
+            ui.label(RichText::new(format!("📅 지난 날 못 끝낸 새 단어 {total}개")).size(18.0).strong());
+            ui.label(RichText::new("전에 나왔지만 아직 통과하지 못한 단어예요. 클릭하면 그 단어를 바로 연습해요.").color(muted()));
+            for (di, (date, left)) in days.iter().enumerate() {
+                let day_no = (*date - start).num_days() + 1;
+                egui::CollapsingHeader::new(RichText::new(format!("{day_no}일차 · {} — {}개", date.format("%m월 %d일"), left.len())).strong())
+                    .id_salt(("past_words", *date))
+                    .default_open(di + 1 == days.len())
+                    .show(ui, |ui| {
+                        for (wi, (w, kind)) in left.iter().enumerate() {
+                            let (color, mark) = word_mark(self.store.word_stat(&w.word).passes);
+                            ui.horizontal_wrapped(|ui| {
+                                speaker_button(ui, &mut self.voice, &w.word);
+                                let label = match kind {
+                                    WordKind::Chunk => format!("🔗 {}", w.word),
+                                    WordKind::Expression => format!("💬 {}", w.word),
+                                    WordKind::Word => w.word.clone(),
+                                };
+                                let r = ui.add(egui::Label::new(RichText::new(label).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                                if r.hovered() {
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                }
+                                if r.clicked() {
+                                    picked = Some((di, wi));
+                                }
+                                ui.label(RichText::new(mark).small().color(color));
+                                crate::grammar::ko_label(ui, &w.meaning_ko, 15.0, muted());
+                            });
+                        }
+                    });
+            }
+            ui.add_space(6.0);
+            all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 단어 {total}개 이어서 연습")).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
+        });
+        let flat: Vec<(LessonWord, WordKind)> = days.iter().flat_map(|d| d.1.iter().cloned()).collect();
+        if let Some((di, wi)) = picked {
+            let skip: usize = days[..di].iter().map(|d| d.1.len()).sum::<usize>() + wi;
+            let (w, kind) = &flat[skip];
+            let mut q = DrillQueue::new("", "vocab", &format!("새 단어 · {}", w.word), self.entry_specs(w, *kind, reps, true));
+            q.then = flat[skip + 1..].iter().map(|(w, k)| (format!("새 단어 · {}", w.word), self.entry_specs(w, *k, reps, true))).collect();
+            crate::applog!("words: 지난 날 단어 '{}' 바로 연습", w.word);
+            self.queue = Some(q);
+        } else if all {
+            let specs = flat.iter().flat_map(|(w, k)| self.entry_specs(w, *k, reps, false)).collect();
+            self.queue = Some(DrillQueue::new("", "vocab", "지난 날 새 단어", specs));
         }
     }
 
