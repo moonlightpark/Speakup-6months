@@ -188,6 +188,9 @@ fn temp_dir(name: &str) -> PathBuf {
     d
 }
 
+/// Held while the process-wide light/dark theme is set (launching, and ft42 switching it).
+static THEME_LOCK: Mutex<()> = Mutex::new(());
+
 fn launch_at(dir: PathBuf, with_key: bool, prepare: impl FnOnce(&mut Store)) -> T {
     let mut store = Store::open_at(dir.clone()).unwrap();
     store.settings.api_key = if with_key { "test-key".into() } else { String::new() };
@@ -204,11 +207,14 @@ fn launch_at(dir: PathBuf, with_key: bool, prepare: impl FnOnce(&mut Store)) -> 
     };
     let mock = start_mock();
     let url = mock.url.clone();
+    // Launching sets the process-wide theme from the settings: not while ft42 switches it.
+    let theme_guard = THEME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let h = Harness::builder().with_size(egui::vec2(1280.0, 2400.0)).build_eframe(move |cc| {
         let mut app = App::new_with(cc, store, voice);
         app.api_url = url;
         app
     });
+    drop(theme_guard);
     let mut t = T { h, script, mock, dir };
     t.steps(3);
     t
@@ -857,7 +863,9 @@ fn ft19_saved_name_and_key_are_not_asked_again() {
         base_rate: 1.0,
         last_recording: Vec::new(),
     };
+    let theme_guard = THEME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut h = Harness::builder().with_size(egui::vec2(1280.0, 2400.0)).build_eframe(move |cc| App::new_with(cc, store, voice));
+    drop(theme_guard);
     h.run_steps(3);
     // Second run: both are shown as saved instead of empty inputs.
     assert!(h.query_by_label_contains("✅ Tyler").is_some());
@@ -1508,6 +1516,7 @@ fn ft41_settings_shows_the_app_version() {
 #[test]
 fn ft42_settings_switches_light_and_dark_theme() {
     let mut t = launch("theme");
+    let _theme = THEME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     t.nav("⚙  설정");
     assert!(t.has("🎨 테마") && t.has("🌙 다크") && t.has("☀ 라이트"));
     t.click("☀ 라이트");
@@ -1698,4 +1707,33 @@ fn ft48_reading_shows_earlier_days_unfinished_sentences_and_marks_learned() {
     // Click an earlier sentence: practise it, then "다음 문장" goes on.
     t.click(&format!("💬 {}", idiom(2)));
     assert!(t.has(&format!("문장 읽기 · {}", idiom(2).chars().take(30).collect::<String>())));
+}
+
+#[test]
+fn ft49_full_lists_by_day_include_finished_ones() {
+    let yesterday = today() - chrono::Duration::days(1);
+    let lw = |w: &str| LessonWord { word: w.into(), meaning_ko: "뜻".into(), example: format!("I said {w}."), example_ko: String::new() };
+    let idiom = |n: u32| crate::idioms::by_no(n).unwrap().en.clone();
+    let mut t = launch_at(temp_dir("daylists"), false, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = yesterday;
+        s.word_days.insert(yesterday, WordSet { words: vec![lw("company"), lw("health"), lw("reason")], ..Default::default() });
+        s.word_stats.insert("reason".into(), WordStat { passes: 10, attempts: 10, last: None });
+        s.items.push(StudyItem { id: crate::srs::make_id(ItemKind::Word, "reason"), kind: ItemKind::Word, text: "reason".into(), ..Default::default() });
+        s.idiom_days.insert(yesterday, vec![1, 2]);
+    });
+    t.nav("📚  새 단어");
+    assert!(t.has("📚 날짜별 전체 단어") && t.has("1일차 (1/3)") && t.has("2일차 (0/"));
+    t.click("1일차 (1/3)");
+    assert!(t.has("1일차 · ") && t.has_exact("reason"), "a learned word is listed too");
+    t.click("reason");
+    assert!(t.has("새 단어 · reason"), "practise it again");
+    t.click("그만하기");
+    t.nav("📖  문장 읽기");
+    assert!(t.has("📚 날짜별 전체 문장") && t.has("1일차 (0/2)") && t.has("2일차 (0/"));
+    t.click_contains("2일차 (0/");
+    let first = crate::idioms::by_no(t.app().store.profile.today.idioms.clone().unwrap()[0]).unwrap().en.clone();
+    assert!(t.h.get_all_by_label(&format!("💬 {first}")).count() >= 2, "today's full list is shown below too");
+    t.click("1일차 (0/2)");
+    assert!(t.has_exact(&format!("💬 {}", idiom(1))));
 }

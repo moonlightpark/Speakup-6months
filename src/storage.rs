@@ -41,6 +41,8 @@ pub struct Store {
     pub word_days: std::collections::BTreeMap<chrono::NaiveDate, WordSet>,
     /// Each day's idiom sentences for 문장 읽기 (idiom_days.json, numbers in the built-in list).
     pub idiom_days: std::collections::BTreeMap<chrono::NaiveDate, Vec<u32>>,
+    /// Earlier days' lessons, read once per day (screens ask for them every frame).
+    lessons_cache: std::cell::RefCell<Option<(chrono::NaiveDate, Vec<Lesson>)>>,
 }
 
 fn load_json<T: DeserializeOwned + Default>(path: &Path) -> T {
@@ -94,6 +96,7 @@ impl Store {
             word_stats: load_json(&dir.join("word_stats.json")),
             word_days: load_json(&dir.join("word_days.json")),
             idiom_days: load_json(&dir.join("idiom_days.json")),
+            lessons_cache: Default::default(),
             dir,
         })
     }
@@ -196,6 +199,15 @@ impl Store {
 
     /// Lessons from earlier days, newest first (used so new lessons don't repeat them).
     pub fn past_lessons(&self, limit: usize) -> Vec<Lesson> {
+        let mut cache = self.lessons_cache.borrow_mut();
+        if cache.as_ref().is_none_or(|c| c.0 != today()) {
+            *cache = Some((today(), self.read_past_lessons()));
+        }
+        cache.as_ref().map(|c| c.1.iter().take(limit).cloned().collect()).unwrap_or_default()
+    }
+
+    /// All lessons before today, newest first.
+    fn read_past_lessons(&self) -> Vec<Lesson> {
         let mut files: Vec<_> = std::fs::read_dir(self.dir.join("lessons"))
             .into_iter()
             .flatten()
@@ -207,7 +219,6 @@ impl Store {
         files.reverse();
         files
             .into_iter()
-            .take(limit)
             .filter_map(|p| serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok())
             .collect()
     }
@@ -268,6 +279,7 @@ impl Store {
     pub fn save_lesson(&self, lesson: &Lesson) {
         if let Some(d) = lesson.date {
             log_err(save_json(&self.lesson_path(d), lesson));
+            self.lessons_cache.replace(None);
         }
     }
 

@@ -403,6 +403,26 @@ impl App {
             return;
         }
         self.past_unfinished_ui(ui, reps);
+        let days: Vec<(chrono::NaiveDate, Vec<DayRow>)> = self
+            .word_days_list(true)
+            .into_iter()
+            .map(|(d, v)| {
+                let rows = v
+                    .iter()
+                    .map(|(w, k)| DayRow {
+                        label: match k {
+                            WordKind::Chunk => format!("🔗 {}", w.word),
+                            WordKind::Expression => format!("💬 {}", w.word),
+                            WordKind::Word => w.word.clone(),
+                        },
+                        ko: w.meaning_ko.clone(),
+                        specs: self.entry_specs(w, *k, reps, true),
+                    })
+                    .collect();
+                (d, rows)
+            })
+            .collect();
+        self.day_lists_ui(ui, "words", "📚 날짜별 전체 단어", "새 단어", &days);
         // Then up to 50 learned words, said once each (Order.md: 하루 새 단어 35 + 배운 단어 50).
         ui.add_space(14.0);
         let ids = self.word_review_ids();
@@ -442,9 +462,16 @@ impl App {
 
     /// Earlier days' 새 단어 entries not finished yet (not saved to the deck), by day, oldest first.
     fn past_unfinished(&self) -> Vec<(chrono::NaiveDate, Vec<(LessonWord, WordKind)>)> {
+        self.word_days_list(false)
+    }
+
+    /// Each day's 새 단어 list up to today, all entries (`all`) or just the unfinished ones of
+    /// earlier days.
+    fn word_days_list(&self, all: bool) -> Vec<(chrono::NaiveDate, Vec<(LessonWord, WordKind)>)> {
+        let until = if all { today() + chrono::Duration::days(1) } else { today() };
         self.store
             .word_days
-            .range(..today())
+            .range(..until)
             .map(|(d, s)| {
                 let left = s
                     .phrases
@@ -452,7 +479,7 @@ impl App {
                     .map(|w| (w, WordKind::Chunk))
                     .chain(s.words.iter().map(|w| (w, WordKind::Word)))
                     .chain(s.expressions.iter().map(|w| (w, WordKind::Expression)))
-                    .filter(|(w, k)| !self.entry_passed(&w.word, *k))
+                    .filter(|(w, k)| all || !self.entry_passed(&w.word, *k))
                     .map(|(w, k)| (w.clone(), k))
                     .collect();
                 (*d, left)
@@ -561,12 +588,22 @@ impl App {
     /// Earlier days' 문장 읽기 sentences (idioms, then the lesson's sentences) not finished yet,
     /// by day, oldest first, as (row label, Korean, drill).
     fn past_reading_unfinished(&self, reps: u32) -> Vec<(chrono::NaiveDate, Vec<(String, String, Spec)>)> {
+        self.reading_days_list(reps, false)
+    }
+
+    /// Each day's 문장 읽기 list (idioms + the lesson's sentences) up to today, all of them
+    /// (`all`) or just the unfinished ones of earlier days.
+    fn reading_days_list(&self, reps: u32, all: bool) -> Vec<(chrono::NaiveDate, Vec<(String, String, Spec)>)> {
         let in_deck = |t: &str| {
             let id = srs::make_id(ItemKind::Sentence, t);
-            self.store.items.iter().any(|i| i.id == id)
+            !all && self.store.items.iter().any(|i| i.id == id)
         };
-        let lessons = self.store.past_lessons(400);
-        let mut dates: Vec<chrono::NaiveDate> = self.store.idiom_days.range(..today()).map(|(d, _)| *d).chain(lessons.iter().filter_map(|l| l.date)).filter(|d| *d < today()).collect();
+        let mut lessons = self.store.past_lessons(400);
+        if all {
+            lessons.extend(self.lesson.clone().filter(|l| l.date == Some(today())));
+        }
+        let until = if all { today() + chrono::Duration::days(1) } else { today() };
+        let mut dates: Vec<chrono::NaiveDate> = self.store.idiom_days.range(..until).map(|(d, _)| *d).chain(lessons.iter().filter_map(|l| l.date)).filter(|d| *d < until).collect();
         dates.sort();
         dates.dedup();
         dates
@@ -677,6 +714,66 @@ impl App {
             self.queue = Some(q);
         } else if all {
             self.queue = Some(DrillQueue::new("", "reading", "지난 날 문장 읽기", flat.into_iter().map(|s| Spec { reps: 1, ..s }).collect()));
+        }
+    }
+
+    /// 📚 날짜별 전체 목록: a button per day (1일차, 2일차 …); the chosen day's whole list, done
+    /// ones included, coloured, clickable to practise, with 학습완료 for the rest.
+    fn day_lists_ui(&mut self, ui: &mut Ui, key: &str, heading: &str, title: &str, days: &[(chrono::NaiveDate, Vec<DayRow>)]) {
+        if days.is_empty() {
+            return;
+        }
+        let start = self.store.profile.start_date;
+        let sel_id = egui::Id::new(("day_list", key));
+        let mut sel: Option<chrono::NaiveDate> = ui.data(|d| d.get_temp(sel_id)).flatten();
+        let (mut picked, mut finished) = (None, None);
+        ui.add_space(14.0);
+        card(ui, |ui| {
+            ui.label(RichText::new(heading).size(18.0).strong());
+            ui.label(RichText::new("날짜를 누르면 그날 목록 전체(학습완료한 것 포함)를 보여 줘요.").color(muted()));
+            ui.horizontal_wrapped(|ui| {
+                for (d, rows) in days {
+                    let done = rows.iter().filter(|r| word_mark(self.store.word_stat(&r.specs[0].target).passes).1.starts_with('✓')).count();
+                    let label = format!("{}일차 ({done}/{})", (*d - start).num_days() + 1, rows.len());
+                    if ui.selectable_label(sel == Some(*d), label).on_hover_text(d.format("%Y-%m-%d").to_string()).clicked() {
+                        sel = if sel == Some(*d) { None } else { Some(*d) };
+                    }
+                }
+            });
+            let Some((d, rows)) = days.iter().find(|(d, _)| Some(*d) == sel) else { return };
+            ui.add_space(6.0);
+            ui.label(RichText::new(format!("{}일차 · {} — {}개", (*d - start).num_days() + 1, d.format("%m월 %d일"), rows.len())).strong());
+            for (i, r) in rows.iter().enumerate() {
+                let target = &r.specs[0].target;
+                let (color, mark) = word_mark(self.store.word_stat(target).passes);
+                ui.horizontal_wrapped(|ui| {
+                    speaker_button(ui, &mut self.voice, target);
+                    let resp = ui.add(egui::Label::new(RichText::new(&r.label).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                    if resp.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    if resp.clicked() {
+                        picked = Some(i);
+                    }
+                    ui.label(RichText::new(&mark).small().color(color));
+                    if !mark.starts_with('✓') && finish_button(ui) {
+                        finished = Some(i);
+                    }
+                    crate::grammar::ko_label(ui, &r.ko, 15.0, muted());
+                });
+            }
+        });
+        ui.data_mut(|d| d.insert_temp(sel_id, sel));
+        let Some(rows) = days.iter().find(|(d, _)| Some(*d) == sel).map(|x| &x.1) else { return };
+        let category = if key == "words" { "vocab" } else { "reading" };
+        let name = |r: &DayRow| format!("{title} · {}", r.specs[0].target.chars().take(30).collect::<String>());
+        if let Some(i) = finished {
+            let item = rows[i].specs.iter().find_map(|s| s.new_item.clone());
+            self.mark_done(item, &rows[i].specs[0].target.clone());
+        } else if let Some(i) = picked {
+            let mut q = DrillQueue::new("", category, &name(&rows[i]), rows[i].specs.clone());
+            q.then = rows[i + 1..].iter().map(|r| (name(r), r.specs.clone())).collect();
+            self.queue = Some(q);
         }
     }
 
@@ -840,6 +937,12 @@ impl App {
             self.queue = Some(DrillQueue::new("reading", "reading", "문장 읽기", specs));
         }
         self.past_reading_ui(ui, reps);
+        let days: Vec<(chrono::NaiveDate, Vec<DayRow>)> = self
+            .reading_days_list(reps, true)
+            .into_iter()
+            .map(|(d, v)| (d, v.into_iter().map(|(label, ko, spec)| DayRow { label, ko, specs: vec![spec] }).collect()))
+            .collect();
+        self.day_lists_ui(ui, "reading", "📚 날짜별 전체 문장", "문장 읽기", &days);
         if lesson.sentences.is_empty() {
             ui.add_space(8.0);
             self.lesson_ready_ui(ui);
@@ -924,4 +1027,11 @@ impl App {
 /// The small "학습완료" button for a word too easy to drill.
 fn finish_button(ui: &mut Ui) -> bool {
     ui.add(egui::Button::new(RichText::new("✓ 학습완료").small()).small()).on_hover_text("아주 쉬운 단어: 연습 없이 완료로 표시해요 (복습에도 나오지 않아요)").clicked()
+}
+
+/// One row of a day's full list: what is shown and the drills for it.
+pub struct DayRow {
+    pub label: String,
+    pub ko: String,
+    pub specs: Vec<Spec>,
 }
