@@ -53,13 +53,23 @@ pub fn non_headset_mic(inputs: &[String], outputs: &[String]) -> Option<String> 
     inputs.iter().find(|n| is_builtin_mic(n)).or_else(|| inputs.iter().find(|n| !is_headset_mic(n, outputs))).cloned()
 }
 
+/// Name of the microphone a recording would use. A chosen mic is taken by name; only the system
+/// default is asked for. Listing every device takes ~0.3 s on macOS and loads coreaudiod.
 pub fn current_input_name(preferred: &str) -> String {
-    pick_device(preferred, true).and_then(|d| d.name().ok()).unwrap_or_default()
+    if !preferred.is_empty() {
+        return preferred.to_string();
+    }
+    cpal::default_host().default_input_device().and_then(|d| d.name().ok()).unwrap_or_default()
 }
 
 /// The device called `name`, or the system default when `name` is empty or not connected.
 fn pick_device(name: &str, input: bool) -> Option<cpal::Device> {
     let host = cpal::default_host();
+    let default = || if input { host.default_input_device() } else { host.default_output_device() };
+    // Usually the chosen device is also the system default: skip listing every device then.
+    if let Some(d) = default().filter(|d| name.is_empty() || d.name().is_ok_and(|n| n == name)) {
+        return Some(d);
+    }
     if !name.is_empty() {
         let found = if input { host.input_devices().ok() } else { host.output_devices().ok() }
             .and_then(|mut it| it.find(|d| d.name().is_ok_and(|n| n == name)));
@@ -67,7 +77,7 @@ fn pick_device(name: &str, input: bool) -> Option<cpal::Device> {
             return found;
         }
     }
-    if input { host.default_input_device() } else { host.default_output_device() }
+    default()
 }
 
 // ---------------------------------------------------------------- recording
@@ -937,6 +947,18 @@ mod tests {
             let first = audio.iter().position(|s| s.abs() > 1e-6).map(|i| format!("{:.2}s", i as f32 / STT_RATE as f32)).unwrap_or("never".into());
             println!("idle {idle:>2}s → first sound at {first} of {:.1}s", audio.len() as f32 / STT_RATE as f32);
         }
+    }
+
+    /// Device lookups like the 3-second mic check, many times over (watch coreaudiod meanwhile).
+    #[test]
+    #[ignore]
+    fn real_device_lookups() {
+        let n: usize = std::env::var("SPEAKUP_TEST_TRIES").ok().and_then(|v| v.parse().ok()).unwrap_or(200);
+        let t = Instant::now();
+        for _ in 0..n {
+            let _ = current_input_name(&std::env::var("SPEAKUP_TEST_MIC").unwrap_or_default());
+        }
+        println!("{n} lookups in {:?}", t.elapsed());
     }
 
     #[test]

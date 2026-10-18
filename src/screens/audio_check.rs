@@ -15,6 +15,8 @@ pub struct AudioCheckState {
     /// Latest known permission (the OS answer to a request arrives on another thread).
     pub permission: Arc<Mutex<MicPermission>>,
     checked_at: Option<Instant>,
+    /// A permission/lid check is running (never start a second one while it is slow).
+    checking: Arc<std::sync::atomic::AtomicBool>,
     /// Microphones and speakers; listing them can take seconds on macOS, so it runs off the UI thread.
     devices: Arc<Mutex<Option<(Vec<String>, Vec<String>)>>>,
     listing: bool,
@@ -30,6 +32,7 @@ impl Default for AudioCheckState {
         Self {
             permission: Arc::new(Mutex::new(mic_permission::status())),
             checked_at: None,
+            checking: Arc::default(),
             devices: Arc::default(),
             listing: false,
             testing: false,
@@ -45,18 +48,23 @@ impl AudioCheckState {
         *self.permission.lock().unwrap()
     }
 
-    /// Re-reads the OS permission every few seconds (the user may change it in System Settings).
-    /// Runs off the UI thread: device enumeration and `ioreg` take a few milliseconds.
+    /// Re-reads the OS permission now and then (the user may change it in System Settings).
+    /// Runs off the UI thread, one check at a time: if the audio system is slow, checks must not
+    /// pile up (each one talks to coreaudiod).
     pub fn refresh(&mut self, chosen_mic: &str) {
-        if !cfg!(test) && self.checked_at.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
-            self.checked_at = Some(Instant::now());
-            let (perm, off, mic) = (self.permission.clone(), self.builtin_mic_off.clone(), chosen_mic.to_string());
-            std::thread::spawn(move || {
-                *perm.lock().unwrap() = mic_permission::status();
-                let lid = mic_permission::lid_closed() && is_builtin_mic(&audio::current_input_name(&mic));
-                off.store(lid, std::sync::atomic::Ordering::Relaxed);
-            });
+        use std::sync::atomic::Ordering;
+        if cfg!(test) || self.checking.load(Ordering::Relaxed) || !self.checked_at.is_none_or(|t| t.elapsed() > CHECK_EVERY) {
+            return;
         }
+        self.checked_at = Some(Instant::now());
+        self.checking.store(true, Ordering::Relaxed);
+        let (perm, off, mic, busy) = (self.permission.clone(), self.builtin_mic_off.clone(), chosen_mic.to_string(), self.checking.clone());
+        std::thread::spawn(move || {
+            *perm.lock().unwrap() = mic_permission::status();
+            let lid = mic_permission::lid_closed() && is_builtin_mic(&audio::current_input_name(&mic));
+            off.store(lid, Ordering::Relaxed);
+            busy.store(false, Ordering::Relaxed);
+        });
     }
 
     fn list_devices(&mut self) {
@@ -86,6 +94,9 @@ fn is_builtin_mic(name: &str) -> bool {
     let n = name.to_lowercase();
     n.contains("macbook") || n.contains("built-in") || n.contains("내장")
 }
+
+/// How often the microphone permission / closed lid is re-checked.
+const CHECK_EVERY: Duration = Duration::from_secs(10);
 
 const LID_MSG: &str = "🎤 노트북 덮개가 닫혀 있어 내장 마이크가 꺼져 있습니다. 덮개를 열거나 헤드셋·이어폰 마이크를 연결하세요.";
 
