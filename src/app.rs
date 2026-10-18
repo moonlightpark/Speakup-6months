@@ -333,6 +333,11 @@ impl App {
                 self.store.record_word_practice(target, a.score >= pass);
             }
         }
+        if category == "business" {
+            // Key phrases / corrected sentences said in the 회화 phrase drills.
+            let pass = self.pass_score();
+            self.store.record_word_practice(target, a.score >= pass);
+        }
         if category == "vocab" {
             let lower = target.to_lowercase();
             let in_set = self.store.profile.today.word_set.iter().any(|w| w.words.iter().chain(&w.phrases).chain(&w.expressions).any(|x| x.word.to_lowercase() == lower));

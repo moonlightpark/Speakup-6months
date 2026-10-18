@@ -573,6 +573,7 @@ fn ft09_business_roleplay_conversation() {
     t.wait("finish", |a| a.roleplay.finished);
     assert!(t.has("🎉 대화 완료!") && t.has("과거형을 연습하세요"));
     assert!(t.app().store.corrections.iter().any(|c| c.source == "회화" && c.corrected == "Yesterday I went to the client."));
+    assert_eq!(t.app().store.word_stat("대화: Weekly meeting").passes, 1, "a finished conversation counts toward the scene's colour");
     // The request contained the scenario and the conversation so far.
     let p = t.prompts().into_iter().filter(|p| p.starts_with("Role-play.")).last().unwrap();
     assert!(p.contains("Sarah, team lead") && p.contains("LEARNER: Yesterday I go to the client"));
@@ -1433,4 +1434,26 @@ fn ft39_reading_list_colours_click_and_home_progress() {
     assert_eq!(t.app().item_progress("reading").map(|p| p.0), Some(1), "one idiom learned");
     t.click("🏠 홈으로");
     assert!(t.has("(1/1,300문장 · 기억 완료 0)"));
+}
+
+#[test]
+fn ft40_business_click_a_scene_or_key_phrase_to_start_talking() {
+    let mut t = launch("bizclick");
+    t.nav("💼  회화 · 비즈니스");
+    t.wait("lesson", |a| a.lesson.is_some());
+    // Today's business: key phrases are coloured and clicking one starts the conversation.
+    assert!(t.has("핵심 표현 · 클릭하면 바로 대화 시작") && t.has("미완료"));
+    t.click("We're on track.");
+    assert!(t.app().roleplay.started && t.has("Let's get started. Any updates?"));
+    // Using a key phrase while talking counts as practising it.
+    t.say("We're on track for Friday", 1.5);
+    assert_eq!(t.app().store.word_stat("We're on track.").passes, 1);
+    // 상황 모음: a list coloured by finished conversations; clicking a scene starts it at once.
+    t.click("🎭 상황 모음");
+    assert!(t.has("완료한 상황 0/") && t.has("Job interview"));
+    t.click("Ordering at a restaurant");
+    t.wait("AI opening line", |a| !a.roleplay.lines.is_empty());
+    assert!(t.app().roleplay.started);
+    let p = t.prompts().into_iter().filter(|p| p.starts_with("Role-play.")).last().unwrap();
+    assert!(p.contains("a friendly waiter"), "the clicked scene was started");
 }

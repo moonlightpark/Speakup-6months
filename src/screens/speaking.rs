@@ -42,6 +42,8 @@ pub struct RoleplayState {
     pub error: Option<String>,
     pub show_ko: bool,
     pub scenario: Option<BusinessScenario>,
+    /// This conversation was already counted toward the scene's practice count.
+    pub counted: bool,
 }
 
 /// Splits a paragraph into sentences for read-aloud drills.
@@ -225,6 +227,42 @@ impl App {
         }
     }
 
+    /// Key in word_stats.json counting finished conversations of a scene.
+    fn scene_key(title: &str) -> String {
+        format!("대화: {title}")
+    }
+
+    /// Opens a conversation for `sc` right away (the AI speaks first).
+    fn start_conversation(&mut self, sc: BusinessScenario) {
+        let Some(c) = self.claude() else {
+            self.roleplay.error = Some("AI 회화 상대는 Claude API 키가 필요합니다. 설정에서 키를 입력하세요.".into());
+            return;
+        };
+        let level = self.store.profile.level;
+        crate::applog!("business: 대화 시작 · {}", sc.title);
+        self.roleplay.started = true;
+        self.roleplay.scenario = Some(sc.clone());
+        if sc.opening_line.trim().is_empty() {
+            // The AI opens the scene itself.
+            self.roleplay.job.spawn(move || c.roleplay_turn(&sc, &[], level));
+        } else {
+            self.voice.say(&sc.opening_line);
+            self.roleplay.lines.push(ChatLine { user: false, text: sc.opening_line.clone(), ko: String::new(), correction: String::new(), correction_ko: String::new() });
+        }
+    }
+
+    /// A conversation reached 4 turns (or its end): counts once toward the scene's colour.
+    fn count_conversation(&mut self) {
+        if self.roleplay.counted {
+            return;
+        }
+        self.roleplay.counted = true;
+        if let Some(sc) = &self.roleplay.scenario {
+            let key = Self::scene_key(&sc.title);
+            self.store.record_word_practice(&key, true);
+        }
+    }
+
     fn reset_roleplay(&mut self) {
         let old = std::mem::take(&mut self.roleplay);
         self.roleplay = RoleplayState { mode: old.mode, collection: old.collection, custom: old.custom, ..Default::default() };
@@ -253,8 +291,11 @@ impl App {
                         self.roleplay.summary = t.summary_ko;
                     }
                     let user_turns = self.roleplay.lines.iter().filter(|l| l.user).count();
-                    if (self.roleplay.finished || user_turns >= 4) && !self.step_done("business") {
-                        self.complete_step("business");
+                    if self.roleplay.finished || user_turns >= 4 {
+                        self.count_conversation();
+                        if !self.step_done("business") {
+                            self.complete_step("business");
+                        }
                     }
                 }
                 Err(e) => self.roleplay.error = Some(format!("{e:#}")),
@@ -273,19 +314,40 @@ impl App {
             }
         });
         if !self.roleplay.started && self.roleplay.mode == 2 {
+            // Scenes coloured by finished conversations (like the 새 단어 list); a click starts one.
             let mut pick = None;
-            ui.horizontal_wrapped(|ui| {
+            card(ui, |ui| {
+                let counts: Vec<u32> = crate::content::ROLEPLAYS.iter().map(|r| self.store.word_stat(&Self::scene_key(r.0)).passes).collect();
+                ui.horizontal_wrapped(|ui| {
+                    let done = counts.iter().filter(|c| **c >= WORD_DONE_PASSES).count();
+                    ui.label(RichText::new(format!("완료한 상황 {done}/{}", counts.len())).strong());
+                    ui.label(RichText::new("· 상황을 클릭하면 바로 대화가 시작돼요 (대화 4번 이상 = 1회)").color(MUTED));
+                });
+                ui.add_space(6.0);
                 for (i, (title, ko, _, _)) in crate::content::ROLEPLAYS.iter().enumerate() {
-                    if ui.selectable_label(self.roleplay.collection == i, *title).on_hover_text(*ko).clicked() {
-                        pick = Some(i);
-                    }
+                    let (color, label) = crate::screens::practice::word_mark(counts[i]);
+                    ui.horizontal_wrapped(|ui| {
+                        let r = ui.add(egui::Label::new(RichText::new(*title).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 바로 대화 시작");
+                        if r.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if r.clicked() {
+                            pick = Some(i);
+                        }
+                        ui.label(RichText::new(label).small().color(color));
+                        ui.label(RichText::new(*ko).color(MUTED));
+                    });
                 }
-                if ui.button("🎲 랜덤").clicked() {
+                ui.add_space(4.0);
+                if ui.button("🎲 랜덤으로 시작").clicked() {
                     pick = Some(rand::random_range(0..crate::content::ROLEPLAYS.len()));
                 }
             });
             if let Some(i) = pick {
                 self.roleplay.collection = i;
+                let sc = self.scenario();
+                self.start_conversation(sc);
+                return;
             }
         }
         if !self.roleplay.started && self.roleplay.mode == 3 {
@@ -304,23 +366,43 @@ impl App {
             }
         }
         let sc = self.roleplay.scenario.clone().unwrap_or_else(|| self.scenario());
+        let mut start_now = false;
         ui.add_space(6.0);
         card(ui, |ui| {
             ui.label(RichText::new(&sc.title).size(20.0).strong());
             ui.label(RichText::new(&sc.scenario_ko).color(MUTED));
             ui.label(RichText::new(format!("상대: {} · 나: {}", sc.ai_role, sc.user_role)).color(MUTED).small());
+            if self.roleplay.mode != 2 {
+                let (color, label) = crate::screens::practice::word_mark(self.store.word_stat(&Self::scene_key(&sc.title)).passes);
+                ui.label(RichText::new(format!("이 상황 대화: {label}")).small().color(color));
+            }
             if !sc.key_phrases.is_empty() {
                 ui.add_space(6.0);
-                ui.label(RichText::new("핵심 표현").color(ACCENT));
+                ui.label(RichText::new("핵심 표현 · 클릭하면 바로 대화 시작 (따라 말하기·대화에서 쓸 때마다 횟수가 올라요)").color(ACCENT));
                 for p in &sc.key_phrases {
-                    ui.horizontal(|ui| {
+                    let (color, label) = crate::screens::practice::word_mark(self.store.word_stat(&p.text).passes);
+                    ui.horizontal_wrapped(|ui| {
                         speaker_button(ui, &mut self.voice, &p.text);
-                        ui.label(RichText::new(&p.text).strong());
+                        let r = ui.add(egui::Label::new(RichText::new(&p.text).strong().color(color)).sense(egui::Sense::click()));
+                        if !self.roleplay.started {
+                            let r = r.on_hover_text("클릭하면 바로 대화 시작");
+                            if r.hovered() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
+                            if r.clicked() {
+                                start_now = true;
+                            }
+                        }
+                        ui.label(RichText::new(label).small().color(color));
                         crate::grammar::ko_label(ui, &p.ko, 16.0, MUTED);
                     });
                 }
             }
         });
+        if start_now && !self.roleplay.started {
+            self.start_conversation(sc.clone());
+            return;
+        }
         if !sc.key_phrases.is_empty() && !self.roleplay.started && ui.button("🔁 핵심 표현 먼저 따라 말하기").clicked() {
             self.start_phrase_queue("핵심 표현 연습", "business", &sc.key_phrases);
             return;
@@ -335,16 +417,7 @@ impl App {
         if !self.roleplay.started {
             ui.add_space(8.0);
             if ui.add(egui::Button::new(RichText::new("▶ 대화 시작").size(18.0)).fill(ACCENT).min_size(Vec2::new(200.0, 44.0))).clicked() {
-                self.roleplay.started = true;
-                self.roleplay.scenario = Some(sc.clone());
-                if sc.opening_line.trim().is_empty() {
-                    // The AI opens the scene itself.
-                    let scc = sc.clone();
-                    self.roleplay.job.spawn(move || c.roleplay_turn(&scc, &[], level));
-                } else {
-                    self.voice.say(&sc.opening_line);
-                    self.roleplay.lines.push(ChatLine { user: false, text: sc.opening_line.clone(), ko: String::new(), correction: String::new(), correction_ko: String::new() });
-                }
+                self.start_conversation(sc.clone());
             }
             return;
         }
@@ -416,6 +489,14 @@ impl App {
             if self.roleplay.job.running() {
                 spinner_label(ui, "상대가 답하는 중…");
             } else if let Some(t) = self.roleplay.capture.ui(ui, &mut self.voice, 45.0) {
+                // A key phrase used in the conversation counts as practice too.
+                let said = normalize_words(&t);
+                for p in &sc.key_phrases {
+                    let phrase = normalize_words(&p.text);
+                    if !phrase.is_empty() && format!(" {said} ").contains(&format!(" {phrase} ")) {
+                        self.store.record_word_practice(&p.text, true);
+                    }
+                }
                 self.store.log_attempt(["business", "free-talk", "roleplay", "custom-roleplay"][self.roleplay.mode.min(3)], "", &t, 0.0);
                 self.roleplay.lines.push(ChatLine { user: true, text: t, ko: String::new(), correction: String::new(), correction_ko: String::new() });
                 self.roleplay.error = None;
@@ -436,11 +517,26 @@ impl App {
         if ui.small_button("대화 끝내기").clicked() {
             self.roleplay.finished = true;
             self.roleplay.summary = "대화를 직접 마쳤어요. 교정된 문장을 따라 말하며 정리해 보세요.".into();
-            if self.roleplay.lines.iter().filter(|l| l.user).count() >= 4 && !self.step_done("business") {
-                self.complete_step("business");
+            if self.roleplay.lines.iter().filter(|l| l.user).count() >= 4 {
+                self.count_conversation();
+                if !self.step_done("business") {
+                    self.complete_step("business");
+                }
             }
         }
     }
+}
+
+/// Lower-case words without punctuation, single-spaced ("We're on track." → "we're on track").
+fn normalize_words(t: &str) -> String {
+    t.to_lowercase()
+        .replace('’', "'")
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '\'' { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]
