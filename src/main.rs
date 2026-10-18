@@ -45,7 +45,9 @@ fn main() -> eframe::Result<()> {
             .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon/icon_256.png")).unwrap_or_default())
             .with_inner_size([width, 800.0])
             .with_min_inner_size([width - 160.0, 600.0]),
-        // Always open at the fitted size instead of a size remembered from an earlier run.
+        // Always open at the fitted size (sidebar + content column, ~1,200 wide). eframe's own
+        // persistence is not compiled in: in eframe 0.31 `persist_window: false` only stops saving,
+        // and an old saved size (2,186 wide) kept being restored.
         persist_window: false,
         ..Default::default()
     };
