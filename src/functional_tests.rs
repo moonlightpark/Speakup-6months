@@ -1555,3 +1555,20 @@ fn ft43_diary_is_kept_by_date_and_read_again_from_the_calendar() {
     t.steps(3);
     assert!(t.has(&format!("{}년 {}월", past.year(), past.month())) && t.has_exact("I went to the zoo.") && t.has_exact("I went to the zoo with my family.") && t.has("85점"));
 }
+
+#[test]
+fn ft44_a_failed_lesson_request_is_not_repeated_until_retry() {
+    let mut t = launch("lessonfail");
+    t.app_mut().lesson = None;
+    t.app_mut().api_url = "http://127.0.0.1:9/v1/messages".into(); // nothing listens: fails at once
+    t.nav("💬  자기 표현");
+    t.wait("lesson error", |a| a.lesson_error.is_some());
+    for _ in 0..30 {
+        t.steps(1);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(t.app().lesson_error.is_some() && !t.app().lesson_job.running(), "no new request after the failure");
+    assert!(t.has("다시 시도") && t.has("내장 레슨으로 진행"));
+    t.click("내장 레슨으로 진행");
+    assert!(t.app().lesson.as_ref().is_some_and(|l| l.date == Some(today())));
+}

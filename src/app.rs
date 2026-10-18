@@ -579,7 +579,9 @@ impl App {
     // ------------------------------------------------------------ today's lesson
 
     pub fn ensure_lesson(&mut self) {
-        if self.lesson.as_ref().and_then(|l| l.date) == Some(today()) || self.lesson_job.running() {
+        // After a failure, wait for 다시 시도 / 내장 레슨 instead of asking again every frame
+        // (an exhausted API credit once sent ~5,000 failing requests overnight).
+        if self.lesson.as_ref().and_then(|l| l.date) == Some(today()) || self.lesson_job.running() || self.lesson_error.is_some() {
             return;
         }
         let p = &self.store.profile;
@@ -640,7 +642,10 @@ impl App {
                     self.store.save_lesson(&l);
                     self.lesson = Some(l);
                 }
-                Err(e) => self.lesson_error = Some(format!("{e:#}")),
+                Err(e) => {
+                    crate::applog!("lesson: 레슨 생성 실패, 다시 시도를 기다림 · {e:#}");
+                    self.lesson_error = Some(format!("{e:#}"));
+                }
             }
         }
         if let Some(r) = self.ytdlp_job.poll() {
