@@ -433,12 +433,18 @@ impl App {
     pub fn idiom_set(&mut self) -> Vec<&'static crate::idioms::Idiom> {
         if self.store.profile.today.idioms.is_none() {
             let items = &self.store.items;
-            let picked = crate::idioms::pick(crate::idioms::PER_DAY, |t| items.iter().any(|i| i.text.eq_ignore_ascii_case(t)));
+            // New ones only: earlier days' sentences left unfinished are in 지난 날 못 끝낸 문장.
+            let earlier: std::collections::HashSet<u32> = self.store.idiom_days.range(..today()).flat_map(|(_, v)| v.iter().copied()).collect();
+            let picked = crate::idioms::pick(crate::idioms::PER_DAY, |t| {
+                items.iter().any(|i| i.text.eq_ignore_ascii_case(t)) || crate::idioms::all().iter().any(|i| i.en == t && earlier.contains(&i.no))
+            });
             crate::applog!("reading: 오늘의 숙어 문장 {}개 · {:?}…", picked.len(), picked.first());
             self.store.profile.today.idioms = Some(picked);
             self.store.save_profile();
         }
-        self.store.profile.today.idioms.iter().flatten().filter_map(|n| crate::idioms::by_no(*n)).collect()
+        let nos = self.store.profile.today.idioms.clone().unwrap_or_default();
+        self.store.record_idiom_day(today(), &nos);
+        nos.iter().filter_map(|n| crate::idioms::by_no(*n)).collect()
     }
 
     /// Makes today's lesson (sentences, writing, prefetch) use the same words as the 새 단어 menu.

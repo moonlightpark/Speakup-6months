@@ -531,7 +531,14 @@ impl App {
     /// 학습완료: a word too easy to drill counts as learned (deck + 기억 완료) and is never
     /// reviewed.
     fn mark_learned(&mut self, w: &LessonWord, kind: WordKind) {
-        if let Some(mut item) = self.entry_specs(w, kind, 1, true).into_iter().find_map(|s| s.new_item) {
+        let item = self.entry_specs(w, kind, 1, true).into_iter().find_map(|s| s.new_item);
+        self.mark_done(item, &w.word);
+    }
+
+    /// Saves `item` (if not in the deck yet) as learned without review, and counts `text` as
+    /// fully practised.
+    fn mark_done(&mut self, item: Option<StudyItem>, text: &str) {
+        if let Some(mut item) = item {
             item.known = true;
             let i = srs::add_item(&mut self.store.items, item);
             let far = today() + chrono::Duration::days(3650);
@@ -541,14 +548,136 @@ impl App {
             it.interval_days = 3650;
             self.store.save_items();
         }
-        self.store.mark_word_done(&w.word);
-        crate::applog!("words: '{}' 학습완료 (쉬운 단어)", w.word);
-        self.toast(format!("✓ '{}' 학습완료", w.word));
+        self.store.mark_word_done(text);
+        crate::applog!("'{text}' 학습완료 (쉬운 항목)");
+        self.toast(format!("✓ '{}' 학습완료", text.chars().take(40).collect::<String>()));
     }
 
     fn is_known(&self, text: &str, kind: WordKind) -> bool {
         let id = srs::make_id(if kind == WordKind::Chunk { ItemKind::Sentence } else { ItemKind::Word }, text);
         self.store.items.iter().any(|i| i.id == id && i.known)
+    }
+
+    /// Earlier days' 문장 읽기 sentences (idioms, then the lesson's sentences) not finished yet,
+    /// by day, oldest first, as (row label, Korean, drill).
+    fn past_reading_unfinished(&self, reps: u32) -> Vec<(chrono::NaiveDate, Vec<(String, String, Spec)>)> {
+        let in_deck = |t: &str| {
+            let id = srs::make_id(ItemKind::Sentence, t);
+            self.store.items.iter().any(|i| i.id == id)
+        };
+        let lessons = self.store.past_lessons(400);
+        let mut dates: Vec<chrono::NaiveDate> = self.store.idiom_days.range(..today()).map(|(d, _)| *d).chain(lessons.iter().filter_map(|l| l.date)).filter(|d| *d < today()).collect();
+        dates.sort();
+        dates.dedup();
+        dates
+            .into_iter()
+            .map(|d| {
+                let idioms = self.store.idiom_days.get(&d).cloned().unwrap_or_default();
+                let mut left: Vec<(String, String, Spec)> = idioms
+                    .iter()
+                    .filter_map(|n| crate::idioms::by_no(*n))
+                    .filter(|i| !in_deck(&i.en))
+                    .map(|i| {
+                        let spec = Spec {
+                            item_id: None,
+                            new_item: Some(StudyItem {
+                                kind: ItemKind::Sentence,
+                                text: i.en.clone(),
+                                meaning_ko: i.ko.clone(),
+                                example: i.also.first().cloned().unwrap_or_default(),
+                                category: "idiom".into(),
+                                ..Default::default()
+                            }),
+                            target: i.en.clone(),
+                            ko: i.ko.clone(),
+                            tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 숙어 문장".into()),
+                            reps,
+                            recall: false,
+                            is_word: false,
+                            chunks: Vec::new(),
+                        };
+                        (format!("💬 {}", i.en), i.ko.clone(), spec)
+                    })
+                    .collect();
+                if let Some(l) = lessons.iter().find(|l| l.date == Some(d)) {
+                    left.extend(l.sentences.iter().filter(|s| !in_deck(&s.text)).map(|s| {
+                        let spec = Spec {
+                            item_id: None,
+                            new_item: Some(StudyItem { kind: ItemKind::Sentence, text: s.text.clone(), meaning_ko: s.ko.clone(), category: "reading".into(), ..Default::default() }),
+                            target: s.text.clone(),
+                            ko: s.ko.clone(),
+                            tip: s.tip_ko.clone(),
+                            reps,
+                            recall: false,
+                            is_word: false,
+                            chunks: self.store.gloss_for(&s.text),
+                        };
+                        (s.text.clone(), s.ko.clone(), spec)
+                    }));
+                }
+                (d, left)
+            })
+            .filter(|(_, v)| !v.is_empty())
+            .collect()
+    }
+
+    /// 📅 지난 날 못 끝낸 문장: like the 새 단어 one — by day, clickable, 학습완료, practise all.
+    fn past_reading_ui(&mut self, ui: &mut Ui, reps: u32) {
+        let days = self.past_reading_unfinished(reps);
+        if days.is_empty() {
+            return;
+        }
+        let total: usize = days.iter().map(|d| d.1.len()).sum();
+        let start = self.store.profile.start_date;
+        let (mut picked, mut finished, mut all) = (None, None, false);
+        ui.add_space(14.0);
+        card(ui, |ui| {
+            ui.label(RichText::new(format!("📅 지난 날 못 끝낸 문장 {total}개")).size(18.0).strong());
+            ui.label(RichText::new("전에 나왔지만 아직 통과하지 못한 문장이에요. 클릭하면 그 문장을 바로 연습해요.").color(muted()));
+            for (di, (date, left)) in days.iter().enumerate() {
+                let day_no = (*date - start).num_days() + 1;
+                egui::CollapsingHeader::new(RichText::new(format!("{day_no}일차 · {} — {}개", date.format("%m월 %d일"), left.len())).strong())
+                    .id_salt(("past_reading", *date))
+                    .default_open(di + 1 == days.len())
+                    .show(ui, |ui| {
+                        for (ri, (label, ko, spec)) in left.iter().enumerate() {
+                            let (color, mark) = word_mark(self.store.word_stat(&spec.target).passes);
+                            ui.horizontal_wrapped(|ui| {
+                                speaker_button(ui, &mut self.voice, &spec.target);
+                                let r = ui.add(egui::Label::new(RichText::new(label).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                                if r.hovered() {
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                }
+                                if r.clicked() {
+                                    picked = Some((di, ri));
+                                }
+                                ui.label(RichText::new(mark).small().color(color));
+                                if finish_button(ui) {
+                                    finished = Some((di, ri));
+                                }
+                                crate::grammar::ko_label(ui, ko, 15.0, muted());
+                            });
+                        }
+                    });
+            }
+            ui.add_space(6.0);
+            all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 문장 {total}개 이어서 연습")).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
+        });
+        let title = |t: &str| format!("문장 읽기 · {}", t.chars().take(30).collect::<String>());
+        let flat: Vec<Spec> = days.iter().flat_map(|d| d.1.iter().map(|r| r.2.clone())).collect();
+        if let Some((di, ri)) = finished {
+            let spec = days[di].1[ri].2.clone();
+            self.mark_done(spec.new_item, &spec.target);
+        } else if let Some((di, ri)) = picked {
+            let skip: usize = days[..di].iter().map(|d| d.1.len()).sum::<usize>() + ri;
+            let spec = flat[skip].clone();
+            crate::applog!("reading: 지난 날 문장 '{}' 바로 연습", spec.target);
+            let mut q = DrillQueue::new("", "reading", &title(&spec.target), vec![spec]);
+            q.then = flat[skip + 1..].iter().map(|s| (title(&s.target), vec![s.clone()])).collect();
+            self.queue = Some(q);
+        } else if all {
+            self.queue = Some(DrillQueue::new("", "reading", "지난 날 문장 읽기", flat.into_iter().map(|s| Spec { reps: 1, ..s }).collect()));
+        }
     }
 
     /// Already saved in the deck (passed on an earlier day or before a restart).
@@ -678,7 +807,7 @@ impl App {
                 }
             }))
             .collect();
-        let (start, picked, _) = self.intro_card(
+        let (start, picked, finished) = self.intro_card(
             ui,
             "📖 문장 소리 내어 읽기 (쉐도잉)",
             &format!(
@@ -688,8 +817,12 @@ impl App {
             &rows,
             "reading",
             &marks,
-            false,
+            true,
         );
+        if let Some(spec) = finished.and_then(|i| row_specs.get(i).cloned()) {
+            self.mark_done(spec.new_item, &spec.target);
+            return;
+        }
         if let Some((i, spec)) = picked.and_then(|i| Some((i, row_specs.get(i).cloned()?))) {
             // One sentence on demand, repeated in full so the count moves toward 기억 완료;
             // "다음 문장" then goes on down the list.
@@ -706,6 +839,7 @@ impl App {
             specs.extend(lesson.sentences.iter().filter(|s| !s.ko.is_empty() && !known(&s.text)).map(|s| recall_spec(&s.text, &s.ko)));
             self.queue = Some(DrillQueue::new("reading", "reading", "문장 읽기", specs));
         }
+        self.past_reading_ui(ui, reps);
         if lesson.sentences.is_empty() {
             ui.add_space(8.0);
             self.lesson_ready_ui(ui);

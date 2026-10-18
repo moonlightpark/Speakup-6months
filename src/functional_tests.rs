@@ -1670,3 +1670,32 @@ fn ft47_an_easy_word_can_be_marked_learned() {
     t.nav("▶ 시작하기");
     assert!(!t.app().queue.as_ref().unwrap().specs.iter().any(|s| s.target == first));
 }
+
+#[test]
+fn ft48_reading_shows_earlier_days_unfinished_sentences_and_marks_learned() {
+    let yesterday = today() - chrono::Duration::days(1);
+    let idiom = |n: u32| crate::idioms::by_no(n).unwrap().en.clone();
+    let mut t = launch_at(temp_dir("pastreading"), false, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = yesterday;
+        s.idiom_days.insert(yesterday, vec![1, 2, 3]);
+        s.items.push(StudyItem { id: crate::srs::make_id(ItemKind::Sentence, &idiom(1)), kind: ItemKind::Sentence, text: idiom(1), category: "idiom".into(), ..Default::default() });
+    });
+    t.nav("📖  문장 읽기");
+    assert!(t.has("📅 지난 날 못 끝낸 문장 2개") && t.has("1일차 ·") && t.has_exact(&format!("💬 {}", idiom(2))));
+    // Today's idioms are new ones only, and kept by date.
+    let today_nos = t.app().store.profile.today.idioms.clone().unwrap();
+    assert!(!today_nos.iter().any(|n| [1, 2, 3].contains(n)), "{today_nos:?}");
+    assert!(std::fs::read_to_string(t.dir.join("idiom_days.json")).unwrap().contains(&today().to_string()));
+    // 학습완료 in the earlier day's list (the last button) and in today's list (the first).
+    t.h.get_all_by_label("✓ 학습완료").last().unwrap().click();
+    t.steps(3);
+    assert!(t.has("📅 지난 날 못 끝낸 문장 1개"));
+    assert!(t.app().store.items.iter().any(|i| i.text == idiom(3) && i.known));
+    t.nav("✓ 학습완료");
+    let first_today = crate::idioms::by_no(today_nos[0]).unwrap().en.clone();
+    assert!(t.app().store.items.iter().any(|i| i.text == first_today && i.known) && t.app().store.word_stat(&first_today).passes >= WORD_DONE_PASSES);
+    // Click an earlier sentence: practise it, then "다음 문장" goes on.
+    t.click(&format!("💬 {}", idiom(2)));
+    assert!(t.has(&format!("문장 읽기 · {}", idiom(2).chars().take(30).collect::<String>())));
+}

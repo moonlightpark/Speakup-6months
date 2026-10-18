@@ -39,6 +39,8 @@ pub struct Store {
     pub word_stats: std::collections::HashMap<String, WordStat>,
     /// Each day's 새 단어 list (word_days.json), so words left unfinished can be found later.
     pub word_days: std::collections::BTreeMap<chrono::NaiveDate, WordSet>,
+    /// Each day's idiom sentences for 문장 읽기 (idiom_days.json, numbers in the built-in list).
+    pub idiom_days: std::collections::BTreeMap<chrono::NaiveDate, Vec<u32>>,
 }
 
 fn load_json<T: DeserializeOwned + Default>(path: &Path) -> T {
@@ -91,6 +93,7 @@ impl Store {
             writings: load_json(&dir.join("writing.json")),
             word_stats: load_json(&dir.join("word_stats.json")),
             word_days: load_json(&dir.join("word_days.json")),
+            idiom_days: load_json(&dir.join("idiom_days.json")),
             dir,
         })
     }
@@ -109,6 +112,14 @@ impl Store {
         if self.word_days.get(&date) != Some(set) {
             self.word_days.insert(date, set.clone());
             log_err(save_json(&self.dir.join("word_days.json"), &self.word_days));
+        }
+    }
+
+    /// Keeps a day's idiom sentences in idiom_days.json.
+    pub fn record_idiom_day(&mut self, date: chrono::NaiveDate, nos: &[u32]) {
+        if self.idiom_days.get(&date).map(|v| v.as_slice()) != Some(nos) {
+            self.idiom_days.insert(date, nos.to_vec());
+            log_err(save_json(&self.dir.join("idiom_days.json"), &self.idiom_days));
         }
     }
 
