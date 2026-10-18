@@ -12,6 +12,50 @@ use egui::{RichText, Ui};
 /// Exercises in one daily writing set (dictation + translation; the diary is a bonus).
 pub const WRITING_GOAL: u32 = 6;
 
+/// Easy diary sentences (elementary-school level) shown as examples to A2–B1 learners.
+pub const DIARY_EXAMPLES: &[(&str, &str)] = &[
+    ("I got up at seven o'clock this morning.", "나는 오늘 아침 7시에 일어났다."),
+    ("I washed my face and brushed my teeth.", "세수를 하고 이를 닦았다."),
+    ("I had toast and milk for breakfast.", "아침으로 토스트와 우유를 먹었다."),
+    ("The weather was sunny and warm.", "날씨가 맑고 따뜻했다."),
+    ("It rained all day, so I stayed home.", "하루 종일 비가 와서 집에 있었다."),
+    ("I went to school with my friend.", "친구와 함께 학교에 갔다."),
+    ("We had a math test today.", "오늘 수학 시험을 봤다."),
+    ("The test was easier than I thought.", "시험은 생각보다 쉬웠다."),
+    ("I ate lunch with my classmates.", "반 친구들과 점심을 먹었다."),
+    ("My favorite food is fried chicken.", "내가 제일 좋아하는 음식은 치킨이다."),
+    ("After school, I played soccer in the park.", "방과 후에 공원에서 축구를 했다."),
+    ("I was very tired, but I was happy.", "아주 피곤했지만 행복했다."),
+    ("I helped my mom clean the kitchen.", "엄마를 도와 부엌을 청소했다."),
+    ("My dad cooked dinner for us.", "아빠가 우리에게 저녁을 해 주셨다."),
+    ("We ate spaghetti together.", "우리는 함께 스파게티를 먹었다."),
+    ("I did my homework before dinner.", "저녁 먹기 전에 숙제를 했다."),
+    ("I read a book about animals.", "동물에 관한 책을 읽었다."),
+    ("I learned that dolphins are very smart.", "돌고래가 아주 똑똑하다는 것을 알게 되었다."),
+    ("My little brother and I watched a movie.", "남동생과 영화를 봤다."),
+    ("The movie was funny and exciting.", "영화는 재미있고 신났다."),
+    ("I called my grandma on the phone.", "할머니께 전화를 드렸다."),
+    ("She was glad to hear my voice.", "할머니는 내 목소리를 듣고 기뻐하셨다."),
+    ("I went shopping with my sister.", "언니(누나)와 쇼핑을 갔다."),
+    ("I bought a new pencil case.", "새 필통을 샀다."),
+    ("I took my dog for a walk.", "강아지를 산책시켰다."),
+    ("He ran around and wagged his tail.", "강아지는 뛰어다니며 꼬리를 흔들었다."),
+    ("I rode my bike along the river.", "강을 따라 자전거를 탔다."),
+    ("I saw many beautiful flowers.", "예쁜 꽃을 많이 봤다."),
+    ("I felt a little sad today.", "오늘은 조금 슬펐다."),
+    ("My best friend moved to another city.", "제일 친한 친구가 다른 도시로 이사를 갔다."),
+    ("I will write a letter to her.", "그 친구에게 편지를 쓸 것이다."),
+    ("Today was my birthday!", "오늘은 내 생일이었다!"),
+    ("My family gave me a big cake.", "가족이 큰 케이크를 주었다."),
+    ("I made a wish and blew out the candles.", "소원을 빌고 촛불을 껐다."),
+    ("I practiced the piano for thirty minutes.", "피아노를 30분 동안 연습했다."),
+    ("I want to play better next time.", "다음에는 더 잘 치고 싶다."),
+    ("I took a warm bath before bed.", "자기 전에 따뜻한 물로 목욕했다."),
+    ("I went to bed at ten o'clock.", "10시에 잠자리에 들었다."),
+    ("Tomorrow I will get up early.", "내일은 일찍 일어날 것이다."),
+    ("It was a good day.", "좋은 하루였다."),
+];
+
 const DIARY_PROMPTS: &[(&str, &str)] = &[
     ("What did you do today? Write 3-5 sentences.", "오늘 무엇을 했나요?"),
     ("Describe your favorite place to relax.", "가장 좋아하는 휴식 장소를 소개해 보세요."),
@@ -258,6 +302,21 @@ impl App {
                 }
             }
         });
+        // A2–B1: easy model sentences to borrow from while writing.
+        if (2.0..5.0).contains(&level) {
+            egui::CollapsingHeader::new(RichText::new(format!("📒 예제 일기 문장 {}개 보기 (초등학교 수준)", DIARY_EXAMPLES.len())).strong()).id_salt("diary_examples").show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                    for (en, ko) in DIARY_EXAMPLES {
+                        ui.horizontal_wrapped(|ui| {
+                            speaker_button(ui, &mut self.voice, en);
+                            ui.label(RichText::new(*en).size(17.0));
+                            crate::grammar::ko_label(ui, ko, 15.0, muted());
+                        });
+                    }
+                });
+            });
+        }
+        let st = &mut self.writing;
         if let Some(r) = &st.diary_result {
             card(ui, |ui| match r {
                 Ok(f) => {

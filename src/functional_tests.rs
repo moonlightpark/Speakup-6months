@@ -907,6 +907,13 @@ fn ft21_writing_dictation_translation_and_diary() {
     t.click("다음 ▶");
     // Diary: Claude corrects, the correction goes to the feedback center, then read it aloud.
     t.click("📝 영어 일기");
+    // A2–B1: 40 easy example diary sentences to look at; not shown from B1+.
+    t.click("📒 예제 일기 문장 40개 보기 (초등학교 수준)");
+    assert!(t.has("I got up at seven o'clock this morning.") && t.has("It was a good day."));
+    t.app_mut().store.profile.level = 6.0;
+    t.steps(2);
+    assert!(!t.has("📒 예제 일기"), "B1+ and up: no examples");
+    t.app_mut().store.profile.level = 3.0;
     t.app_mut().writing.input = "Today I go park and drink coffee.".into();
     t.steps(2);
     t.click("✨ Claude 교정 받기");
