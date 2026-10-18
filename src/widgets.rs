@@ -12,12 +12,54 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 pub const ACCENT: Color32 = Color32::from_rgb(61, 123, 255);
 pub const GOOD: Color32 = Color32::from_rgb(52, 199, 120);
 pub const BAD: Color32 = Color32::from_rgb(255, 92, 92);
-pub const WARN: Color32 = Color32::from_rgb(255, 184, 0);
-pub const MUTED: Color32 = Color32::from_rgb(168, 178, 198);
-pub const CARD: Color32 = Color32::from_rgb(22, 28, 44);
-pub const BORDER: Color32 = Color32::from_rgb(40, 50, 76);
-pub const BG: Color32 = Color32::from_rgb(12, 16, 27);
-pub const SIDEBAR: Color32 = Color32::from_rgb(9, 12, 21);
+
+// ---------------------------------------------------------------- theme colours
+// Colours that differ between the dark and the light theme (설정 > 테마). The accent colours
+// above read well on both.
+
+static LIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Switches every themed colour below (call `theme::apply` too for egui's own widgets).
+pub fn set_light(on: bool) {
+    LIGHT.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn is_light() -> bool {
+    LIGHT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `dark` in the dark theme, `light` in the light theme.
+pub fn themed(dark: Color32, light: Color32) -> Color32 {
+    if is_light() { light } else { dark }
+}
+
+pub fn warn() -> Color32 {
+    themed(Color32::from_rgb(255, 184, 0), Color32::from_rgb(190, 115, 0))
+}
+/// Secondary text.
+pub fn muted() -> Color32 {
+    themed(Color32::from_rgb(168, 178, 198), Color32::from_rgb(92, 100, 120))
+}
+pub fn card_bg() -> Color32 {
+    themed(Color32::from_rgb(22, 28, 44), Color32::WHITE)
+}
+pub fn border() -> Color32 {
+    themed(Color32::from_rgb(40, 50, 76), Color32::from_rgb(220, 225, 236))
+}
+pub fn bg() -> Color32 {
+    themed(Color32::from_rgb(12, 16, 27), Color32::from_rgb(243, 245, 250))
+}
+pub fn sidebar() -> Color32 {
+    themed(Color32::from_rgb(9, 12, 21), Color32::from_rgb(230, 234, 244))
+}
+/// Main text where it must stand out (titles, the sentence to say).
+pub fn text_strong() -> Color32 {
+    themed(Color32::WHITE, Color32::from_rgb(18, 22, 34))
+}
+/// Rows and tiles inside a card.
+pub fn subtle_fill() -> Color32 {
+    themed(Color32::from_rgb(27, 34, 52), Color32::from_rgb(236, 240, 248))
+}
 
 /// Korean-support stage for this window (`curriculum::support_stage`), set by the app each frame.
 pub fn support_stage(ctx: &egui::Context) -> u8 {
@@ -73,10 +115,10 @@ impl<T: Send + 'static> Pending<T> {
 
 pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
     egui::Frame::new()
-        .fill(CARD)
+        .fill(card_bg())
         .corner_radius(16.0)
         .inner_margin(20.0)
-        .stroke(Stroke::new(1.0_f32, BORDER))
+        .stroke(Stroke::new(1.0_f32, border()))
         .shadow(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(70) })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -97,9 +139,9 @@ pub fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
             ui.add_space(4.0);
         }
         ui.vertical(|ui| {
-            ui.label(RichText::new(text).size(28.0).strong().color(Color32::WHITE));
+            ui.label(RichText::new(text).size(28.0).strong().color(text_strong()));
             if !subtitle.is_empty() {
-                ui.label(RichText::new(subtitle).size(15.0).color(MUTED));
+                ui.label(RichText::new(subtitle).size(15.0).color(muted()));
             }
         });
     });
@@ -125,7 +167,7 @@ pub fn primary_button(ui: &mut Ui, text: &str) -> egui::Response {
 pub fn spinner_label(ui: &mut Ui, text: &str) {
     ui.horizontal(|ui| {
         ui.spinner();
-        ui.label(RichText::new(text).color(MUTED));
+        ui.label(RichText::new(text).color(muted()));
     });
 }
 
@@ -238,7 +280,7 @@ impl Capture {
             p.rect_filled(egui::Rect::from_center_size(c, Vec2::splat(24.0)), 4.0, Color32::WHITE);
             ui.ctx().request_repaint();
         } else {
-            let fill = if transcribing { MUTED } else if resp.hovered() { ACCENT.gamma_multiply(1.2) } else { ACCENT };
+            let fill = if transcribing { muted() } else if resp.hovered() { ACCENT.gamma_multiply(1.2) } else { ACCENT };
             p.circle_filled(c, size / 2.0, fill);
             draw_mic_icon(p, c);
         }
@@ -279,7 +321,7 @@ impl Capture {
         } else {
             "눌러서 말하기".to_string()
         };
-        ui.label(RichText::new(status).color(MUTED));
+        ui.label(RichText::new(status).color(muted()));
         if let Some(e) = &self.error {
             error_label(ui, e);
         }
@@ -328,7 +370,9 @@ pub struct Attempt {
 /// What the speaking score measures (Study.md: say so plainly).
 pub const SCORE_MEANING: &str = "점수는 음성 인식이 내 말을 얼마나 잘 알아들었는지(알아듣기 쉬운 정도)예요. 원어민처럼 들리는지는 재지 않아요.";
 
-pub const GLOSS: Color32 = Color32::from_rgb(255, 214, 120);
+pub fn gloss() -> Color32 {
+    themed(Color32::from_rgb(255, 214, 120), Color32::from_rgb(165, 105, 0))
+}
 
 /// Space between sentences of a passage, so each one stands apart (scaled by font size).
 fn sentence_gap(ui: &mut Ui, i: usize, size: f32) {
@@ -397,8 +441,8 @@ pub fn chunk_view(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, siz
         for (i, c) in chunks.iter().enumerate() {
             if i > 0 {
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("/").size(size).color(MUTED));
-                    ui.label(RichText::new("/").size(size * 0.62).color(MUTED));
+                    ui.label(RichText::new("/").size(size).color(muted()));
+                    ui.label(RichText::new("/").size(size * 0.62).color(muted()));
                 });
             }
             let n = c.en.split_whitespace().count();
@@ -408,12 +452,12 @@ pub fn chunk_view(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, siz
                 Some(m) if k + n <= m.len() => {
                     if m[k..k + n].iter().all(|w| w.ok) { GOOD } else { BAD }
                 }
-                _ => role.unwrap_or(Color32::WHITE),
+                _ => role.unwrap_or(text_strong()),
             };
             k += n;
             ui.vertical(|ui| {
                 ui.label(RichText::new(&c.en).size(size).strong().color(color));
-                ui.label(RichText::new(&c.ko).size(size * 0.62).strong().color(role.unwrap_or(GLOSS)));
+                ui.label(RichText::new(&c.ko).size(size * 0.62).strong().color(role.unwrap_or(gloss())));
             });
         }
     });
@@ -562,12 +606,12 @@ impl Drill {
 
         ui.vertical_centered(|ui| {
             if self.recall && !self.revealed {
-                ui.label(RichText::new("영어로 말해 보세요").color(MUTED));
-                crate::grammar::ko_label(ui, &self.ko, 26.0, Color32::WHITE);
+                ui.label(RichText::new("영어로 말해 보세요").color(muted()));
+                crate::grammar::ko_label(ui, &self.ko, 26.0, text_strong());
                 ui.add_space(6.0);
-                ui.label(RichText::new(self.hidden_text()).size(22.0).monospace().color(MUTED));
+                ui.label(RichText::new(self.hidden_text()).size(22.0).monospace().color(muted()));
                 if !self.tip.is_empty() && self.hint > 0 {
-                    ui.label(RichText::new(&self.tip).color(MUTED));
+                    ui.label(RichText::new(&self.tip).color(muted()));
                 }
                 ui.horizontal(|ui| {
                     ui.add_space((ui.available_width() - 220.0).max(0.0) / 2.0);
@@ -595,13 +639,13 @@ impl Drill {
                 }
                 if !self.ko.is_empty() {
                     if stage < 2 || self.ko_shown || self.last.is_some() {
-                        crate::grammar::ko_label(ui, &self.ko, 16.0, MUTED);
+                        crate::grammar::ko_label(ui, &self.ko, 16.0, muted());
                     } else if ui.small_button("한국어 뜻 보기").on_hover_text("5~6개월 차: 영어만 보고, 한국어는 확인할 때만 봐요").clicked() {
                         self.ko_shown = true;
                     }
                 }
                 if !self.tip.is_empty() {
-                    ui.label(RichText::new(format!("💡 {}", self.tip)).color(WARN));
+                    ui.label(RichText::new(format!("💡 {}", self.tip)).color(warn()));
                 }
                 ui.horizontal(|ui| {
                     ui.add_space((ui.available_width() - 360.0).max(0.0) / 2.0);
@@ -665,13 +709,13 @@ impl Drill {
             }
 
             if let Some((heard, r)) = &self.last {
-                let color = if r.score >= pass { GOOD } else if r.score >= pass - 20.0 { WARN } else { BAD };
+                let color = if r.score >= pass { GOOD } else if r.score >= pass - 20.0 { warn() } else { BAD };
                 ui.label(RichText::new(format!("{:.0}점", r.score)).size(30.0).strong().color(color))
                     .on_hover_text(SCORE_MEANING);
-                ui.label(RichText::new(format!("들린 말: \"{heard}\"")).color(MUTED));
-                ui.label(RichText::new("점수 = 알아듣기 쉬운 정도 (원어민 발음과 비교한 점수가 아니에요)").small().color(MUTED)).on_hover_text(SCORE_MEANING);
+                ui.label(RichText::new(format!("들린 말: \"{heard}\"")).color(muted()));
+                ui.label(RichText::new("점수 = 알아듣기 쉬운 정도 (원어민 발음과 비교한 점수가 아니에요)").small().color(muted())).on_hover_text(SCORE_MEANING);
                 if self.last_wpm > 0.0 && r.marks.len() >= 4 {
-                    ui.label(RichText::new(format!("⚡ 말하기 속도 {:.0} WPM (원어민 대화 약 150)", self.last_wpm)).color(MUTED).small());
+                    ui.label(RichText::new(format!("⚡ 말하기 속도 {:.0} WPM (원어민 대화 약 150)", self.last_wpm)).color(muted()).small());
                 }
                 if r.score < pass {
                     ui.horizontal(|ui| {
@@ -692,7 +736,7 @@ impl Drill {
                 Some(Ok(t)) => {
                     ui.label(RichText::new(format!("💡 {}", t.tip_ko)).color(Color32::LIGHT_BLUE));
                     if !t.focus_words.is_empty() {
-                        ui.label(RichText::new(format!("집중 연습: {}", t.focus_words.join(", "))).color(WARN));
+                        ui.label(RichText::new(format!("집중 연습: {}", t.focus_words.join(", "))).color(warn()));
                     }
                 }
                 Some(Err(e)) => error_label(ui, e),
@@ -707,7 +751,7 @@ impl Drill {
                     event = DrillEvent::Completed;
                 }
             } else if self.last.is_some() {
-                ui.label(RichText::new(format!("{}점 이상으로 {}번 말하면 통과", pass as i32, self.reps_needed)).color(MUTED));
+                ui.label(RichText::new(format!("{}점 이상으로 {}번 말하면 통과", pass as i32, self.reps_needed)).color(muted()));
             }
         });
         event
@@ -725,7 +769,7 @@ pub fn reps_dots(ui: &mut Ui, passed: u32, needed: u32) {
             if i < passed {
                 ui.painter().circle_filled(c, r, GOOD);
             } else {
-                ui.painter().circle_stroke(c, r, Stroke::new(2.0_f32, MUTED));
+                ui.painter().circle_stroke(c, r, Stroke::new(2.0_f32, muted()));
             }
         }
     });
@@ -737,7 +781,7 @@ pub fn ring(ui: &mut Ui, frac: f32, label: &str, size: f32) {
     let c = rect.center();
     let rad = size / 2.0 - 6.0;
     let p = ui.painter();
-    p.circle_stroke(c, rad, Stroke::new(9.0_f32, Color32::from_rgb(40, 48, 70)));
+    p.circle_stroke(c, rad, Stroke::new(9.0_f32, themed(Color32::from_rgb(40, 48, 70), Color32::from_rgb(222, 227, 238))));
     let n = 64;
     let pts: Vec<egui::Pos2> = (0..=((n as f32 * frac.clamp(0.0, 1.0)) as usize))
         .map(|i| {

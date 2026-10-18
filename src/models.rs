@@ -37,6 +37,9 @@ pub struct Settings {
     /// The 30 → 60 minute default change has been applied (missing in older settings files).
     #[serde(default)]
     pub goal_60_applied: bool,
+    /// Light screen theme (설정 > 테마); dark by default.
+    #[serde(default)]
+    pub light_theme: bool,
     /// From month 3 the Korean colours were switched off once (the learner may turn them back on).
     pub ko_colors_faded: bool,
 }
@@ -65,6 +68,7 @@ impl Default for Settings {
             korean_model: "small".into(),
             ko_role_colors: true,
             goal_60_applied: true,
+            light_theme: false,
             ko_colors_faded: false,
         }
     }

@@ -34,7 +34,7 @@ impl App {
         let claude = self.claude();
         if let Some(drill) = self.feedback.drill.as_mut() {
             let word = drill.target.clone();
-            ui.label(RichText::new(format!("남은 단어 {}개 · 3번 연속 정확히 말하면 해결!", self.feedback.queue.len() + 1)).color(MUTED));
+            ui.label(RichText::new(format!("남은 단어 {}개 · 3번 연속 정확히 말하면 해결!", self.feedback.queue.len() + 1)).color(muted()));
             let ev = card(ui, |ui| drill.ui(ui, &mut self.voice, pass, claude.as_ref()));
             match ev {
                 DrillEvent::Attempt(a) => {
@@ -65,7 +65,7 @@ impl App {
             }
             return;
         }
-        ui.label(RichText::new("연습 중 음성 인식이 알아듣지 못한 단어들이에요. 발음이 부정확했을 가능성이 높습니다.").color(MUTED));
+        ui.label(RichText::new("연습 중 음성 인식이 알아듣지 못한 단어들이에요. 발음이 부정확했을 가능성이 높습니다.").color(muted()));
         let mut list: Vec<_> = self.store.mistakes.iter().filter(|m| m.fixed_streak < 3).cloned().collect();
         list.sort_by(|a, b| b.count.cmp(&a.count).then(b.last.cmp(&a.last)));
         if list.is_empty() {
@@ -86,8 +86,8 @@ impl App {
                 for m in list.iter().take(60) {
                     speaker_button(ui, &mut self.voice, &m.word);
                     ui.label(RichText::new(&m.word).size(17.0).strong());
-                    ui.label(RichText::new(format!("{}회", m.count)).color(WARN));
-                    ui.label(RichText::new(format!("최근 {}", m.last)).color(MUTED));
+                    ui.label(RichText::new(format!("{}회", m.count)).color(warn()));
+                    ui.label(RichText::new(format!("최근 {}", m.last)).color(muted()));
                     ui.end_row();
                 }
             });
@@ -95,7 +95,7 @@ impl App {
     }
 
     fn corrections_ui(&mut self, ui: &mut Ui) {
-        ui.label(RichText::new("자기 표현·회화에서 Claude가 고쳐 준 문장들이에요. 소리 내어 따라 하면 단어장에 들어가 반복 학습됩니다.").color(MUTED));
+        ui.label(RichText::new("자기 표현·회화에서 Claude가 고쳐 준 문장들이에요. 소리 내어 따라 하면 단어장에 들어가 반복 학습됩니다.").color(muted()));
         let pending: Vec<Phrase> = self
             .store
             .corrections
@@ -122,14 +122,14 @@ impl App {
         let list: Vec<_> = self.store.corrections.iter().rev().take(80).cloned().collect();
         for c in list {
             card(ui, |ui| {
-                ui.label(RichText::new(format!("{} · {}{}", c.date, c.source, if c.practiced { " · ✅ 연습함" } else { "" })).color(MUTED).small());
+                ui.label(RichText::new(format!("{} · {}{}", c.date, c.source, if c.practiced { " · ✅ 연습함" } else { "" })).color(muted()).small());
                 ui.label(RichText::new(format!("✖ {}", c.original)).color(BAD));
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, &c.corrected);
                     ui.label(RichText::new(format!("✓ {}", c.corrected)).color(GOOD).strong());
                 });
                 if !c.explanation_ko.is_empty() {
-                    ui.label(RichText::new(&c.explanation_ko).color(MUTED));
+                    ui.label(RichText::new(&c.explanation_ko).color(muted()));
                 }
             });
             ui.add_space(4.0);

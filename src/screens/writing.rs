@@ -137,11 +137,11 @@ impl App {
                     if ui.button("🐢 천천히").clicked() {
                         self.voice.say_slow(&en);
                     }
-                    ui.label(RichText::new(format!("힌트: {}", ko)).color(MUTED).small());
+                    ui.label(RichText::new(format!("힌트: {}", ko)).color(muted()).small());
                 });
             } else {
-                ui.label(RichText::new("영어로 써 보세요.").color(MUTED));
-                crate::grammar::ko_label(ui, &ko, 22.0, GLOSS);
+                ui.label(RichText::new("영어로 써 보세요.").color(muted()));
+                crate::grammar::ko_label(ui, &ko, 22.0, gloss());
             }
             ui.add_space(4.0);
             let resp = ui.add(egui::TextEdit::singleline(&mut st.input).desired_width(f32::INFINITY).font(egui::FontId::proportional(19.0)).hint_text("여기에 영어로 입력"));
@@ -162,8 +162,8 @@ impl App {
             if let Some(r) = &st.checked {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{:.0}점", r.score)).size(22.0).strong().color(if r.score >= 80.0 { GOOD } else { WARN }));
-                    ui.label(RichText::new(if dictation { "정답과 비교 (초록 = 맞음, 빨강 = 다름)" } else { "모범 답안과 비교" }).color(MUTED));
+                    ui.label(RichText::new(format!("{:.0}점", r.score)).size(22.0).strong().color(if r.score >= 80.0 { GOOD } else { warn() }));
+                    ui.label(RichText::new(if dictation { "정답과 비교 (초록 = 맞음, 빨강 = 다름)" } else { "모범 답안과 비교" }).color(muted()));
                 });
                 word_feedback(ui, r, 19.0);
                 if st.translation.running() {
@@ -172,9 +172,9 @@ impl App {
                 if let Some(t) = &st.translation_result {
                     match t {
                         Ok(t) => {
-                            ui.label(RichText::new(format!("{} {}", if t.ok { "✅" } else { "💡" }, t.feedback_ko)).color(if t.ok { GOOD } else { WARN }));
+                            ui.label(RichText::new(format!("{} {}", if t.ok { "✅" } else { "💡" }, t.feedback_ko)).color(if t.ok { GOOD } else { warn() }));
                             if !t.better.is_empty() && t.better != en {
-                                ui.label(RichText::new(format!("더 자연스럽게: {}", t.better)).color(GLOSS));
+                                ui.label(RichText::new(format!("더 자연스럽게: {}", t.better)).color(gloss()));
                             }
                         }
                         Err(e) => error_label(ui, e),
@@ -241,11 +241,11 @@ impl App {
         let st = &mut self.writing;
         card(ui, |ui| {
             ui.label(RichText::new(prompt).size(19.0).strong());
-            crate::grammar::ko_label(ui, prompt_ko, 16.0, MUTED);
+            crate::grammar::ko_label(ui, prompt_ko, 16.0, muted());
             ui.add(egui::TextEdit::multiline(&mut st.input).desired_rows(6).desired_width(f32::INFINITY).font(egui::FontId::proportional(18.0)).hint_text("영어로 3~5문장 써 보세요. 틀려도 괜찮아요!"));
             match &claude {
                 None => {
-                    ui.label(RichText::new("영어 일기 교정은 Claude API 키가 필요합니다 (설정).").color(WARN));
+                    ui.label(RichText::new("영어 일기 교정은 Claude API 키가 필요합니다 (설정).").color(warn()));
                 }
                 Some(c) => {
                     if st.diary.running() {
@@ -262,7 +262,7 @@ impl App {
             card(ui, |ui| match r {
                 Ok(f) => {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(format!("{}점", f.score)).size(24.0).strong().color(if f.score >= 80 { GOOD } else { WARN }));
+                        ui.label(RichText::new(format!("{}점", f.score)).size(24.0).strong().color(if f.score >= 80 { GOOD } else { warn() }));
                         ui.label(&f.feedback_ko);
                     });
                     for c in &f.corrections {
@@ -270,13 +270,13 @@ impl App {
                             ui.label(RichText::new(&c.original).strikethrough().color(BAD));
                             ui.label("→");
                             ui.label(RichText::new(&c.corrected).color(GOOD).strong());
-                            ui.label(RichText::new(&c.explanation_ko).color(MUTED).small());
+                            ui.label(RichText::new(&c.explanation_ko).color(muted()).small());
                         });
                     }
                     ui.add_space(6.0);
                     ui.label(RichText::new("원어민 버전").strong());
                     ui.label(RichText::new(&f.natural_version).size(18.0));
-                    crate::grammar::ko_label(ui, &f.natural_version_ko, 16.0, GLOSS);
+                    crate::grammar::ko_label(ui, &f.natural_version_ko, 16.0, gloss());
                     if ui.button("🔊 원어민 버전 듣기").clicked() {
                         self.voice.say(&f.natural_version);
                     }

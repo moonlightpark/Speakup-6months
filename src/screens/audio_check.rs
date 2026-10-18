@@ -110,9 +110,9 @@ impl App {
             _ if self.audio_check.builtin_mic_off() => LID_MSG.to_string(),
             _ => return,
         };
-        egui::TopBottomPanel::top("mic_warn").frame(egui::Frame::new().fill(Color32::from_rgb(70, 46, 8)).inner_margin(egui::Margin::symmetric(16, 8))).show(ctx, |ui| {
+        egui::TopBottomPanel::top("mic_warn").frame(egui::Frame::new().fill(themed(Color32::from_rgb(70, 46, 8), Color32::from_rgb(255, 236, 200))).inner_margin(egui::Margin::symmetric(16, 8))).show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(msg).color(Color32::from_rgb(255, 222, 150)).strong());
+                ui.label(RichText::new(msg).color(themed(Color32::from_rgb(255, 222, 150), Color32::from_rgb(120, 70, 0))).strong());
                 if self.audio_check.permission() == MicPermission::NotDetermined {
                     if ui.button("권한 요청").clicked() {
                         self.audio_check.request_if_needed();
@@ -141,8 +141,8 @@ impl App {
         // Permission
         let (txt, col) = match st.permission() {
             MicPermission::Granted => ("✅ 마이크 권한 허용됨", GOOD),
-            MicPermission::NotApplicable => ("● 마이크 권한: 운영체제 설정을 따릅니다", MUTED),
-            MicPermission::NotDetermined => ("● 마이크 권한을 아직 묻지 않았습니다", WARN),
+            MicPermission::NotApplicable => ("● 마이크 권한: 운영체제 설정을 따릅니다", muted()),
+            MicPermission::NotDetermined => ("● 마이크 권한을 아직 묻지 않았습니다", warn()),
             MicPermission::Denied => ("⛔ 마이크 권한이 거부되어 있습니다", BAD),
         };
         ui.horizontal_wrapped(|ui| {
@@ -162,10 +162,10 @@ impl App {
             }
         });
         if st.permission() == MicPermission::Denied {
-            ui.label(RichText::new(mic_permission::how_to_fix()).color(MUTED).small());
+            ui.label(RichText::new(mic_permission::how_to_fix()).color(muted()).small());
         }
         if st.builtin_mic_off() {
-            ui.label(RichText::new(LID_MSG).color(WARN));
+            ui.label(RichText::new(LID_MSG).color(warn()));
         }
         ui.add_space(4.0);
 
@@ -196,7 +196,7 @@ impl App {
             ui.end_row();
         });
         if audio::is_headset_mic(&self.store.settings.input_device, &outputs) {
-            ui.label(RichText::new("⚠ 블루투스 헤드폰의 마이크를 쓰면 헤드폰이 '통화 모드'로 바뀌어 원어민 음성이 전화처럼 뭉개져 들립니다. 소리는 헤드폰으로 듣고, 마이크는 노트북 내장 마이크를 쓰세요.").color(WARN));
+            ui.label(RichText::new("⚠ 블루투스 헤드폰의 마이크를 쓰면 헤드폰이 '통화 모드'로 바뀌어 원어민 음성이 전화처럼 뭉개져 들립니다. 소리는 헤드폰으로 듣고, 마이크는 노트북 내장 마이크를 쓰세요.").color(warn()));
             if let Some(m) = audio::non_headset_mic(&inputs, &outputs) {
                 if ui.button(format!("🎤 마이크를 '{m}'(으)로 바꾸기")).clicked() {
                     self.store.settings.input_device = m.clone();
@@ -212,10 +212,10 @@ impl App {
             }
             if st.devices.lock().unwrap().is_none() && !cfg!(test) {
                 ui.spinner();
-                ui.label(RichText::new("장치 찾는 중…").color(MUTED).small());
+                ui.label(RichText::new("장치 찾는 중…").color(muted()).small());
             }
         });
-        ui.label(RichText::new("소리 내기(원어민 음성)는 운영체제의 기본 출력 장치를 사용합니다. 녹음·유튜브 재생은 위에서 고른 스피커로 나옵니다.").color(MUTED).small());
+        ui.label(RichText::new("소리 내기(원어민 음성)는 운영체제의 기본 출력 장치를 사용합니다. 녹음·유튜브 재생은 위에서 고른 스피커로 나옵니다.").color(muted()).small());
         ui.add_space(6.0);
 
         // Live test

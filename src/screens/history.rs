@@ -18,14 +18,14 @@ pub fn stat_tile(ui: &mut Ui, value: &str, label: &str, color: Color32) {
 
 /// A stat tile of a fixed width with extra content under the label (progress bar, button…).
 pub fn stat_card(ui: &mut Ui, width: f32, value: &str, label: &str, color: Color32, extra: impl FnOnce(&mut Ui)) {
-    egui::Frame::new().fill(CARD).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0_f32, BORDER)).show(ui, |ui| {
+    egui::Frame::new().fill(card_bg()).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0_f32, border())).show(ui, |ui| {
         // Stack value, label and extras even when the tiles sit in a horizontal row.
         ui.vertical(|ui| {
             ui.set_width(width);
             // Same height for every tile in a row, with or without extras.
             ui.set_min_height(if width > 130.0 { 86.0 } else { 0.0 });
             ui.label(RichText::new(value).size(24.0).strong().color(color));
-            ui.label(RichText::new(label).color(MUTED));
+            ui.label(RichText::new(label).color(muted()));
             extra(ui);
         });
     });
@@ -47,7 +47,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             stat_tile(ui, &format!("{} / {TOTAL_DAYS}", hist.len()), "학습한 날", ACCENT);
             stat_tile(ui, &format!("{}시간 {}분", total_min / 60, total_min % 60), "총 학습 시간", GOOD);
-            stat_tile(ui, &words.to_string(), "새로 배운 단어", WARN);
+            stat_tile(ui, &words.to_string(), "새로 배운 단어", warn());
             stat_tile(ui, &total_attempts.to_string(), "소리 내어 말한 횟수", Color32::from_rgb(190, 140, 255));
             stat_tile(ui, &format!("{recent_avg:.0}점"), "최근 7일 평균", GOOD);
         });
@@ -55,7 +55,7 @@ impl App {
 
         card(ui, |ui| {
             ui.label(RichText::new("6개월 학습 달력").size(18.0).strong());
-            ui.label(RichText::new("칸 색이 진할수록 많이 학습한 날입니다. 마우스를 올리면 그날 기록이 보여요.").color(MUTED).small());
+            ui.label(RichText::new("칸 색이 진할수록 많이 학습한 날입니다. 마우스를 올리면 그날 기록이 보여요.").color(muted()).small());
             ui.add_space(6.0);
             calendar(ui, p.start_date, &hist);
         });
@@ -64,7 +64,7 @@ impl App {
         ui.label(RichText::new("일별 기록").size(18.0).strong());
         if hist.is_empty() {
             card(ui, |ui| {
-                ui.label(RichText::new("아직 기록이 없습니다. 오늘 학습을 시작해 보세요!").color(MUTED));
+                ui.label(RichText::new("아직 기록이 없습니다. 오늘 학습을 시작해 보세요!").color(muted()));
             });
         }
         for r in hist.iter().rev() {
@@ -79,7 +79,7 @@ impl App {
                 r.steps.len(),
                 STEPS.len()
             );
-            egui::Frame::new().fill(CARD).corner_radius(12.0).inner_margin(12.0).stroke(Stroke::new(1.0_f32, BORDER)).show(ui, |ui| {
+            egui::Frame::new().fill(card_bg()).corner_radius(12.0).inner_margin(12.0).stroke(Stroke::new(1.0_f32, border())).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 egui::CollapsingHeader::new(RichText::new(title).size(15.0)).id_salt(date).default_open(date == today()).show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
@@ -105,7 +105,7 @@ impl App {
                                 "⏱ 말하기 {}분 · 듣기 {}분 · 읽기 {}분 · 쓰기 {}분",
                                 r.speaking_minutes, r.listening_minutes, r.reading_minutes, r.writing_minutes
                             ))
-                            .color(MUTED),
+                            .color(muted()),
                         );
                     }
                     if !r.reading.is_empty() {
@@ -117,7 +117,7 @@ impl App {
                     if r.best_wpm > 0.0 {
                         ui.label(format!("⚡ 스피드 리딩 최고 {:.0} WPM", r.best_wpm));
                     }
-                    ui.label(RichText::new(format!("레벨 {:.2} ({})", r.level, cefr_of(r.level))).color(MUTED));
+                    ui.label(RichText::new(format!("레벨 {:.2} ({})", r.level, cefr_of(r.level))).color(muted()));
                 });
             });
             ui.add_space(4.0);
@@ -144,15 +144,15 @@ fn calendar(ui: &mut Ui, start: chrono::NaiveDate, hist: &[DayRecord]) {
         let rec = hist.iter().find(|h| h.date == Some(date));
         let intensity = rec.map(|h| (h.minutes as f32 / 30.0).max(h.steps.len() as f32 / STEPS.len() as f32).min(1.0)).unwrap_or(0.0);
         let fill = if rec.is_some() {
-            Color32::from_rgb(30, 50, 90).lerp_to_gamma(ACCENT, 0.25 + 0.75 * intensity)
+            themed(Color32::from_rgb(30, 50, 90), Color32::from_rgb(205, 218, 248)).lerp_to_gamma(ACCENT, 0.25 + 0.75 * intensity)
         } else if date > today() {
-            Color32::from_rgb(20, 25, 38)
+            themed(Color32::from_rgb(20, 25, 38), Color32::from_rgb(236, 239, 245))
         } else {
-            Color32::from_rgb(32, 39, 58)
+            themed(Color32::from_rgb(32, 39, 58), Color32::from_rgb(224, 229, 240))
         };
         p.rect_filled(r, 4.0, fill);
         if date == today() {
-            p.rect_stroke(r.expand(1.5), 5.0, Stroke::new(2.0_f32, WARN), egui::StrokeKind::Outside);
+            p.rect_stroke(r.expand(1.5), 5.0, Stroke::new(2.0_f32, warn()), egui::StrokeKind::Outside);
         }
         if resp.hover_pos().is_some_and(|h| r.contains(h)) {
             hovered = Some((date, rec));

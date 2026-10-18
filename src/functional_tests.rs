@@ -1464,3 +1464,17 @@ fn ft41_settings_shows_the_app_version() {
     t.nav("⚙  설정");
     assert!(t.has(&format!("SpeakUp 버전 {}", env!("CARGO_PKG_VERSION"))));
 }
+
+#[test]
+fn ft42_settings_switches_light_and_dark_theme() {
+    let mut t = launch("theme");
+    t.nav("⚙  설정");
+    assert!(t.has("🎨 테마") && t.has("🌙 다크") && t.has("☀ 라이트"));
+    t.click("☀ 라이트");
+    let light_ok = t.app().store.settings.light_theme && crate::widgets::is_light() && crate::widgets::bg() == egui::Color32::from_rgb(243, 245, 250);
+    let saved: Settings = serde_json::from_str(&std::fs::read_to_string(t.dir.join("settings.json")).unwrap()).unwrap();
+    t.click("🌙 다크");
+    let dark_ok = !t.app().store.settings.light_theme && !crate::widgets::is_light();
+    crate::widgets::set_light(false); // the theme is process-wide: leave other tests in dark
+    assert!(light_ok && saved.light_theme && dark_ok);
+}

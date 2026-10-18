@@ -114,7 +114,7 @@ impl App {
         let today_read = self.store.profile.today.paragraphs_read;
         ui.horizontal_wrapped(|ui| {
             chip(ui, &format!("내 레벨 {} {}", level_name_of(level), cefr_of(level)), ACCENT);
-            chip(ui, &format!("오늘 읽은 문단 {today_read}개 (목표 {READ_GOAL}개)"), if today_read >= READ_GOAL { GOOD } else { MUTED });
+            chip(ui, &format!("오늘 읽은 문단 {today_read}개 (목표 {READ_GOAL}개)"), if today_read >= READ_GOAL { GOOD } else { muted() });
             ui.checkbox(&mut self.library.show_all, "모든 책 보기");
         });
         if let Some(e) = &self.library.error {
@@ -143,10 +143,10 @@ impl App {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(RichText::new(b.title).size(18.0).strong());
                             chip(ui, b.kind, crate::art::badge_colors(b.kind).0);
-                            chip(ui, &format!("{}~{}", cefr_of(b.min_level), cefr_of(b.max_level)), MUTED);
+                            chip(ui, &format!("{}~{}", cefr_of(b.min_level), cefr_of(b.max_level)), muted());
                         });
-                        ui.label(RichText::new(format!("{} · {}", b.title_ko, b.author)).color(MUTED));
-                        ui.label(RichText::new(b.blurb_ko).color(MUTED).small());
+                        ui.label(RichText::new(format!("{} · {}", b.title_ko, b.author)).color(muted()));
+                        ui.label(RichText::new(b.blurb_ko).color(muted()).small());
                         if prog.pages > 0 {
                             let frac = if prog.finished { 1.0 } else { prog.page as f32 / prog.pages as f32 };
                             ui.add(egui::ProgressBar::new(frac).desired_width(260.0).desired_height(8.0).fill(GOOD).text(if prog.finished {
@@ -182,7 +182,7 @@ impl App {
                 self.library.download.spawn(move || library::download(&dir, id));
             }
         }
-        ui.label(RichText::new("원문 책은 저작권이 만료된 퍼블릭 도메인 작품(Project Gutenberg)입니다. 짧은 동화는 학습용으로 다시 쓴 이야기입니다.").color(MUTED).small());
+        ui.label(RichText::new("원문 책은 저작권이 만료된 퍼블릭 도메인 작품(Project Gutenberg)입니다. 짧은 동화는 학습용으로 다시 쓴 이야기입니다.").color(muted()).small());
     }
 
     fn reader_ui(&mut self, ui: &mut Ui) {
@@ -218,13 +218,13 @@ impl App {
                 close = true;
             }
             ui.label(RichText::new(r.book.title).size(22.0).strong());
-            ui.label(RichText::new(r.book.title_ko).color(MUTED));
+            ui.label(RichText::new(r.book.title_ko).color(muted()));
         });
         let n = r.pages.len();
         ui.add(egui::ProgressBar::new((r.page + 1) as f32 / n as f32).desired_height(6.0).fill(ACCENT));
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(&r.pages[r.page].heading).color(MUTED));
-            ui.label(RichText::new(format!("· {}/{n} 페이지", r.page + 1)).color(MUTED));
+            ui.label(RichText::new(&r.pages[r.page].heading).color(muted()));
+            ui.label(RichText::new(format!("· {}/{n} 페이지", r.page + 1)).color(muted()));
         });
         if let Some(e) = &r.error {
             error_label(ui, e);
@@ -247,7 +247,7 @@ impl App {
                 ui.checkbox(&mut r.show_simple, "✨ 쉬운 영어로 보기");
             } else if r.simplify.running() {
                 ui.spinner();
-                ui.label(RichText::new("쉬운 영어로 바꾸는 중…").color(MUTED));
+                ui.label(RichText::new("쉬운 영어로 바꾸는 중…").color(muted()));
             } else if let Some(c) = claude.clone() {
                 if ui.button("✨ 쉬운 영어로 다시 쓰기").on_hover_text("Claude가 내 레벨에 맞게 이 페이지를 쉽게 바꿔 줍니다.").clicked() {
                     let p = r.pages[r.page].paragraphs.clone();
@@ -257,11 +257,11 @@ impl App {
         });
         if let Some((p, s)) = &r.simplified {
             if *p == r.page && r.show_simple && !s.summary_ko.is_empty() {
-                ui.label(RichText::new(format!("요약: {}", s.summary_ko)).color(GLOSS));
+                ui.label(RichText::new(format!("요약: {}", s.summary_ko)).color(gloss()));
             }
         }
         ui.add_space(6.0);
-        ui.label(RichText::new("문장을 누르면 듣기 · 직독직해 · 소리 내어 읽기 · 단어 뜻을 볼 수 있어요.").color(MUTED).small());
+        ui.label(RichText::new("문장을 누르면 듣기 · 직독직해 · 소리 내어 읽기 · 단어 뜻을 볼 수 있어요.").color(muted()).small());
 
         // Page text
         let mut clicked: Option<(usize, usize)> = None;
@@ -292,7 +292,7 @@ impl App {
                 if let Some((sp, ss)) = r.selected {
                     if sp == pi {
                         let sentence = sents.get(ss).cloned().unwrap_or_default();
-                        egui::Frame::new().fill(CARD).corner_radius(12.0).inner_margin(14.0).show(ui, |ui| {
+                        egui::Frame::new().fill(card_bg()).corner_radius(12.0).inner_margin(14.0).show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal_wrapped(|ui| {
                                 if ui.button("🔊 듣기").clicked() {
@@ -327,7 +327,7 @@ impl App {
                             }
                             // Word lookup: the built-in 6,000-word dictionary first (instant, no API).
                             ui.horizontal_wrapped(|ui| {
-                                ui.label(RichText::new("단어 뜻:").color(MUTED).small());
+                                ui.label(RichText::new("단어 뜻:").color(muted()).small());
                                 for w in sentence.split_whitespace() {
                                     let clean: String = w.chars().filter(|c| c.is_alphabetic() || *c == '\'' || *c == '’' || *c == '-').collect();
                                     if clean.len() < 2 {
@@ -355,26 +355,26 @@ impl App {
                                 match res {
                                     Ok(m) => {
                                         ui.horizontal_wrapped(|ui| {
-                                            ui.label(RichText::new(&w).strong().color(GLOSS));
+                                            ui.label(RichText::new(&w).strong().color(gloss()));
                                             ui.label(&m.meaning_ko);
                                             if !m.note_ko.is_empty() {
-                                                ui.label(RichText::new(&m.note_ko).color(MUTED).small());
+                                                ui.label(RichText::new(&m.note_ko).color(muted()).small());
                                             }
                                             if m.proper_noun || is_proper_noun(&w, &m.meaning_ko) {
-                                                ui.label(RichText::new("지명·이름 — 단어장에 넣지 않아요").color(MUTED).small());
+                                                ui.label(RichText::new("지명·이름 — 단어장에 넣지 않아요").color(muted()).small());
                                             } else if ui.small_button("＋ 단어장").clicked() {
                                                 save_word = Some((w.clone(), m.clone()));
                                             }
                                         });
                                         if !m.example.is_empty() {
-                                            ui.label(RichText::new(format!("예) {} — {}", m.example, m.example_ko)).color(MUTED).small());
+                                            ui.label(RichText::new(format!("예) {} — {}", m.example, m.example_ko)).color(muted()).small());
                                         }
                                     }
                                     Err(_) if r.word.running() => spinner_label(ui, "문맥 속 뜻을 묻는 중…"),
                                     Err(e) if e == NOT_IN_DICTIONARY => {
                                         ui.horizontal_wrapped(|ui| {
-                                            ui.label(RichText::new(&w).strong().color(GLOSS));
-                                            ui.label(RichText::new(NOT_IN_DICTIONARY).color(MUTED));
+                                            ui.label(RichText::new(&w).strong().color(gloss()));
+                                            ui.label(RichText::new(NOT_IN_DICTIONARY).color(muted()));
                                             // Only on request: names and rarer words can still be asked about.
                                             if let Some(c) = claude.clone() {
                                                 if ui.small_button("🔎 문맥 뜻 묻기").clicked() {

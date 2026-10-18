@@ -1,4 +1,4 @@
-//! Dark theme in the spirit of Speak, with the Pretendard font built in (SIL Open Font
+//! Dark (default) and light themes in the spirit of Speak, with the Pretendard font built in (SIL Open Font
 //! License, assets/fonts) so Hangul and symbols look the same on macOS, Windows and Linux.
 
 use egui::{Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
@@ -21,9 +21,16 @@ pub fn apply(ctx: &egui::Context) {
     }
     ctx.set_fonts(fonts);
 
-    // Always dark (the design assumes it), regardless of the OS light/dark setting.
-    ctx.set_theme(egui::Theme::Dark);
-    let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
+    apply_visuals(ctx);
+}
+
+/// Colours of egui's own widgets for the chosen theme (설정 > 테마; see `widgets::set_light`).
+/// The OS light/dark setting is not followed: the learner picks one in the app.
+pub fn apply_visuals(ctx: &egui::Context) {
+    let light = crate::widgets::is_light();
+    let theme = if light { egui::Theme::Light } else { egui::Theme::Dark };
+    ctx.set_theme(theme);
+    let mut style = (*ctx.style_of(theme)).clone();
     style.text_styles = [
         (TextStyle::Heading, FontId::proportional(26.0)),
         (TextStyle::Body, FontId::proportional(16.0)),
@@ -35,31 +42,36 @@ pub fn apply(ctx: &egui::Context) {
     style.spacing.item_spacing = egui::vec2(10.0, 9.0);
     style.spacing.button_padding = egui::vec2(14.0, 7.0);
     style.spacing.interact_size.y = 30.0;
-    let mut v = egui::Visuals::dark();
-    // High-contrast text on the dark background.
-    v.override_text_color = Some(Color32::from_rgb(236, 240, 248));
-    v.widgets.noninteractive.fg_stroke.color = Color32::from_rgb(236, 240, 248);
-    v.widgets.inactive.fg_stroke.color = Color32::from_rgb(240, 244, 252);
-    v.widgets.hovered.fg_stroke.color = Color32::WHITE;
-    v.widgets.active.fg_stroke.color = Color32::WHITE;
-    v.panel_fill = crate::widgets::BG;
-    v.window_fill = Color32::from_rgb(18, 23, 36);
+    // (dark, light) for each themed colour.
+    let pick = |d: Color32, l: Color32| if light { l } else { d };
+    let mut v = if light { egui::Visuals::light() } else { egui::Visuals::dark() };
+    let text = pick(Color32::from_rgb(236, 240, 248), Color32::from_rgb(28, 32, 46));
+    let strong = pick(Color32::WHITE, Color32::from_rgb(12, 16, 28));
+    // High-contrast text on the background.
+    v.override_text_color = Some(text);
+    v.widgets.noninteractive.fg_stroke.color = text;
+    v.widgets.inactive.fg_stroke.color = pick(Color32::from_rgb(240, 244, 252), Color32::from_rgb(24, 28, 42));
+    v.widgets.hovered.fg_stroke.color = strong;
+    v.widgets.active.fg_stroke.color = strong;
+    v.panel_fill = crate::widgets::bg();
+    v.window_fill = pick(Color32::from_rgb(18, 23, 36), Color32::WHITE);
     v.window_corner_radius = 14.0.into();
-    v.extreme_bg_color = Color32::from_rgb(17, 22, 36);
-    v.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, crate::widgets::BORDER);
-    v.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, Color32::from_rgb(48, 60, 90));
+    v.extreme_bg_color = pick(Color32::from_rgb(17, 22, 36), Color32::from_rgb(250, 251, 254));
+    v.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, crate::widgets::border());
+    v.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, pick(Color32::from_rgb(48, 60, 90), Color32::from_rgb(200, 207, 222)));
     v.selection.bg_fill = crate::widgets::ACCENT;
-    v.hyperlink_color = Color32::from_rgb(140, 180, 255);
-    v.widgets.inactive.weak_bg_fill = Color32::from_rgb(30, 38, 58);
-    v.widgets.inactive.bg_fill = Color32::from_rgb(30, 38, 58);
-    v.widgets.hovered.weak_bg_fill = Color32::from_rgb(44, 55, 84);
-    v.widgets.hovered.bg_fill = Color32::from_rgb(44, 55, 84);
-    v.widgets.active.weak_bg_fill = Color32::from_rgb(52, 66, 100);
+    v.selection.stroke.color = Color32::WHITE;
+    v.hyperlink_color = pick(Color32::from_rgb(140, 180, 255), Color32::from_rgb(35, 90, 220));
+    v.widgets.inactive.weak_bg_fill = pick(Color32::from_rgb(30, 38, 58), Color32::from_rgb(232, 236, 246));
+    v.widgets.inactive.bg_fill = pick(Color32::from_rgb(30, 38, 58), Color32::from_rgb(232, 236, 246));
+    v.widgets.hovered.weak_bg_fill = pick(Color32::from_rgb(44, 55, 84), Color32::from_rgb(218, 225, 242));
+    v.widgets.hovered.bg_fill = pick(Color32::from_rgb(44, 55, 84), Color32::from_rgb(218, 225, 242));
+    v.widgets.active.weak_bg_fill = pick(Color32::from_rgb(52, 66, 100), Color32::from_rgb(204, 214, 238));
     for w in [&mut v.widgets.noninteractive, &mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
         w.corner_radius = 10.0.into();
     }
     style.visuals = v;
-    ctx.set_style_of(egui::Theme::Dark, style);
+    ctx.set_style_of(theme, style);
 }
 
 #[cfg(test)]

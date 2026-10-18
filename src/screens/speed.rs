@@ -64,7 +64,7 @@ impl App {
             ui.selectable_value(&mut self.speed.tab, 0, "📖 스피드 리딩 (WPM)");
             ui.selectable_value(&mut self.speed.tab, 1, "💨 순발력 말하기");
             ui.selectable_value(&mut self.speed.tab, 2, "⏱ 4/3/2 말하기");
-            ui.label(RichText::new(format!("오늘 {}/3 라운드", self.store.profile.today.speed_rounds.min(3))).color(MUTED));
+            ui.label(RichText::new(format!("오늘 {}/3 라운드", self.store.profile.today.speed_rounds.min(3))).color(muted()));
         });
         ui.add_space(6.0);
         match self.speed.tab {
@@ -168,7 +168,7 @@ impl App {
                 } else {
                     "📚 지문 폴더(학습 기록 폴더의 passages)가 비어 있어 Claude가 만든 지문으로 연습해요.".to_string()
                 })
-                .color(MUTED),
+                .color(muted()),
             );
             if ui.small_button("📂 지문 폴더 열기").clicked() {
                 let d = crate::passages::dir(&self.store.dir);
@@ -231,12 +231,12 @@ impl App {
             } else {
                 match &self.speed.last {
                     Some((_, r, _)) => word_feedback_lines(ui, r, 20.0),
-                    None => sentence_lines(ui, &p.passage, 20.0, egui::Color32::WHITE),
+                    None => sentence_lines(ui, &p.passage, 20.0, text_strong()),
                 }
             }
             if self.speed.show_ko {
                 ui.add_space(4.0);
-                sentence_lines(ui, &p.passage_ko, 16.0, MUTED);
+                sentence_lines(ui, &p.passage_ko, 16.0, muted());
             }
         });
         ui.add_space(6.0);
@@ -263,20 +263,20 @@ impl App {
             let ok = r.score >= 85.0 && *wpm >= target;
             card(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{wpm:.0} WPM")).size(34.0).strong().color(if *wpm >= target { GOOD } else { WARN }));
+                    ui.label(RichText::new(format!("{wpm:.0} WPM")).size(34.0).strong().color(if *wpm >= target { GOOD } else { warn() }));
                     ui.add_space(16.0);
                     ui.label(RichText::new(format!("정확도 {:.0}%", r.score)).size(24.0).color(if r.score >= 85.0 { GOOD } else { BAD }));
                 });
                 ui.label(if ok {
                     RichText::new("🎯 목표 달성! 한 번 더 더 빠르게 읽거나 새 지문에 도전하세요.").color(GOOD)
                 } else if r.score < 85.0 {
-                    RichText::new("속도보다 정확도가 먼저예요. 빨간 단어를 듣고 다시 읽어 보세요.").color(WARN)
+                    RichText::new("속도보다 정확도가 먼저예요. 빨간 단어를 듣고 다시 읽어 보세요.").color(warn())
                 } else {
-                    RichText::new(format!("정확해요! 이제 {:.0} WPM까지 속도를 올려 봅시다 — 문장 사이 쉬는 시간을 줄이세요.", target)).color(WARN)
+                    RichText::new(format!("정확해요! 이제 {:.0} WPM까지 속도를 올려 봅시다 — 문장 사이 쉬는 시간을 줄이세요.", target)).color(warn())
                 });
                 if self.speed.attempts.len() > 1 {
                     let trail: Vec<String> = self.speed.attempts.iter().enumerate().map(|(i, (w, a))| format!("{}회 {w:.0}({a:.0}%)", i + 1)).collect();
-                    ui.label(RichText::new(format!("반복 읽기: {}", trail.join(" → "))).color(MUTED));
+                    ui.label(RichText::new(format!("반복 읽기: {}", trail.join(" → "))).color(muted()));
                 }
             });
             ui.horizontal(|ui| {
@@ -329,7 +329,7 @@ impl App {
         let pass = self.pass_score();
         card(ui, |ui| {
             ui.label("한국어가 나오면 마이크가 자동으로 켜집니다. 생각나는 즉시 영어로 말하세요 — 말이 끝나면 자동으로 채점돼요.");
-            ui.label(RichText::new("배운 단어·문장에서 출제됩니다. 제한 시간 안에 정확히 말해야 통과.").color(MUTED));
+            ui.label(RichText::new("배운 단어·문장에서 출제됩니다. 제한 시간 안에 정확히 말해야 통과.").color(muted()));
         });
         ui.add_space(6.0);
         if self.speed.queue.is_empty() {
@@ -363,11 +363,11 @@ impl App {
             self.speed.rcap.start_now(&mut self.voice);
         }
         let shown = self.speed.shown_at.unwrap();
-        ui.label(RichText::new(format!("{} / {}", self.speed.idx + 1, self.speed.queue.len())).color(MUTED));
+        ui.label(RichText::new(format!("{} / {}", self.speed.idx + 1, self.speed.queue.len())).color(muted()));
         let mut next = false;
         card(ui, |ui| {
             ui.vertical_centered(|ui| {
-                crate::grammar::ko_label(ui, &ko, 28.0, egui::Color32::WHITE);
+                crate::grammar::ko_label(ui, &ko, 28.0, text_strong());
                 ui.add_space(6.0);
                 if self.speed.result.is_none() {
                     let el = shown.elapsed().as_secs_f32();
@@ -386,11 +386,11 @@ impl App {
                 }
                 if let Some((heard, r, secs, ok)) = &self.speed.result {
                     word_feedback(ui, r, 24.0);
-                    ui.label(RichText::new(format!("들린 말: \"{heard}\"")).color(MUTED));
+                    ui.label(RichText::new(format!("들린 말: \"{heard}\"")).color(muted()));
                     ui.label(
                         RichText::new(format!("{} · {:.1}초 (제한 {:.1}초) · 정확도 {:.0}%", if *ok { "✅ 통과" } else { "❌ 다시 연습" }, secs, limit, r.score))
                             .size(18.0)
-                            .color(if *ok { GOOD } else { WARN }),
+                            .color(if *ok { GOOD } else { warn() }),
                     );
                     ui.horizontal(|ui| {
                         ui.add_space((ui.available_width() - 200.0).max(0.0) / 2.0);

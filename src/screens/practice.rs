@@ -127,7 +127,7 @@ impl App {
             ui.add_space(8.0);
             if !weak.is_empty() {
                 card(ui, |ui| {
-                    ui.label(RichText::new("어려웠던 항목 (복습·숙제로 다시 나옵니다)").color(WARN));
+                    ui.label(RichText::new("어려웠던 항목 (복습·숙제로 다시 나옵니다)").color(warn()));
                     for w in &weak {
                         ui.label(format!("• {w}"));
                     }
@@ -155,7 +155,7 @@ impl App {
 
         ui.horizontal(|ui| {
             ui.label(RichText::new(&q.title).size(20.0).strong());
-            ui.label(RichText::new(format!("{} / {}", q.idx + 1, q.specs.len())).color(MUTED));
+            ui.label(RichText::new(format!("{} / {}", q.idx + 1, q.specs.len())).color(muted()));
         });
         ui.add(egui::ProgressBar::new(q.idx as f32 / q.specs.len() as f32).desired_height(6.0).fill(ACCENT));
         ui.add_space(10.0);
@@ -252,7 +252,7 @@ impl App {
                 // Wrapped so a long sentence + translation stays inside the card.
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, en);
-                    let color = mark.map(|m| m.0).unwrap_or(Color32::WHITE);
+                    let color = mark.map(|m| m.0).unwrap_or(text_strong());
                     let text = RichText::new(en).size(17.0).strong().color(color);
                     if mark.is_some() {
                         // Click a word to practise just that one right away.
@@ -271,9 +271,9 @@ impl App {
                     }
                     // Months 5-6: English only; the Korean is a hover away.
                     if support_stage(ui.ctx()) < 2 {
-                        crate::grammar::ko_label(ui, ko, 16.0, MUTED);
+                        crate::grammar::ko_label(ui, ko, 16.0, muted());
                     } else {
-                        ui.label(RichText::new("뜻").small().color(MUTED)).on_hover_text(ko);
+                        ui.label(RichText::new("뜻").small().color(muted())).on_hover_text(ko);
                     }
                 });
             }
@@ -377,9 +377,9 @@ impl App {
             ui.label(RichText::new(format!("🔁 배운 단어 복습  {}/{goal}", done.min(goal))).size(18.0).strong());
             if ids.is_empty() {
                 let msg = if done >= goal { "오늘 복습을 다 했어요!" } else { "복습할 배운 단어가 아직 없어요. 새 단어를 배우면 내일부터 쌓입니다." };
-                ui.label(RichText::new(msg).color(MUTED));
+                ui.label(RichText::new(msg).color(muted()));
             } else {
-                ui.label(RichText::new("이미 배운 단어를 한 번씩 소리 내어 말해요. 첫 시도 점수로 다음 복습일이 정해집니다.").color(MUTED));
+                ui.label(RichText::new("이미 배운 단어를 한 번씩 소리 내어 말해요. 첫 시도 점수로 다음 복습일이 정해집니다.").color(muted()));
                 ui.add_space(6.0);
                 start_review = ui.add(egui::Button::new(RichText::new(format!("▶ 배운 단어 {}개 복습", ids.len())).size(17.0)).min_size(Vec2::new(200.0, 40.0))).clicked();
             }
@@ -573,7 +573,7 @@ impl App {
         card(ui, |ui| {
             ui.label(RichText::new(format!("오늘 복습할 항목 {due}개 · 약점 항목 {weak}개")).size(18.0));
             if ids.is_empty() {
-                ui.label(RichText::new("지금은 복습할 항목이 없어요. 새 단어와 문장을 배우면 여기에 쌓입니다.").color(MUTED));
+                ui.label(RichText::new("지금은 복습할 항목이 없어요. 새 단어와 문장을 배우면 여기에 쌓입니다.").color(muted()));
             }
         });
         if ids.is_empty() {

@@ -181,7 +181,7 @@ impl App {
 
         card(ui, |ui| {
             ui.label("글자 없이 질문을 듣고, 바로 영어로 대답하세요. 들을 수 있어야 대답할 수 있어요.");
-            ui.label(RichText::new("질문 글과 해석은 대답한 뒤에 보여요. 이해한 대답은 오늘의 듣기 목표에 포함됩니다.").color(MUTED));
+            ui.label(RichText::new("질문 글과 해석은 대답한 뒤에 보여요. 이해한 대답은 오늘의 듣기 목표에 포함됩니다.").color(muted()));
         });
         ui.add_space(6.0);
         if let Some(e) = self.coach.listen.error.clone() {
@@ -205,7 +205,7 @@ impl App {
             let st = &self.coach.listen;
             card(ui, |ui| {
                 ui.label(RichText::new(format!("👂 이해한 질문 {}/{}", st.understood, st.answered.max(n as u32))).size(26.0).strong());
-                ui.label(RichText::new("못 알아들은 질문은 🔊 다시 듣고 소리 내어 따라 해 보세요.").color(MUTED));
+                ui.label(RichText::new("못 알아들은 질문은 🔊 다시 듣고 소리 내어 따라 해 보세요.").color(muted()));
             });
             if ui.button("↻ 새 질문 받기").clicked() {
                 self.new_listen_questions();
@@ -223,13 +223,13 @@ impl App {
         let mut next = false;
         card(ui, |ui| {
             let st = &mut self.coach.listen;
-            ui.label(RichText::new(format!("질문 {}/{n} — 듣고 영어로 대답하세요", st.idx + 1)).color(MUTED));
+            ui.label(RichText::new(format!("질문 {}/{n} — 듣고 영어로 대답하세요", st.idx + 1)).color(muted()));
             let answered = st.result.is_some() || (st.transcript.is_some() && !st.judge.running());
             if st.peeked || answered {
                 ui.label(RichText::new(&q.question).size(22.0).strong());
-                crate::grammar::ko_label(ui, &q.question_ko, 16.0, MUTED);
+                crate::grammar::ko_label(ui, &q.question_ko, 16.0, muted());
             } else {
-                ui.label(RichText::new("🙈 질문 글은 대답한 뒤에 보여요").size(18.0).color(MUTED));
+                ui.label(RichText::new("🙈 질문 글은 대답한 뒤에 보여요").size(18.0).color(muted()));
             }
             ui.horizontal(|ui| {
                 if ui.button("🔊 다시 듣기").clicked() {
@@ -265,7 +265,7 @@ impl App {
                 });
             }
             if let Some(t) = &st.transcript {
-                ui.label(RichText::new(format!("내 대답: {t}")).color(MUTED));
+                ui.label(RichText::new(format!("내 대답: {t}")).color(muted()));
             }
             if let Some(r) = &st.result {
                 let (msg, color) = if r.understood { ("✅ 질문을 이해했어요", GOOD) } else { ("❌ 질문을 다르게 이해했어요", BAD) };
@@ -274,14 +274,14 @@ impl App {
                 if !r.better_answer.is_empty() {
                     ui.horizontal_wrapped(|ui| {
                         speaker_button(ui, &mut self.voice, &r.better_answer);
-                        ui.label(RichText::new(format!("더 자연스러운 대답: {}", r.better_answer)).color(GLOSS));
+                        ui.label(RichText::new(format!("더 자연스러운 대답: {}", r.better_answer)).color(gloss()));
                     });
                 }
             }
             if answered {
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, &q.sample_answer);
-                    ui.label(RichText::new(format!("예시 대답: {}", q.sample_answer)).color(MUTED));
+                    ui.label(RichText::new(format!("예시 대답: {}", q.sample_answer)).color(muted()));
                 });
                 next = ui.add(egui::Button::new("다음 ▶").min_size(Vec2::new(120.0, 34.0))).clicked();
             }
@@ -298,7 +298,7 @@ impl App {
     pub fn four_three_two_ui(&mut self, ui: &mut Ui) {
         card(ui, |ui| {
             ui.label("4/3/2 말하기: 같은 주제를 4분 → 3분 → 2분 동안 반복해서 말해요. 같은 내용을 더 짧은 시간에 말하면서 유창해집니다.");
-            ui.label(RichText::new("첫 라운드는 정확하게, 라운드마다 조금 더 빨리. 시간이 끝나면 자동으로 멈춰요.").color(MUTED));
+            ui.label(RichText::new("첫 라운드는 정확하게, 라운드마다 조금 더 빨리. 시간이 끝나면 자동으로 멈춰요.").color(muted()));
         });
         ui.add_space(6.0);
         let Some((topic, topic_ko)) = self.coach.ftt.topic.clone() else {
@@ -318,7 +318,7 @@ impl App {
                 speaker_button(ui, &mut self.voice, &topic);
                 ui.label(RichText::new(&topic).size(20.0).strong());
             });
-            crate::grammar::ko_label(ui, &topic_ko, 16.0, MUTED);
+            crate::grammar::ko_label(ui, &topic_ko, 16.0, muted());
             ui.add_space(6.0);
             if round < ROUNDS.len() {
                 let limit = ROUNDS[round];
@@ -354,8 +354,8 @@ impl App {
             let (a, b) = (self.coach.ftt.results[0].wpm, self.coach.ftt.results[2].wpm);
             card(ui, |ui| {
                 let gain = if a > 0.0 { (b / a - 1.0) * 100.0 } else { 0.0 };
-                ui.label(RichText::new(format!("말하기 속도 {a:.0} → {b:.0} WPM ({gain:+.0}%)")).size(22.0).strong().color(if b >= a { GOOD } else { WARN }));
-                ui.label(RichText::new("같은 내용을 더 짧게, 더 빠르게 말할수록 말이 입에 붙어요.").color(MUTED));
+                ui.label(RichText::new(format!("말하기 속도 {a:.0} → {b:.0} WPM ({gain:+.0}%)")).size(22.0).strong().color(if b >= a { GOOD } else { warn() }));
+                ui.label(RichText::new("같은 내용을 더 짧게, 더 빠르게 말할수록 말이 입에 붙어요.").color(muted()));
             });
             if ui.button("↻ 다른 주제로 다시").clicked() {
                 self.coach.ftt.topic = None;
@@ -380,12 +380,12 @@ impl App {
         let mut recorded: Option<String> = None;
         card(ui, |ui| {
             ui.label(RichText::new("📼 주간 녹음 비교").size(18.0).strong());
-            ui.label(RichText::new("매주 같은 질문에 1분 동안 대답해 녹음해요. 첫 달 녹음과 지금을 비교해 들으면 실력이 는 게 들려요.").color(MUTED));
+            ui.label(RichText::new("매주 같은 질문에 1분 동안 대답해 녹음해요. 첫 달 녹음과 지금을 비교해 들으면 실력이 는 게 들려요.").color(muted()));
             ui.horizontal_wrapped(|ui| {
                 speaker_button(ui, &mut self.voice, WEEKLY_QUESTION.0);
                 ui.label(RichText::new(WEEKLY_QUESTION.0).size(18.0).strong());
             });
-            crate::grammar::ko_label(ui, WEEKLY_QUESTION.1, 16.0, MUTED);
+            crate::grammar::ko_label(ui, WEEKLY_QUESTION.1, 16.0, muted());
             if weekly_recorded(&self.store.profile) {
                 ui.label(RichText::new(format!("✅ {week}주차 녹음 완료 — 다시 녹음하면 이번 주 녹음을 바꿔요")).color(GOOD));
             }
@@ -405,7 +405,7 @@ impl App {
                     if ui.button(format!("▶ 최근 ({}주차)", last.week)).clicked() {
                         play = Some(last.file.clone());
                     }
-                    ui.label(RichText::new(format!("1분에 {}단어 → {}단어", first.words, last.words)).strong().color(if last.words >= first.words { GOOD } else { WARN }));
+                    ui.label(RichText::new(format!("1분에 {}단어 → {}단어", first.words, last.words)).strong().color(if last.words >= first.words { GOOD } else { warn() }));
                 });
             }
             for r in recs.iter().rev() {
@@ -414,7 +414,7 @@ impl App {
                         play = Some(r.file.clone());
                     }
                     ui.label(format!("{}주차 · {} · {}단어 · {:.0} WPM", r.week, r.date.map(|d| d.to_string()).unwrap_or_default(), r.words, r.wpm));
-                    ui.label(RichText::new(&r.transcript).small().color(MUTED));
+                    ui.label(RichText::new(&r.transcript).small().color(muted()));
                 });
             }
         });
@@ -454,11 +454,11 @@ impl App {
         let mut log = false;
         card(ui, |ui| {
             ui.label(RichText::new("🎓 원어민 화상 수업").size(18.0).strong());
-            ui.label(RichText::new("AI 롤플레이만으로는 상대의 예상 못 한 반응에 대처하는 경험이 부족해요. 3개월 차부터 주 1~2회, 30분씩 원어민과 화상 수업(예: italki)을 함께 하세요.").color(MUTED));
+            ui.label(RichText::new("AI 롤플레이만으로는 상대의 예상 못 한 반응에 대처하는 경험이 부족해요. 3개월 차부터 주 1~2회, 30분씩 원어민과 화상 수업(예: italki)을 함께 하세요.").color(muted()));
             if day < TUTOR_FROM_DAY {
                 ui.label(format!("Day {TUTOR_FROM_DAY}부터 권장 (지금 Day {day})"));
             } else {
-                let color = if this_week >= 1 { GOOD } else { WARN };
+                let color = if this_week >= 1 { GOOD } else { warn() };
                 ui.label(RichText::new(format!("이번 주 수업 {this_week}회 / 목표 1~2회 · 지금까지 {total}회")).strong().color(color));
             }
             ui.horizontal(|ui| {
@@ -481,9 +481,9 @@ impl App {
         let mut add = false;
         card(ui, |ui| {
             ui.label(RichText::new("📝 외부 모의고사 (2주마다)").size(18.0).strong());
-            ui.label(RichText::new("2주마다 OPIc이나 TOEIC Speaking 모의고사로 실력을 확인하고 결과를 기록하세요.").color(MUTED));
+            ui.label(RichText::new("2주마다 OPIc이나 TOEIC Speaking 모의고사로 실력을 확인하고 결과를 기록하세요.").color(muted()));
             if due_in <= 0 {
-                ui.label(RichText::new("지금 볼 때예요").strong().color(WARN));
+                ui.label(RichText::new("지금 볼 때예요").strong().color(warn()));
             } else {
                 ui.label(format!("다음 모의고사까지 {due_in}일"));
             }

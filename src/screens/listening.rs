@@ -120,7 +120,7 @@ impl App {
         let ytdlp = youtube::find_ytdlp(&self.store.settings.ytdlp_path, &self.store.dir.join("bin"));
         card(ui, |ui| {
             if ytdlp.is_none() {
-                ui.label(RichText::new("유튜브 오디오·자막을 받으려면 yt-dlp 가 필요합니다.").color(WARN));
+                ui.label(RichText::new("유튜브 오디오·자막을 받으려면 yt-dlp 가 필요합니다.").color(warn()));
                 if self.ytdlp_job.running() {
                     spinner_label(ui, "yt-dlp 설치 중…");
                 } else if ui.button("⬇ yt-dlp 자동 설치").clicked() {
@@ -144,7 +144,7 @@ impl App {
                 error_label(ui, e);
             }
             ui.add_space(4.0);
-            ui.label(RichText::new("영상 찾기 (브라우저에서 열림 → 마음에 드는 영상 주소를 복사해 붙여넣기)").color(MUTED).small());
+            ui.label(RichText::new("영상 찾기 (브라우저에서 열림 → 마음에 드는 영상 주소를 복사해 붙여넣기)").color(muted()).small());
             let queries = self.lesson.as_ref().map(|l| l.listening.search_queries.clone()).unwrap_or_default();
             ui.horizontal_wrapped(|ui| {
                 for q in &queries {
@@ -176,7 +176,7 @@ impl App {
                             self.listening.selected = 0;
                         }
                         if self.listening.confirm_delete.as_deref() == Some(v.id.as_str()) {
-                            ui.label(RichText::new("삭제할까요?").color(WARN));
+                            ui.label(RichText::new("삭제할까요?").color(warn()));
                             if ui.small_button("🗑 삭제").clicked() {
                                 match youtube::delete(&self.store.youtube_dir(), &v.id) {
                                     Ok(()) => crate::applog!("listening: 받아둔 영상 삭제 · {} ({})", v.title, v.id),
@@ -219,12 +219,12 @@ impl App {
         let mut action: Option<usize> = None;
         card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{} / {}", sel + 1, video.segments.len())).color(MUTED));
-                ui.label(RichText::new(format!("{:.1}s – {:.1}s", seg.start, seg.end)).color(MUTED).small());
+                ui.label(RichText::new(format!("{} / {}", sel + 1, video.segments.len())).color(muted()));
+                ui.label(RichText::new(format!("{:.1}s – {:.1}s", seg.start, seg.end)).color(muted()).small());
             });
             ui.add_space(4.0);
             if self.listening.blind && self.listening.drill.is_none() {
-                ui.label(RichText::new("🙈 자막 숨김 — 먼저 귀로만 들어 보세요").size(20.0).color(MUTED));
+                ui.label(RichText::new("🙈 자막 숨김 — 먼저 귀로만 들어 보세요").size(20.0).color(muted()));
             } else {
                 ui.label(RichText::new(&seg.text).size(22.0).strong());
             }
@@ -333,7 +333,7 @@ impl App {
             self.select_segment(i);
         }
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("오늘 쉐도잉 통과: {}/5", self.store.profile.today.listening_passes)).color(MUTED));
+            ui.label(RichText::new(format!("오늘 쉐도잉 통과: {}/5", self.store.profile.today.listening_passes)).color(muted()));
             if ui.small_button("🌐 유튜브에서 열기").clicked() {
                 let _ = open::that(format!("{}&t={}s", video.url, seg.start as u32));
             }

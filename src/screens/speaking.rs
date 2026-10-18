@@ -96,7 +96,7 @@ impl App {
                 speaker_button(ui, &mut self.voice, &se.question);
                 ui.label(RichText::new(&se.question).size(22.0).strong());
             });
-            crate::grammar::ko_label(ui, &se.question_ko, 16.0, MUTED);
+            crate::grammar::ko_label(ui, &se.question_ko, 16.0, muted());
             if !se.useful_phrases.is_empty() {
                 ui.add_space(6.0);
                 ui.label(RichText::new("쓸 수 있는 표현").color(ACCENT));
@@ -104,7 +104,7 @@ impl App {
                     ui.horizontal(|ui| {
                         speaker_button(ui, &mut self.voice, &p.text);
                         ui.label(RichText::new(&p.text).strong());
-                        crate::grammar::ko_label(ui, &p.ko, 16.0, MUTED);
+                        crate::grammar::ko_label(ui, &p.ko, 16.0, muted());
                     });
                 }
             }
@@ -139,7 +139,7 @@ impl App {
                     }
                 }
                 if let Some(a) = &self.selfx.answer {
-                    ui.label(RichText::new(format!("내가 한 말: \"{a}\"")).color(MUTED));
+                    ui.label(RichText::new(format!("내가 한 말: \"{a}\"")).color(muted()));
                 }
                 if let Some(e) = &self.selfx.error {
                     error_label(ui, e);
@@ -154,8 +154,8 @@ impl App {
                 ui.horizontal(|ui| {
                     for (label, v) in [("종합", f.overall), ("유창성", f.fluency), ("문법", f.grammar), ("어휘", f.vocabulary)] {
                         ui.vertical(|ui| {
-                            ui.label(RichText::new(format!("{v}")).size(26.0).strong().color(if v >= 70 { GOOD } else { WARN }));
-                            ui.label(RichText::new(label).color(MUTED));
+                            ui.label(RichText::new(format!("{v}")).size(26.0).strong().color(if v >= 70 { GOOD } else { warn() }));
+                            ui.label(RichText::new(label).color(muted()));
                         });
                         ui.add_space(14.0);
                     }
@@ -167,7 +167,7 @@ impl App {
                     for c in &f.corrections {
                         ui.label(RichText::new(format!("✖ {}", c.original)).color(BAD));
                         ui.label(RichText::new(format!("✓ {}", c.corrected)).color(GOOD));
-                        ui.label(RichText::new(&c.explanation_ko).color(MUTED).small());
+                        ui.label(RichText::new(&c.explanation_ko).color(muted()).small());
                     }
                 }
                 ui.add_space(6.0);
@@ -321,7 +321,7 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     let done = counts.iter().filter(|c| **c >= WORD_DONE_PASSES).count();
                     ui.label(RichText::new(format!("완료한 상황 {done}/{}", counts.len())).strong());
-                    ui.label(RichText::new("· 상황을 클릭하면 바로 대화가 시작돼요 (대화 4번 이상 = 1회)").color(MUTED));
+                    ui.label(RichText::new("· 상황을 클릭하면 바로 대화가 시작돼요 (대화 4번 이상 = 1회)").color(muted()));
                 });
                 ui.add_space(6.0);
                 for (i, (title, ko, _, _)) in crate::content::ROLEPLAYS.iter().enumerate() {
@@ -335,7 +335,7 @@ impl App {
                             pick = Some(i);
                         }
                         ui.label(RichText::new(label).small().color(color));
-                        ui.label(RichText::new(*ko).color(MUTED));
+                        ui.label(RichText::new(*ko).color(muted()));
                     });
                 }
                 ui.add_space(4.0);
@@ -370,8 +370,8 @@ impl App {
         ui.add_space(6.0);
         card(ui, |ui| {
             ui.label(RichText::new(&sc.title).size(20.0).strong());
-            ui.label(RichText::new(&sc.scenario_ko).color(MUTED));
-            ui.label(RichText::new(format!("상대: {} · 나: {}", sc.ai_role, sc.user_role)).color(MUTED).small());
+            ui.label(RichText::new(&sc.scenario_ko).color(muted()));
+            ui.label(RichText::new(format!("상대: {} · 나: {}", sc.ai_role, sc.user_role)).color(muted()).small());
             if self.roleplay.mode != 2 {
                 let (color, label) = crate::screens::practice::word_mark(self.store.word_stat(&Self::scene_key(&sc.title)).passes);
                 ui.label(RichText::new(format!("이 상황 대화: {label}")).small().color(color));
@@ -394,7 +394,7 @@ impl App {
                             }
                         }
                         ui.label(RichText::new(label).small().color(color));
-                        crate::grammar::ko_label(ui, &p.ko, 16.0, MUTED);
+                        crate::grammar::ko_label(ui, &p.ko, 16.0, muted());
                     });
                 }
             }
@@ -427,7 +427,7 @@ impl App {
         let show_ko = self.roleplay.show_ko;
         let mut replay: Option<String> = None;
         for l in &self.roleplay.lines {
-            let (fill, align) = if l.user { (ACCENT.gamma_multiply(0.5), egui::Align::Max) } else { (CARD, egui::Align::Min) };
+            let (fill, align) = if l.user { (ACCENT.gamma_multiply(0.5), egui::Align::Max) } else { (card_bg(), egui::Align::Min) };
             ui.with_layout(egui::Layout::top_down(align), |ui| {
                 egui::Frame::new().fill(fill).corner_radius(12.0).inner_margin(10.0).show(ui, |ui| {
                     ui.set_max_width(560.0);
@@ -438,11 +438,11 @@ impl App {
                         ui.label(RichText::new(&l.text).size(16.0));
                     });
                     if show_ko && !l.ko.is_empty() {
-                        crate::grammar::ko_label(ui, &l.ko, 12.5, MUTED);
+                        crate::grammar::ko_label(ui, &l.ko, 12.5, muted());
                     }
                     if !l.correction.is_empty() {
-                        ui.label(RichText::new(format!("✓ 더 자연스럽게: {}", l.correction)).color(Color32::from_rgb(150, 255, 190)));
-                        ui.label(RichText::new(&l.correction_ko).color(MUTED).small());
+                        ui.label(RichText::new(format!("✓ 더 자연스럽게: {}", l.correction)).color(themed(Color32::from_rgb(150, 255, 190), Color32::from_rgb(20, 125, 70))));
+                        ui.label(RichText::new(&l.correction_ko).color(muted()).small());
                     }
                 });
             });
@@ -476,12 +476,12 @@ impl App {
         }
 
         if !self.roleplay.suggestions.is_empty() {
-            ui.label(RichText::new("💡 이렇게 말해 보세요").color(WARN));
+            ui.label(RichText::new("💡 이렇게 말해 보세요").color(warn()));
             for p in self.roleplay.suggestions.clone() {
                 ui.horizontal(|ui| {
                     speaker_button(ui, &mut self.voice, &p.text);
                     ui.label(RichText::new(&p.text).strong());
-                    crate::grammar::ko_label(ui, &p.ko, 16.0, MUTED);
+                    crate::grammar::ko_label(ui, &p.ko, 16.0, muted());
                 });
             }
         }

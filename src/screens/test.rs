@@ -76,7 +76,7 @@ impl App {
         ui.add_space(10.0);
 
         if t.idx < content::PLACEMENT.len() {
-            ui.label(RichText::new("문장을 듣지 말고 바로 소리 내어 읽어 보세요. 어려우면 '모르겠어요'를 눌러도 됩니다.").color(MUTED));
+            ui.label(RichText::new("문장을 듣지 말고 바로 소리 내어 읽어 보세요. 어려우면 '모르겠어요'를 눌러도 됩니다.").color(muted()));
             // Reading test: no audio model first — the learner reads cold.
             let ev = card(ui, |ui| t.drill.ui(ui, &mut self.voice, pass, None));
             let mut next = false;
@@ -103,12 +103,12 @@ impl App {
             let (q, qko) = content::PLACEMENT_QUESTION;
             card(ui, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.label(RichText::new("마지막: 자유롭게 말하기 (30초~1분)").color(MUTED));
+                    ui.label(RichText::new("마지막: 자유롭게 말하기 (30초~1분)").color(muted()));
                     ui.horizontal(|ui| {
                         speaker_button(ui, &mut self.voice, q);
                         ui.label(RichText::new(q).size(20.0).strong());
                     });
-                    ui.label(RichText::new(qko).color(MUTED));
+                    ui.label(RichText::new(qko).color(muted()));
                     ui.add_space(8.0);
                     if let Some(a) = t.capture.ui(ui, &mut self.voice, 75.0) {
                         t.answer = Some(a);
@@ -157,11 +157,11 @@ impl App {
             if let Some(a) = t.result.clone() {
                 card(ui, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new("당신의 레벨").color(MUTED));
+                        ui.label(RichText::new("당신의 레벨").color(muted()));
                         ui.label(RichText::new(format!("{} {}  ({:.1}/10)", level_name_of(a.level), cefr_of(a.level), a.level)).size(40.0).strong().color(ACCENT));
                         if t.retest {
                             let cur = self.store.profile.level;
-                            ui.label(RichText::new(format!("현재 {} {} ({cur:.1}) → 새 레벨 {} {} ({:.1})", level_name_of(cur), cefr_of(cur), level_name_of(a.level), cefr_of(a.level), a.level)).color(MUTED));
+                            ui.label(RichText::new(format!("현재 {} {} ({cur:.1}) → 새 레벨 {} {} ({:.1})", level_name_of(cur), cefr_of(cur), level_name_of(a.level), cefr_of(a.level), a.level)).color(muted()));
                         }
                         ui.label(RichText::new(&a.summary_ko).size(16.0));
                     });
@@ -169,7 +169,7 @@ impl App {
                         ui.label(RichText::new(format!("👍 {s}")).color(GOOD));
                     }
                     for w in &a.weaknesses_ko {
-                        ui.label(RichText::new(format!("🎯 {w}")).color(WARN));
+                        ui.label(RichText::new(format!("🎯 {w}")).color(warn()));
                     }
                     if !a.focus_next_ko.is_empty() {
                         ui.label(RichText::new(format!("다음 목표: {}", a.focus_next_ko)).color(ACCENT));

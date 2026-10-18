@@ -31,7 +31,7 @@ impl App {
         if open.is_empty() {
             card(ui, |ui| {
                 ui.label(RichText::new("남은 숙제가 없어요 👍").size(18.0));
-                ui.label(RichText::new("학습 중 통과 점수에 못 미친 항목이 생기면 '오늘 학습 마무리' 때 숙제로 나옵니다.").color(MUTED));
+                ui.label(RichText::new("학습 중 통과 점수에 못 미친 항목이 생기면 '오늘 학습 마무리' 때 숙제로 나옵니다.").color(muted()));
             });
             if !self.step_done("homework") && self.store.homework.iter().any(|h| h.completed == Some(today())) {
                 self.complete_step("homework");
@@ -46,7 +46,7 @@ impl App {
                 for (ti, t) in hw.tasks.iter().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label(if t.done { "✅" } else { "⬜" });
-                        ui.label(RichText::new(&t.instruction_ko).color(if t.done { MUTED } else { egui::Color32::WHITE }));
+                        ui.label(RichText::new(&t.instruction_ko).color(if t.done { muted() } else { text_strong() }));
                         if !t.done && ui.button("하기").clicked() {
                             start = Some((hi, ti));
                         }
@@ -121,7 +121,7 @@ impl App {
                 card(ui, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.label(RichText::new(&task.text).size(30.0).strong());
-                        crate::grammar::ko_label(ui, &task.meaning_ko, 16.0, MUTED);
+                        crate::grammar::ko_label(ui, &task.meaning_ko, 16.0, muted());
                         ui.add_space(8.0);
                         if self.homework.check.running() {
                             spinner_label(ui, "Claude가 확인 중…");
@@ -134,7 +134,7 @@ impl App {
                             error_label(ui, e);
                         }
                         if !task.feedback.is_empty() {
-                            ui.label(RichText::new(&task.feedback).color(if task.passed > 0 { GOOD } else { WARN }));
+                            ui.label(RichText::new(&task.feedback).color(if task.passed > 0 { GOOD } else { warn() }));
                         }
                         if task.passed > 0 && ui.add(egui::Button::new("다음 ▶").fill(GOOD).min_size(Vec2::new(140.0, 36.0))).clicked() {
                             finished = true;

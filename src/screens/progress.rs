@@ -40,7 +40,7 @@ impl App {
                 ] {
                     ui.vertical(|ui| {
                         ui.label(RichText::new(v).size(24.0).strong());
-                        ui.label(RichText::new(label).color(MUTED));
+                        ui.label(RichText::new(label).color(muted()));
                     });
                     ui.add_space(18.0);
                 }
@@ -52,7 +52,7 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 for w in curriculum::CHECKPOINT_WEEKS {
                     let done = *w <= p.last_checkpoint_week;
-                    ui.label(RichText::new(format!("{}{w}주차", if done { "✅ " } else { "⬜ " })).color(if done { GOOD } else { MUTED }));
+                    ui.label(RichText::new(format!("{}{w}주차", if done { "✅ " } else { "⬜ " })).color(if done { GOOD } else { muted() }));
                 }
             });
             ui.horizontal(|ui| {
@@ -74,7 +74,7 @@ impl App {
                 ui.label(format!("{}  {:.2} ({})  — {}", r.date, r.level, r.cefr, r.reason));
             }
             if p.level_history.is_empty() {
-                ui.label(RichText::new("아직 기록이 없습니다.").color(MUTED));
+                ui.label(RichText::new("아직 기록이 없습니다.").color(muted()));
             }
         });
         ui.add_space(6.0);
@@ -85,7 +85,7 @@ impl App {
                 for (i, w) in curriculum::WEEKS.iter().enumerate() {
                     let n = i as u32 + 1;
                     let txt = format!("{n}주 · {} — {}", w.theme_ko, w.business);
-                    ui.label(if n == cur { RichText::new(format!("▶ {txt}")).color(ACCENT).strong() } else if n < cur { RichText::new(txt).color(MUTED) } else { RichText::new(txt) });
+                    ui.label(if n == cur { RichText::new(format!("▶ {txt}")).color(ACCENT).strong() } else if n < cur { RichText::new(txt).color(muted()) } else { RichText::new(txt) });
                     ui.end_row();
                 }
             });
@@ -118,7 +118,7 @@ impl App {
             .cloned()
             .collect();
         items.sort_by_key(|i| (i.due, i.text.clone()));
-        ui.label(RichText::new(format!("{}개 · 오늘 복습 {}개", items.len(), srs::due_count(&self.store.items))).color(MUTED));
+        ui.label(RichText::new(format!("{}개 · 오늘 복습 {}개", items.len(), srs::due_count(&self.store.items))).color(muted()));
         ui.add_space(6.0);
         let mut delete: Option<String> = None;
         egui::Grid::new("vocab").striped(true).num_columns(5).show(ui, |ui| {
@@ -130,8 +130,8 @@ impl App {
             ui.end_row();
             for i in &items {
                 speaker_button(ui, &mut self.voice, &i.text);
-                ui.label(RichText::new(&i.text).color(if i.weak { WARN } else { Color32::WHITE }));
-                crate::grammar::ko_label(ui, &i.meaning_ko, 16.0, MUTED);
+                ui.label(RichText::new(&i.text).color(if i.weak { warn() } else { text_strong() }));
+                crate::grammar::ko_label(ui, &i.meaning_ko, 16.0, muted());
                 let due = if i.due <= t { "오늘".to_string() } else { format!("{} ({}일 뒤)", i.due, (i.due - t).num_days()) };
                 ui.label(format!("{due} · {:.0}점{}", i.last_score, if i.weak { " · 약점" } else { "" }));
                 if ui.small_button("🗑").on_hover_text("삭제").clicked() {
@@ -150,20 +150,20 @@ impl App {
 fn level_chart(ui: &mut Ui, history: &[LevelRecord], start: chrono::NaiveDate) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 180.0), Sense::hover());
     let p = ui.painter();
-    p.rect_filled(rect, 8.0, Color32::from_rgb(16, 21, 34));
+    p.rect_filled(rect, 8.0, themed(Color32::from_rgb(16, 21, 34), Color32::from_rgb(246, 248, 252)));
     let x_of = |d: chrono::NaiveDate| rect.left() + 30.0 + (rect.width() - 40.0) * ((d - start).num_days() as f32 / TOTAL_DAYS as f32).clamp(0.0, 1.0);
     let y_of = |l: f32| rect.bottom() - 16.0 - (rect.height() - 30.0) * ((l - 1.0) / 9.0);
     for (l, name) in [(2.0, "A2"), (3.5, "B1"), (6.5, "B2"), (9.0, "C1")] {
         let y = y_of(l);
-        p.line_segment([Pos2::new(rect.left() + 28.0, y), Pos2::new(rect.right() - 8.0, y)], Stroke::new(1.0_f32, Color32::from_rgb(40, 48, 70)));
-        p.text(Pos2::new(rect.left() + 4.0, y), egui::Align2::LEFT_CENTER, name, egui::FontId::proportional(11.0), MUTED);
+        p.line_segment([Pos2::new(rect.left() + 28.0, y), Pos2::new(rect.right() - 8.0, y)], Stroke::new(1.0_f32, themed(Color32::from_rgb(40, 48, 70), Color32::from_rgb(222, 227, 238))));
+        p.text(Pos2::new(rect.left() + 4.0, y), egui::Align2::LEFT_CENTER, name, egui::FontId::proportional(11.0), muted());
     }
     // Pace line toward B2 by the end of the program.
     if let Some(first) = history.first() {
         let goal = curriculum::target_level_for_day(TOTAL_DAYS, first.level);
         p.line_segment(
             [Pos2::new(x_of(start), y_of(first.level)), Pos2::new(x_of(start + chrono::Duration::days(TOTAL_DAYS)), y_of(goal))],
-            Stroke::new(1.5_f32, WARN.gamma_multiply(0.5)),
+            Stroke::new(1.5_f32, warn().gamma_multiply(0.5)),
         );
     }
     let pts: Vec<Pos2> = history.iter().map(|r| Pos2::new(x_of(r.date), y_of(r.level))).collect();

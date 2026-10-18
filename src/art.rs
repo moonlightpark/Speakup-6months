@@ -2,7 +2,7 @@
 //! bubble that talks), the six-month journey, icon badges and the soft window backdrop.
 //! Everything is drawn in code, so it is crisp at any scale and needs no image files.
 
-use crate::widgets::{GOOD, WARN};
+use crate::widgets::{GOOD, warn};
 use egui::{Color32, Mesh, Painter, Pos2, Rect, Shape, Stroke, Ui, Vec2, epaint::Vertex, pos2, vec2};
 use std::f32::consts::{PI, TAU};
 
@@ -133,7 +133,7 @@ pub fn mascot(p: &Painter, c: Pos2, size: f32, mood: Mood, t: f32) {
         }
     }
     if mood == Mood::Cheer {
-        sparkle(p, c + vec2(-r * 1.1, -r * 0.9), r * 0.22, WARN);
+        sparkle(p, c + vec2(-r * 1.1, -r * 0.9), r * 0.22, warn());
         sparkle(p, c + vec2(r * 1.15, -r * 0.6), r * 0.16, PINK);
         sparkle(p, c + vec2(r * 0.9, r * 0.9), r * 0.12, CYAN);
     }
@@ -239,7 +239,7 @@ pub fn celebration(ui: &mut Ui, t: f32, score: f32) -> Rect {
     }
 
     // Confetti: thrown up from the middle, then falling and tumbling, fading at the end.
-    let palette = [PINK, CYAN, WARN, GOOD, Color32::from_rgb(255, 214, 80), Color32::WHITE, VIOLET];
+    let palette = [PINK, CYAN, warn(), GOOD, Color32::from_rgb(255, 214, 80), Color32::WHITE, VIOLET];
     let fade = (1.0 - (t - (CELEBRATION_SECS - 0.8)) / 0.8).clamp(0.0, 1.0);
     if fade > 0.0 {
         for i in 0..90u32 {
@@ -305,7 +305,7 @@ pub fn journey(rect: Rect, progress: f32) -> Shape {
     // Flag
     let f = path_at(1.0);
     out.push(Shape::line_segment([f, f - vec2(0.0, 30.0)], Stroke::new(2.5_f32, Color32::WHITE)));
-    out.push(Shape::convex_polygon(vec![f - vec2(0.0, 30.0), f - vec2(-20.0, 24.0), f - vec2(0.0, 18.0)], WARN, Stroke::NONE));
+    out.push(Shape::convex_polygon(vec![f - vec2(0.0, 30.0), f - vec2(-20.0, 24.0), f - vec2(0.0, 18.0)], warn(), Stroke::NONE));
     // Marker
     let me = path_at(progress.clamp(0.0, 1.0));
     out.push(Shape::circle_filled(me, 9.0, Color32::WHITE));
@@ -337,7 +337,7 @@ pub fn onboarding_hero(ui: &mut Ui) {
     p.text(pos2(left, rect.top() + 58.0), egui::Align2::LEFT_CENTER, "말하고, 연습하고, 활용하세요.", egui::FontId::proportional(32.0), Color32::WHITE);
     p.text(pos2(left, rect.top() + 100.0), egui::Align2::LEFT_CENTER, "6개월 뒤 영어로 듣고 말하는 것만을 목표로 하는 음성 학습 앱", egui::FontId::proportional(16.0), Color32::from_rgb(220, 226, 255));
     let mut x = left;
-    for (txt, col) in [("🎧 듣기", CYAN), ("🎤 말하기", PINK), ("🔁 반복", GOOD), ("⚡ 스피드", WARN)] {
+    for (txt, col) in [("🎧 듣기", CYAN), ("🎤 말하기", PINK), ("🔁 반복", GOOD), ("⚡ 스피드", warn())] {
         let galley = p.layout_no_wrap(txt.to_string(), egui::FontId::proportional(15.0), Color32::WHITE);
         let pill = Rect::from_min_size(pos2(x, rect.top() + 140.0), galley.size() + vec2(24.0, 12.0));
         p.rect_filled(pill, 16.0, col.gamma_multiply(0.35));
