@@ -901,7 +901,11 @@ impl App {
         self.screen = s;
     }
 
-    fn nav_ui(&mut self, ui: &mut egui::Ui) {
+    fn nav_ui(&mut self, ui: &mut egui::Ui, view_h: f32) {
+        let top = ui.cursor().top();
+        // The scroll area clips to the panel's inner width; the selected item's bar sits in the margin.
+        let clip = ui.clip_rect();
+        ui.set_clip_rect(egui::Rect::from_x_y_ranges(clip.left() - 14.0..=clip.right() + 14.0, clip.y_range()));
         ui.add_space(18.0);
         ui.horizontal(|ui| {
             let (r, _) = ui.allocate_exact_size(Vec2::splat(44.0), egui::Sense::hover());
@@ -964,8 +968,9 @@ impl App {
         }
         // Status lines at the bottom, or right after the menu when the window is short.
         let status_h = 76.0;
-        if ui.available_height() > status_h {
-            ui.add_space(ui.available_height() - status_h);
+        let left = view_h - (ui.cursor().top() - top);
+        if left > status_h {
+            ui.add_space(left - status_h);
         }
         ui.vertical(|ui| {
             let (txt, col) = match self.voice.stt.status() {
@@ -1623,7 +1628,11 @@ impl eframe::App for App {
                 .exact_width(SIDEBAR_WIDTH)
                 .resizable(false)
                 .frame(egui::Frame::new().fill(sidebar()).inner_margin(egui::Margin::symmetric(14, 0)).stroke(egui::Stroke::new(1.0_f32, border())))
-                .show(ctx, |ui| self.nav_ui(ui));
+                .show(ctx, |ui| {
+                    // Scrolls when the window is too short for the whole menu (small screens).
+                    let view_h = ui.available_height();
+                    egui::ScrollArea::vertical().id_salt("nav_scroll").auto_shrink([false, false]).show(ui, |ui| self.nav_ui(ui, view_h));
+                });
         }
         self.mic_permission_banner(ctx);
         if self.voice.player.output_stuck() {
