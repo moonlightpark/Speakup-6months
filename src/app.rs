@@ -90,6 +90,8 @@ pub struct App {
     /// the same day after a failure).
     pub tense_job: Pending<Vec<crate::tenses::TenseSet>>,
     pub tense_tried: Option<chrono::NaiveDate>,
+    pub sentence_tense_job: Pending<Vec<crate::tenses::TenseSet>>,
+    pub sentence_tense_tried: Option<chrono::NaiveDate>,
     /// 오늘의 문장 만들기 in progress: (word, mission).
     pub word_mission: Option<(String, crate::screens::mission::Mission)>,
     pub selfx: SelfExprState,
@@ -196,6 +198,8 @@ impl App {
             word_mission: None,
             tense_job: Pending::default(),
             tense_tried: None,
+            sentence_tense_job: Pending::default(),
+            sentence_tense_tried: None,
             selfx: SelfExprState::default(),
             roleplay: RoleplayState::default(),
             listening: ListeningState::default(),
@@ -479,6 +483,31 @@ impl App {
         }
         let level = self.store.profile.level;
         self.tense_job.spawn(move || c.tense_sentences(&missing, level));
+    }
+
+    /// Asks Claude once a day for today's 문장 읽기 sentences in three tenses (those not asked
+    /// before), and keeps what comes back.
+    pub fn ensure_sentence_tenses(&mut self, sentences: &[(String, String)]) {
+        if let Some(r) = self.sentence_tense_job.poll() {
+            match r {
+                Ok(sets) => {
+                    crate::applog!("reading: 시제 문장 {}개 받음 (바꿀 수 있는 문장 {}개)", sets.len(), sets.iter().filter(|s| s.is_complete()).count());
+                    self.store.put_sentence_tenses(&sets);
+                }
+                Err(e) => crate::applog!("reading: 시제 문장 생성 실패 · {e:#}"),
+            }
+        }
+        if sentences.is_empty() || self.sentence_tense_job.running() || self.sentence_tense_tried == Some(today()) || self.talk_offline() {
+            return;
+        }
+        let Some(c) = self.claude() else { return };
+        let missing: Vec<(String, String)> = sentences.iter().filter(|(t, _)| !self.store.sentence_tenses.contains_key(&t.trim().to_lowercase())).take(50).cloned().collect();
+        self.sentence_tense_tried = Some(today());
+        if missing.is_empty() {
+            return;
+        }
+        let level = self.store.profile.level;
+        self.sentence_tense_job.spawn(move || c.sentence_tenses(&missing, level));
     }
 
     /// An entry's 시제 3문장: Claude's, else a frame for its part of speech.

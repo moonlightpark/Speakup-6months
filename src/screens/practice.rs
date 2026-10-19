@@ -960,6 +960,9 @@ impl App {
             .map(|t| word_mark(self.store.word_stat(t).passes))
             .collect();
         let reps = self.store.settings.reps_new;
+        // Claude rewrites today's sentences in three tenses once a day (where they can change).
+        let today_sentences: Vec<(String, String)> = idioms.iter().map(|i| (i.en.clone(), i.ko.clone())).chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone()))).collect();
+        self.ensure_sentence_tenses(&today_sentences);
         // One drill per row (same order as `rows`). Idioms once each in the day's run; a sentence
         // passed before (e.g. before a restart) once, without counting as a new review.
         let row_specs: Vec<Spec> = idioms
@@ -1008,7 +1011,7 @@ impl App {
             ui,
             "📖 문장 소리 내어 읽기 (쉐도잉)",
             &format!(
-                "💬 오늘의 숙어 문장 {}개를 한 번씩 소리 내어 읽고, 이어서 읽기 쉬운 긴 문장을 원어민처럼 따라 읽어요(각 {reps}번 통과). 문장을 클릭하면 그 문장만 바로 연습해요.",
+                "💬 오늘의 숙어 문장 {}개를 한 번씩 소리 내어 읽고, 이어서 읽기 쉬운 긴 문장을 원어민처럼 따라 읽어요(각 {reps}번 통과). 시제를 바꿀 수 있는 문장은 이어서 🕐 현재·과거·미래로 2번씩 말해요. 문장을 클릭하면 그 문장만 바로 연습해요.",
                 idioms.len()
             ),
             &rows,
@@ -1020,18 +1023,23 @@ impl App {
             self.mark_done(spec.new_item, &spec.target);
             return;
         }
+        // Each sentence, then (where it can change tense) present · past · future, twice each.
+        let with_tenses = |s: Spec| -> Vec<Spec> {
+            let tenses = self.sentence_tense_specs(&s.target);
+            std::iter::once(s).chain(tenses).collect()
+        };
         if let Some((i, spec)) = picked.and_then(|i| Some((i, row_specs.get(i).cloned()?))) {
             // One sentence on demand, repeated in full so the count moves toward 기억 완료;
             // "다음 문장" then goes on down the list.
             crate::applog!("reading: 리스트에서 '{}' 바로 연습", spec.target);
             let title = format!("문장 읽기 · {}", spec.target.chars().take(30).collect::<String>());
-            let mut q = DrillQueue::new("", "reading", &title, vec![Spec { reps, ..spec }]);
-            q.then = row_specs[i + 1..].iter().map(|s| (format!("문장 읽기 · {}", s.target.chars().take(30).collect::<String>()), vec![Spec { reps, ..s.clone() }])).collect();
+            let mut q = DrillQueue::new("", "reading", &title, with_tenses(Spec { reps, ..spec }));
+            q.then = row_specs[i + 1..].iter().map(|s| (format!("문장 읽기 · {}", s.target.chars().take(30).collect::<String>()), with_tenses(Spec { reps, ..s.clone() }))).collect();
             self.queue = Some(q);
             return;
         }
         if start {
-            let mut specs = row_specs;
+            let mut specs: Vec<Spec> = row_specs.into_iter().flat_map(with_tenses).collect();
             // Finally say each sentence again from the Korean only (기억해서 말하기).
             specs.extend(lesson.sentences.iter().filter(|s| !s.ko.is_empty() && !known(&s.text)).map(|s| recall_spec(&s.text, &s.ko)));
             self.queue = Some(DrillQueue::new("reading", "reading", "문장 읽기", specs));
@@ -1040,13 +1048,48 @@ impl App {
         let days: Vec<(chrono::NaiveDate, Vec<DayRow>)> = self
             .reading_days_list(reps, true)
             .into_iter()
-            .map(|(d, v)| (d, v.into_iter().map(|(label, ko, spec)| DayRow { label, ko, specs: vec![spec] }).collect()))
+            .map(|(d, v)| {
+                let rows = v
+                    .into_iter()
+                    .map(|(label, ko, spec)| {
+                        let tenses = self.sentence_tense_specs(&spec.target);
+                        DayRow { label, ko, specs: std::iter::once(spec).chain(tenses).collect() }
+                    })
+                    .collect();
+                (d, rows)
+            })
             .collect();
         self.day_lists_ui(ui, "reading", "📚 날짜별 전체 문장", "문장 읽기", &days);
         if lesson.sentences.is_empty() {
             ui.add_space(8.0);
             self.lesson_ready_ui(ui);
         }
+    }
+
+    /// A 문장 읽기 sentence in the present, past and future (Claude's, kept in
+    /// sentence_tenses.json), each said twice. None for a sentence that can't change tense or
+    /// hasn't been rewritten yet; a tense the same as the sentence itself is left out.
+    pub fn sentence_tense_specs(&self, text: &str) -> Vec<Spec> {
+        let Some(t) = self.store.sentence_tenses.get(&text.trim().to_lowercase()).filter(|t| t.is_complete()) else {
+            return Vec::new();
+        };
+        let same = |a: &str| a.trim().trim_end_matches(['.', '!', '?']).eq_ignore_ascii_case(text.trim().trim_end_matches(['.', '!', '?']));
+        [(&t.present, &t.present_ko), (&t.past, &t.past_ko), (&t.future, &t.future_ko)]
+            .into_iter()
+            .zip(crate::tenses::SENTENCE_TENSES)
+            .filter(|((en, _), _)| !same(en))
+            .map(|((en, ko), (label, frame))| Spec {
+                item_id: None,
+                new_item: None,
+                target: en.clone(),
+                ko: ko.clone(),
+                tip: format!("🕐 {label} · {frame} — 시제를 바꿔 2번 말해요"),
+                reps: SENTENCE_TENSE_REPS,
+                recall: false,
+                is_word: false,
+                chunks: Vec::new(),
+            })
+            .collect()
     }
 
     pub fn review_ui(&mut self, ui: &mut Ui) {
@@ -1123,6 +1166,9 @@ impl App {
         self.queue = Some(DrillQueue::new("", category, title, specs));
     }
 }
+
+/// Times each tense of a 문장 읽기 sentence is said (3 would make the day too long).
+pub const SENTENCE_TENSE_REPS: u32 = 2;
 
 /// The small "학습완료" button for a word too easy to drill.
 fn finish_button(ui: &mut Ui) -> bool {

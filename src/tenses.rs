@@ -21,6 +21,9 @@ pub struct TenseSet {
 /// (label, Korean frame) of the three tenses, in drill order.
 pub const TENSES: [(&str, &str); 3] = [("현재", "~할까 생각 중이에요"), ("과거", "~할까 생각했어요"), ("미래", "~할까 생각할 거예요")];
 
+/// (label, Korean ending) for sentences said in three tenses in 문장 읽기.
+pub const SENTENCE_TENSES: [(&str, &str); 3] = [("현재", "~해요"), ("과거", "~했어요"), ("미래", "~할 거예요")];
+
 impl TenseSet {
     /// (sentence, Korean, tense label, Korean frame) × 3.
     pub fn rows(&self) -> [(&str, &str, &str, &str); 3] {

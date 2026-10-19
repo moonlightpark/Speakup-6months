@@ -128,6 +128,21 @@ fn respond(body: &Value) -> Value {
             })
             .collect();
         json!({"items": items})
+    } else if prompt.starts_with("Sentence tenses:") {
+        // Only "I wake up early." changes tense here; the idioms stay as they are.
+        let items: Vec<Value> = prompt
+            .lines()
+            .filter_map(|l| l.strip_prefix("- ").and_then(|r| r.rsplit_once(" (")).map(|(t, _)| t.to_string()))
+            .map(|t| {
+                if t == "I wake up early." {
+                    json!({"sentence": t, "ok": true, "present": "I wake up early.", "present_ko": "일찍 일어나요.",
+                           "past": "I woke up early.", "past_ko": "일찍 일어났어요.", "future": "I will wake up early.", "future_ko": "일찍 일어날 거예요."})
+                } else {
+                    json!({"sentence": t, "ok": false, "present": "", "present_ko": "", "past": "", "past_ko": "", "future": "", "future_ko": ""})
+                }
+            })
+            .collect();
+        json!({"items": items})
     } else if prompt.starts_with("Sentence mission:") {
         json!({"ok": true, "feedback_ko": "좋아요! be동사를 잘 썼어요", "better": "My deadline is on Friday."})
     } else if prompt.starts_with("Homework:") {
@@ -444,6 +459,7 @@ fn ft05_reading_shows_direct_reading_and_failures_become_homework() {
     let mut t = launch("reading");
     t.nav("📖  문장 읽기");
     t.wait("lesson", |a| a.lesson.is_some());
+    t.wait("sentence tenses", |a| a.store.sentence_tenses.contains_key("i wake up early."));
     t.nav("▶ 시작하기");
     // 직독직해: each chunk with its Korean meaning, separated by slashes.
     for text in ["I", "am", "boy.", "나", "이다", "소년", "/"] {
@@ -460,6 +476,13 @@ fn ft05_reading_shows_direct_reading_and_failures_become_homework() {
         t.say("I wake up early.", 1.2);
     }
     t.click("다음 ▶");
+    // It can change tense: past and future, twice each (Claude's, asked when the screen opened).
+    for en in ["I woke up early.", "I will wake up early."] {
+        assert_eq!(t.app().queue.as_ref().unwrap().drill.target, en);
+        t.say(en, 1.0);
+        t.say(en, 1.0);
+        t.click("다음 ▶");
+    }
     // Then each sentence once more from the Korean only.
     assert!(t.has("영어로 말해 보세요") && t.has("나는 소년이다."));
     t.say("I am a boy.", 1.0);
@@ -1978,4 +2001,33 @@ fn ft57_speed_reading_without_claude_uses_the_weeks_built_in_script() {
     assert!(t.has(&first), "the whole script is on screen");
     assert!(t.has("1/") && t.has("따라 읽기"));
     assert!(!t.has("◀ 이전 회차") || !t.app().speed.day.is_some_and(|d| d > 1));
+}
+
+#[test]
+fn ft58_reading_sentences_in_three_tenses_twice_each() {
+    let mut t = launch("readtenses");
+    t.nav("📖  문장 읽기");
+    t.wait("lesson", |a| a.lesson.is_some());
+    t.steps(2);
+    t.wait("sentence tenses", |a| a.store.sentence_tenses.contains_key("i wake up early."));
+    let p = t.prompts().into_iter().find(|p| p.starts_with("Sentence tenses:")).unwrap();
+    assert!(p.contains("- I wake up early. (나는 일찍 일어난다.)") && p.contains("ok=false"));
+    assert!(t.app().store.sentence_tenses.values().filter(|s| s.is_complete()).count() == 1, "idioms that can't change tense are kept as such");
+    assert!(std::fs::read_to_string(t.dir.join("sentence_tenses.json")).unwrap().contains("I woke up early."));
+    // Click the sentence: read it, then past and future (present = itself, left out), 2 times each.
+    t.click("I wake up early.");
+    let reps = t.app().store.settings.reps_new;
+    for _ in 0..reps {
+        t.say("I wake up early.", 1.0);
+    }
+    t.click("다음 ▶");
+    for (en, label) in [("I woke up early.", "🕐 과거 · ~했어요"), ("I will wake up early.", "🕐 미래 · ~할 거예요")] {
+        assert!(t.has(label) && t.app().queue.as_ref().unwrap().drill.target == en, "{en}");
+        t.say(en, 1.0);
+        assert!(!t.has("다음 ▶"), "two times, not one");
+        t.say(en, 1.0);
+        t.click("다음 ▶");
+    }
+    // A sentence that can't change tense: just itself.
+    assert!(t.app().sentence_tense_specs("I am a boy.").is_empty());
 }

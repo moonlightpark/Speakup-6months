@@ -425,6 +425,43 @@ impl Claude {
         Ok(out.items)
     }
 
+    /// 문장 읽기 in three tenses: each sentence rewritten in the present, past and future where
+    /// that sounds natural. Sentences that can't change tense (greetings, fixed sayings, most
+    /// questions and requests) come back with empty fields (`word` = the sentence).
+    pub fn sentence_tenses(&self, sentences: &[(String, String)], level: f32) -> Result<Vec<crate::tenses::TenseSet>> {
+        let schema = obj(json!({"items": arr(obj(json!({
+            "sentence": s(), "ok": json!({"type": "boolean"}),
+            "present": s(), "present_ko": s(), "past": s(), "past_ko": s(), "future": s(), "future_ko": s(),
+        })))}));
+        let list: String = sentences.iter().map(|(t, ko)| format!("- {t} ({ko})\n")).collect();
+        let user = format!(
+            "Sentence tenses: for each English sentence below (a learner at level {level:.1}/10, CEFR {cefr}, reads them aloud), \
+             give the same sentence in the present, the past and the future (will / be going to), changing as little as possible \
+             and keeping any idiom or expression in it intact (e.g. \"I've got a lot on my plate.\" → present \"I have a lot on my plate.\", \
+             past \"I had a lot on my plate.\", future \"I'll have a lot on my plate.\"). One of the three may be the sentence itself. \
+             ok=false (and the other fields empty) when the tense can't naturally change: greetings, fixed sayings, set phrases, \
+             most questions and requests. sentence: exactly as given. *_ko: natural Korean translations.\n\nSentences:\n{list}",
+            cefr = cefr_of(level)
+        );
+        #[derive(Deserialize)]
+        struct Item {
+            sentence: String,
+            ok: bool,
+            #[serde(flatten)]
+            set: crate::tenses::TenseSet,
+        }
+        #[derive(Deserialize)]
+        struct Out {
+            items: Vec<Item>,
+        }
+        let out: Out = self.call(user, schema, "low")?;
+        Ok(out
+            .items
+            .into_iter()
+            .map(|i| if i.ok { crate::tenses::TenseSet { word: i.sentence, ..i.set } } else { crate::tenses::TenseSet { word: i.sentence, ..Default::default() } })
+            .collect())
+    }
+
     /// 오늘의 문장 만들기: an original sentence with one of the day's words, on the week's theme,
     /// practising the week's grammar.
     pub fn check_sentence_mission(&self, word: &str, meaning_ko: &str, theme: &str, grammar: &str, transcript: &str, level: f32) -> Result<WordUseCheck> {
