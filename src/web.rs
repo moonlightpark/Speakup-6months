@@ -1,4 +1,4 @@
-//! A web page inside the app window (playphrase.me clips in the listening lab): a native web
+//! A web page inside the app window (YouGlish videos in the listening lab): a native web
 //! view (WKWebView on macOS, WebView2 on Windows) laid over the part of the screen a page
 //! asks for. Screens ask each frame with `App::web_req`; nothing asked = hidden.
 

@@ -1,6 +1,6 @@
 //! Listening lab: real people saying what was learned today, inside the window —
-//! 🎬 today's 문장 읽기 sentences in film and TV clips (playphrase.me), 🔤 today's words in
-//! YouTube videos (YouGlish) — then said after them and scored; and 👂 listen and respond.
+//! 🎬 today's 문장 읽기 sentences and 🔤 today's words in YouTube videos (YouGlish) — then
+//! said after them and scored; and 👂 listen and respond.
 
 use crate::app::App;
 use crate::models::*;
@@ -8,7 +8,7 @@ use crate::widgets::*;
 use egui::{RichText, Ui};
 
 pub struct ListeningState {
-    /// 0 = today's sentences on playphrase.me, 1 = listen and respond, 2 = today's words on YouGlish.
+    /// 0 = today's sentences on YouGlish, 1 = listen and respond, 2 = today's words on YouGlish.
     pub tab: usize,
     /// 🎬 tab: the sentence shown.
     pub phrase_idx: usize,
@@ -25,11 +25,12 @@ impl Default for ListeningState {
     }
 }
 
-/// YouGlish pronunciation search for a word: "peckish" →
-/// https://youglish.com/pronounce/peckish/english
-pub fn youglish_url(word: &str) -> String {
+/// YouGlish search for a word or sentence: "peckish" →
+/// https://youglish.com/pronounce/peckish/english (a sentence without its end mark).
+pub fn youglish_url(text: &str) -> String {
+    let q = text.trim().trim_end_matches(['.', '!', '?', ',']).trim();
     let mut enc = String::new();
-    for c in word.trim().chars() {
+    for c in q.chars() {
         match c {
             ' ' => enc.push_str("%20"),
             c if c.is_ascii_alphanumeric() || "'-_.~".contains(c) => enc.push(c),
@@ -45,31 +46,10 @@ pub fn youglish_url(word: &str) -> String {
     format!("https://youglish.com/pronounce/{enc}/english")
 }
 
-/// playphrase.me search for a sentence: "I'm a little peckish." →
-/// https://www.playphrase.me/#/search?q=I'm+a+little+peckish&language=en
-pub fn playphrase_url(sentence: &str) -> String {
-    let q = sentence.trim().trim_end_matches(['.', '!', '?', ',']).trim();
-    let mut enc = String::new();
-    for c in q.chars() {
-        match c {
-            ' ' => enc.push('+'),
-            c if c.is_ascii_alphanumeric() || "'-_.~".contains(c) => enc.push(c),
-            '’' => enc.push('\''),
-            c => {
-                let mut b = [0u8; 4];
-                for byte in c.encode_utf8(&mut b).bytes() {
-                    enc.push_str(&format!("%{byte:02X}"));
-                }
-            }
-        }
-    }
-    format!("https://www.playphrase.me/#/search?q={enc}&language=en")
-}
-
 impl App {
-    /// 🎬 Today's 문장 읽기 sentences: pick one and playphrase.me shows the film and TV
-    /// clips where people say it, inside the window; then say it yourself.
-    fn playphrase_ui(&mut self, ui: &mut Ui) {
+    /// 🎬 Today's 문장 읽기 sentences: pick one and YouGlish shows YouTube videos where people
+    /// say it, inside the window; then say it yourself.
+    fn sentence_clips_ui(&mut self, ui: &mut Ui) {
         // Today's longer sentences come with the lesson.
         self.ensure_lesson();
         let lesson = self.lesson.clone().filter(|l| l.date == Some(today())).unwrap_or_default();
@@ -82,7 +62,7 @@ impl App {
         }
         let i = self.listening.phrase_idx.min(sentences.len() - 1);
         let (en, ko) = sentences[i].clone();
-        let url = playphrase_url(&en);
+        let url = youglish_url(&en);
         let mut pick: Option<usize> = None;
         // The sentence, its controls and the mic.
         card(ui, |ui| {
@@ -118,14 +98,10 @@ impl App {
             });
         });
         ui.add_space(6.0);
-        // The clips as wide as the page, then the mic.
-        let video_w = ui.available_width().max(320.0);
-        // playphrase draws its player about 250 px high whatever the width (wider only crops
-        // it), so the page is zoomed to fill the width: laid out ~600 px wide, then scaled.
-        let zoom = (video_w / 600.0).clamp(1.0, 2.2);
-        self.web_frame(ui, &url, video_w, 251.0 * zoom, zoom, "playphrase.me");
+        // The video as wide as the page, then the mic.
+        self.youglish_frame(ui, &url);
         ui.add_space(6.0);
-        self.say_after_ui(ui, &en, "playphrase", "🎤 영상 속 원어민처럼 따라 말해 보세요");
+        self.say_after_ui(ui, &en, "youglish_sentence", "🎤 영상 속 원어민처럼 따라 말해 보세요");
         if let Some(k) = pick {
             self.listening.phrase_idx = k;
             self.listening.cap = Capture::default();
@@ -183,11 +159,7 @@ impl App {
             });
         });
         ui.add_space(6.0);
-        // YouGlish shows only the video (16:9, as wide as the page), its control bar and the
-        // caption box under it.
-        let video_w = ui.available_width().max(320.0);
-        let h = video_w * 9.0 / 16.0 + 190.0;
-        self.web_frame(ui, &url, video_w, h, 1.0, "YouGlish");
+        self.youglish_frame(ui, &url);
         ui.add_space(6.0);
         self.say_after_ui(ui, &w.word, "youglish", "🎤 영상 속 원어민 발음처럼 따라 말해 보세요");
         if let Some(k) = pick {
@@ -195,6 +167,13 @@ impl App {
             self.listening.cap = Capture::default();
             self.listening.result = None;
         }
+    }
+
+    /// YouGlish, showing only the video (16:9, as wide as the page), its control bar and the
+    /// caption box under it.
+    fn youglish_frame(&mut self, ui: &mut Ui, url: &str) {
+        let video_w = ui.available_width().max(320.0);
+        self.web_frame(ui, url, video_w, video_w * 9.0 / 16.0 + 190.0, 1.0, "YouGlish");
     }
 
     /// The native web view laid over a `w`×`h` box (only the part on screen).
@@ -243,8 +222,8 @@ impl App {
         page_title(ui, "🎧 리스닝 랩", "오늘 배운 문장과 단어를 실제 원어민이 말하는 영상으로 보고 듣고, 따라 말하세요.");
         ui.horizontal(|ui| {
             let before = self.listening.tab;
-            ui.selectable_value(&mut self.listening.tab, 0, "🎬 오늘 문장 영상 (playphrase)");
-            ui.selectable_value(&mut self.listening.tab, 2, "🔤 오늘 단어 발음 (YouGlish)");
+            ui.selectable_value(&mut self.listening.tab, 0, "🎬 오늘 문장 영상");
+            ui.selectable_value(&mut self.listening.tab, 2, "🔤 오늘 단어 발음");
             ui.selectable_value(&mut self.listening.tab, 1, "👂 듣고 대답하기");
             if self.listening.tab != before {
                 self.listening.cap = Capture::default();
@@ -255,7 +234,7 @@ impl App {
         match self.listening.tab {
             1 => self.listen_respond_ui(ui),
             2 => self.youglish_ui(ui),
-            _ => self.playphrase_ui(ui),
+            _ => self.sentence_clips_ui(ui),
         }
     }
 }
@@ -263,16 +242,11 @@ impl App {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn playphrase_search_urls() {
-        assert_eq!(super::playphrase_url("I'm a little peckish."), "https://www.playphrase.me/#/search?q=I'm+a+little+peckish&language=en");
-        assert_eq!(super::playphrase_url(" What's up? "), "https://www.playphrase.me/#/search?q=What's+up&language=en");
-        assert_eq!(super::playphrase_url("Rock & roll, baby!"), "https://www.playphrase.me/#/search?q=Rock+%26+roll%2C+baby&language=en");
-        assert_eq!(super::playphrase_url("I’m in"), "https://www.playphrase.me/#/search?q=I'm+in&language=en");
-    }
-
-    #[test]
     fn youglish_search_urls() {
         assert_eq!(super::youglish_url("peckish"), "https://youglish.com/pronounce/peckish/english");
         assert_eq!(super::youglish_url(" café "), "https://youglish.com/pronounce/caf%C3%A9/english");
+        assert_eq!(super::youglish_url("I'm a little peckish."), "https://youglish.com/pronounce/I'm%20a%20little%20peckish/english");
+        assert_eq!(super::youglish_url("Rock & roll, baby!"), "https://youglish.com/pronounce/Rock%20%26%20roll%2C%20baby/english");
+        assert_eq!(super::youglish_url("I’m in"), "https://youglish.com/pronounce/I'm%20in/english");
     }
 }

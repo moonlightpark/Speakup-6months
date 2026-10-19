@@ -2033,24 +2033,24 @@ fn ft59_notifications_at_the_top_right_take_turns() {
 }
 
 #[test]
-fn ft60_listening_lab_shows_todays_sentences_on_playphrase() {
-    let mut t = launch("playphrase");
+fn ft60_listening_lab_shows_todays_sentences_on_youglish() {
+    let mut t = launch("ygsentences");
     t.nav("🎧  리스닝 랩");
     t.wait("lesson", |a| a.lesson.is_some());
-    assert!(t.has("🎬 오늘 문장 영상 (playphrase)") && t.has("🌐 브라우저로 열기"));
+    assert!(t.has("🎬 오늘 문장 영상") && t.has("🌐 브라우저로 열기"));
     // Today's 문장 읽기 sentences (here the lesson's): the web view is asked for the first.
     let url = |t: &T| t.app().web_req.as_ref().map(|r| r.url.clone()).unwrap_or_default();
-    assert_eq!(url(&t), "https://www.playphrase.me/#/search?q=I+am+a+boy&language=en");
+    assert_eq!(url(&t), "https://youglish.com/pronounce/I%20am%20a%20boy/english");
     t.click("다음 문장 ▶");
     t.steps(1);
-    assert_eq!(url(&t), "https://www.playphrase.me/#/search?q=I+wake+up+early&language=en");
+    assert_eq!(url(&t), "https://youglish.com/pronounce/I%20wake%20up%20early/english");
     // Saying it after the clips is scored.
     t.say("I wake up early.", 1.0);
     assert!(t.app().listening.result.as_ref().is_some_and(|(_, r)| r.score > 90.0));
     // A sentence picked from the list.
     t.click("I am a boy.");
     t.steps(1);
-    assert!(url(&t).contains("I+am+a+boy"));
+    assert!(url(&t).contains("I%20am%20a%20boy"));
     // Other tabs: no web view.
     t.click("👂 듣고 대답하기");
     t.steps(1);
@@ -2127,7 +2127,7 @@ fn ft63_listening_lab_shows_todays_words_on_youglish() {
     });
     t.nav("🎧  리스닝 랩");
     assert!(!t.has("유튜브 구간반복"));
-    t.click("🔤 오늘 단어 발음 (YouGlish)");
+    t.click("🔤 오늘 단어 발음");
     let words: Vec<String> = t.app_mut().word_set().words.iter().map(|w| w.word.clone()).collect();
     assert_eq!(words, vec!["peckish", "company", "health"]);
     let url = |t: &T| t.app().web_req.as_ref().map(|r| r.url.clone()).unwrap_or_default();
