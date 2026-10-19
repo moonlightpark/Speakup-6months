@@ -1,7 +1,8 @@
-//! 🔠 낱말 맞추기 (복습 menu): guess a word already learned in six tries, Wordle style —
-//! green = right letter in the right place, yellow = in the word elsewhere, grey = not in it.
-//! Typed on the keyboard or with the on-screen keys; afterwards the word, its meaning and
-//! example are shown and read aloud.
+//! 🔠 낱말 맞추기 (복습 menu): a round of several words already learned, each guessed in six
+//! tries, Wordle style — green = right letter in the right place, yellow = in the word
+//! elsewhere, grey = not in it. The Korean meanings are listed on the left (pick one to solve);
+//! typed on the keyboard or with the on-screen keys; a finished word is read aloud with its
+//! meaning and example.
 
 use crate::app::App;
 use crate::widgets::*;
@@ -12,7 +13,9 @@ use std::time::{Duration, Instant};
 
 pub const TRIES: usize = 6;
 const MIN_LEN: usize = 4;
-const MAX_LEN: usize = 7;
+const MAX_LEN: usize = 12;
+/// Words in a round.
+pub const ROUND_WORDS: usize = 5;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mark {
@@ -28,14 +31,31 @@ pub struct Answer {
     pub example: String,
 }
 
+/// One word of a round and the guesses made at it.
+#[derive(Clone)]
+pub struct Puzzle {
+    pub answer: Answer,
+    pub guesses: Vec<String>,
+}
+
+impl Puzzle {
+    pub fn solved(&self) -> bool {
+        self.guesses.last().is_some_and(|g| g == &self.answer.word)
+    }
+    pub fn over(&self) -> bool {
+        self.solved() || self.guesses.len() >= TRIES
+    }
+}
+
 #[derive(Default)]
 pub struct WordleState {
     /// 복습 menu tab: 0 = review cards, 1 = this game.
     pub tab: usize,
-    pub answer: Option<Answer>,
-    pub guesses: Vec<String>,
+    /// This round's words (meanings listed on the left).
+    pub round: Vec<Puzzle>,
+    /// The word being solved.
+    pub sel: usize,
     pub current: String,
-    pub hint: bool,
     /// A short popup over the board ("단어 목록에 없어요", the answer after six misses).
     pub popup: Option<(String, Instant)>,
     pub played: u32,
@@ -46,11 +66,13 @@ pub struct WordleState {
 }
 
 impl WordleState {
-    pub fn solved(&self) -> bool {
-        self.answer.as_ref().is_some_and(|a| self.guesses.last().is_some_and(|g| g == &a.word))
+    pub fn puzzle(&self) -> Option<&Puzzle> {
+        self.round.get(self.sel)
     }
-    pub fn over(&self) -> bool {
-        self.solved() || self.guesses.len() >= TRIES
+    /// The next unfinished word after the selected one.
+    fn next_open(&self) -> Option<usize> {
+        let n = self.round.len();
+        (1..=n).map(|k| (self.sel + k) % n).find(|&i| !self.round[i].over())
     }
 }
 
@@ -79,7 +101,7 @@ pub fn score(guess: &str, answer: &str) -> Vec<Mark> {
     marks
 }
 
-/// A word that can be an answer: plain letters, 4–7 long.
+/// A word that can be an answer: plain letters, 4–12 long.
 fn playable(w: &str) -> bool {
     (MIN_LEN..=MAX_LEN).contains(&w.len()) && w.chars().all(|c| c.is_ascii_alphabetic())
 }
@@ -108,7 +130,7 @@ impl App {
         self.store
             .items
             .iter()
-            .filter(|i| i.is_vocab_word())
+            .filter(|i| i.is_vocab_word() && !i.meaning_ko.trim().is_empty())
             .filter_map(|i| {
                 let w = i.text.trim().to_lowercase();
                 (playable(&w) && seen.insert(w.clone())).then(|| Answer { word: w, ko: i.meaning_ko.clone(), example: i.example.clone() })
@@ -116,20 +138,20 @@ impl App {
             .collect()
     }
 
-    fn wordle_new_game(&mut self) {
+    /// A new round of up to `ROUND_WORDS` learned words.
+    fn wordle_new_round(&mut self) {
         let pool = self.wordle_pool();
         let st = &mut self.wordle;
-        if pool.iter().all(|a| st.used.contains(&a.word)) {
+        if pool.iter().filter(|a| !st.used.contains(&a.word)).count() < ROUND_WORDS.min(pool.len()) {
             st.used.clear();
         }
         let fresh: Vec<&Answer> = pool.iter().filter(|a| !st.used.contains(&a.word)).collect();
-        st.answer = fresh.choose(&mut rand::rng()).map(|a| (*a).clone());
-        if let Some(a) = &st.answer {
-            st.used.insert(a.word.clone());
+        st.round = fresh.choose_multiple(&mut rand::rng(), ROUND_WORDS).map(|a| Puzzle { answer: (*a).clone(), guesses: Vec::new() }).collect();
+        for p in &st.round {
+            st.used.insert(p.answer.word.clone());
         }
-        st.guesses.clear();
+        st.sel = 0;
         st.current.clear();
-        st.hint = false;
         st.popup = None;
     }
 
@@ -144,23 +166,24 @@ impl App {
     }
 
     fn wordle_type(&mut self, c: char) {
-        let Some(len) = self.wordle.answer.as_ref().map(|a| a.word.len()) else { return };
-        if !self.wordle.over() && self.wordle.current.len() < len && c.is_ascii_alphabetic() {
+        let Some(p) = self.wordle.puzzle() else { return };
+        if !p.over() && self.wordle.current.len() < p.answer.word.len() && c.is_ascii_alphabetic() {
             self.wordle.current.push(c.to_ascii_lowercase());
         }
     }
 
     fn wordle_back(&mut self) {
-        if !self.wordle.over() {
+        if self.wordle.puzzle().is_some_and(|p| !p.over()) {
             self.wordle.current.pop();
         }
     }
 
     fn wordle_enter(&mut self) {
-        let Some(a) = self.wordle.answer.clone() else { return };
-        if self.wordle.over() {
+        let Some(p) = self.wordle.puzzle().cloned() else { return };
+        if p.over() {
             return;
         }
+        let a = p.answer;
         let g = self.wordle.current.clone();
         if g.len() < a.word.len() {
             self.wordle.popup = Some((format!("{}글자를 모두 채워 주세요", a.word.len()), Instant::now()));
@@ -170,31 +193,41 @@ impl App {
             self.wordle.popup = Some(("단어 목록에 없는 단어예요".into(), Instant::now()));
             return;
         }
-        self.wordle.guesses.push(g);
-        self.wordle.current.clear();
-        if self.wordle.over() {
-            let st = &mut self.wordle;
+        let st = &mut self.wordle;
+        let sel = st.sel;
+        st.round[sel].guesses.push(g);
+        st.current.clear();
+        let p = &st.round[sel];
+        if p.over() {
             st.played += 1;
-            if st.solved() {
+            if p.solved() {
                 st.won += 1;
                 st.streak += 1;
                 let praise = ["천재예요!", "대단해요!", "훌륭해요!", "잘했어요!", "좋아요!", "휴, 맞혔어요!"];
-                st.popup = Some((praise[(st.guesses.len() - 1).min(5)].into(), Instant::now()));
+                st.popup = Some((praise[(p.guesses.len() - 1).min(5)].into(), Instant::now()));
             } else {
                 st.streak = 0;
                 st.popup = Some((a.word.to_uppercase(), Instant::now()));
             }
-            crate::applog!("wordle: {} · {}", a.word, if self.wordle.solved() { "맞힘" } else { "못 맞힘" });
+            crate::applog!("wordle: {} · {}", a.word, if p.solved() { "맞힘" } else { "못 맞힘" });
             self.voice.say(&a.word);
         }
     }
 
-    /// Best mark seen for each letter (for the on-screen keyboard).
+    fn wordle_select(&mut self, i: usize) {
+        if i != self.wordle.sel {
+            self.wordle.sel = i;
+            self.wordle.current.clear();
+            self.wordle.popup = None;
+        }
+    }
+
+    /// Best mark seen for each letter of the selected word (for the on-screen keyboard).
     fn wordle_key_marks(&self) -> std::collections::HashMap<char, Mark> {
         let mut m = std::collections::HashMap::new();
-        let Some(a) = &self.wordle.answer else { return m };
-        for g in &self.wordle.guesses {
-            for (c, mk) in g.chars().zip(score(g, &a.word)) {
+        let Some(p) = self.wordle.puzzle() else { return m };
+        for g in &p.guesses {
+            for (c, mk) in g.chars().zip(score(g, &p.answer.word)) {
                 let e = m.entry(c).or_insert(mk);
                 if mk == Mark::Hit || (mk == Mark::Near && *e == Mark::Miss) {
                     *e = mk;
@@ -205,67 +238,100 @@ impl App {
     }
 
     pub fn wordle_ui(&mut self, ui: &mut Ui) {
-        if self.wordle.answer.is_none() {
-            self.wordle_new_game();
+        if self.wordle.round.is_empty() {
+            self.wordle_new_round();
         }
-        let Some(a) = self.wordle.answer.clone() else {
+        if self.wordle.round.is_empty() {
             card(ui, |ui| {
                 ui.label(RichText::new("🔠 낱말 맞추기").size(18.0).strong());
-                ui.label(RichText::new(format!("새 단어에서 {MIN_LEN}~{MAX_LEN}글자 단어를 배우면 여기서 맞추기 게임을 할 수 있어요.")).color(muted()));
+                ui.label(RichText::new(format!("새 단어에서 {MIN_LEN}글자 이상 단어를 배우면 여기서 맞추기 게임을 할 수 있어요.")).color(muted()));
             });
             return;
-        };
-        let len = a.word.len();
+        }
 
         // Typing on the keyboard (nothing else takes keys on this tab).
-        if !self.wordle.over() {
-            let (typed, back, enter) = ui.input(|i| {
-                let typed: String = i.events.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.clone()) } else { None }).collect();
-                (typed, i.key_pressed(egui::Key::Backspace), i.key_pressed(egui::Key::Enter))
-            });
-            for c in typed.chars() {
-                self.wordle_type(c);
-            }
-            if back {
-                self.wordle_back();
-            }
-            if enter {
-                self.wordle_enter();
-            }
+        let (typed, back, enter) = ui.input(|i| {
+            let typed: String = i.events.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.clone()) } else { None }).collect();
+            (typed, i.key_pressed(egui::Key::Backspace), i.key_pressed(egui::Key::Enter))
+        });
+        for c in typed.chars() {
+            self.wordle_type(c);
+        }
+        if back {
+            self.wordle_back();
+        }
+        if enter {
+            self.wordle_enter();
         }
 
         card(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(format!("🔠 이미 배운 {len}글자 단어를 {TRIES}번 안에 맞혀 보세요")).size(17.0).strong().color(text_strong()));
-            });
+            let n = self.wordle.round.len();
+            let solved = self.wordle.round.iter().filter(|p| p.solved()).count();
+            ui.label(RichText::new(format!("🔠 이미 배운 단어 {n}개를 맞혀 보세요 — 왼쪽 뜻을 골라 단어마다 {TRIES}번 기회")).size(17.0).strong().color(text_strong()));
             ui.label(RichText::new("초록 = 자리까지 맞음 · 노랑 = 단어에 있지만 다른 자리 · 회색 = 없는 글자. 키보드로 입력하고 Enter.").size(13.5).color(muted()));
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                let win = if self.wordle.played > 0 { self.wordle.won * 100 / self.wordle.played } else { 0 };
-                ui.label(RichText::new(format!("게임 {} · 맞힘 {win}% · 연속 {}", self.wordle.played, self.wordle.streak)).size(13.5).color(muted()));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.wordle.hint || self.wordle.over() {
-                        ui.label(RichText::new(format!("💡 {}", a.ko)).size(15.0).color(text_strong()));
-                    } else if ui.button("💡 뜻 힌트").on_hover_text("한국어 뜻을 보여 줘요").clicked() {
-                        self.wordle.hint = true;
-                    }
-                });
-            });
+            let win = if self.wordle.played > 0 { self.wordle.won * 100 / self.wordle.played } else { 0 };
+            ui.label(RichText::new(format!("이번 라운드 {solved}/{n} 맞힘 · 전체 {}단어 · 맞힘 {win}% · 연속 {}", self.wordle.played, self.wordle.streak)).size(13.5).color(muted()));
         });
         ui.add_space(10.0);
 
-        // The board.
-        let tile = 58.0;
+        ui.horizontal_top(|ui| {
+            // Left: the meanings (pick the word to solve).
+            ui.allocate_ui_with_layout(Vec2::new(250.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_width(250.0);
+                card(ui, |ui| {
+                    ui.label(RichText::new("📖 한글 뜻").size(15.0).strong().color(text_strong()));
+                    ui.add_space(4.0);
+                    let mut pick = None;
+                    for (i, p) in self.wordle.round.iter().enumerate() {
+                        let (icon, col) = if p.solved() {
+                            ("✓", GOOD)
+                        } else if p.over() {
+                            ("✖", BAD)
+                        } else if i == self.wordle.sel {
+                            ("▶", ACCENT)
+                        } else {
+                            ("·", muted())
+                        };
+                        let status = if p.over() { p.answer.word.clone() } else { format!("{}글자 · {}/{TRIES}", p.answer.word.len(), p.guesses.len()) };
+                        let text = format!("{icon} {}. {}\n     {status}", i + 1, p.answer.ko);
+                        let selected = i == self.wordle.sel;
+                        let resp = ui.add(
+                            egui::Button::new(RichText::new(text).size(15.0).color(if selected { Color32::WHITE } else { col }))
+                                .fill(if selected { ACCENT } else { subtle_fill() })
+                                .wrap()
+                                .min_size(Vec2::new(ui.available_width(), 44.0)),
+                        );
+                        if resp.clicked() {
+                            pick = Some(i);
+                        }
+                        ui.add_space(2.0);
+                    }
+                    if let Some(i) = pick {
+                        self.wordle_select(i);
+                    }
+                });
+            });
+            ui.add_space(14.0);
+            ui.vertical(|ui| self.wordle_board_ui(ui));
+        });
+    }
+
+    /// The selected word's board, then its result or the on-screen keyboard.
+    fn wordle_board_ui(&mut self, ui: &mut Ui) {
+        let Some(p) = self.wordle.puzzle().cloned() else { return };
+        let a = &p.answer;
+        let len = a.word.len();
         let gap = 6.0;
+        let tile = ((ui.available_width() - (len - 1) as f32 * gap) / len as f32).clamp(30.0, 58.0);
         let board_w = len as f32 * tile + (len - 1) as f32 * gap;
         let board_h = TRIES as f32 * tile + (TRIES - 1) as f32 * gap;
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), board_h), egui::Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width().max(board_w), board_h), egui::Sense::hover());
         let origin = egui::pos2(rect.center().x - board_w / 2.0, rect.top());
         let painter = ui.painter_at(rect.expand(4.0));
         for row in 0..TRIES {
-            let (text, marks): (String, Option<Vec<Mark>>) = match self.wordle.guesses.get(row) {
+            let (text, marks): (String, Option<Vec<Mark>>) = match p.guesses.get(row) {
                 Some(g) => (g.clone(), Some(score(g, &a.word))),
-                None if row == self.wordle.guesses.len() => (self.wordle.current.clone(), None),
+                None if row == p.guesses.len() => (self.wordle.current.clone(), None),
                 None => (String::new(), None),
             };
             let chars: Vec<char> = text.chars().collect();
@@ -284,13 +350,13 @@ impl App {
                 }
                 if let Some(c) = ch {
                     let col = if marks.is_some() { Color32::WHITE } else { text_strong() };
-                    painter.text(r.center(), egui::Align2::CENTER_CENTER, c.to_ascii_uppercase(), egui::FontId::proportional(30.0), col);
+                    painter.text(r.center(), egui::Align2::CENTER_CENTER, c.to_ascii_uppercase(), egui::FontId::proportional(tile * 0.52), col);
                 }
             }
         }
         // Popup over the top of the board.
         if let Some((msg, at)) = &self.wordle.popup {
-            let stays = self.wordle.over() && !self.wordle.solved();
+            let stays = p.over() && !p.solved();
             if stays || at.elapsed() < Duration::from_millis(1600) {
                 let galley = ui.painter().layout_no_wrap(msg.clone(), egui::FontId::proportional(18.0), Color32::WHITE);
                 let pr = egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 2.0), galley.size() + Vec2::new(28.0, 18.0));
@@ -304,11 +370,11 @@ impl App {
         }
         ui.add_space(14.0);
 
-        if self.wordle.over() {
+        if p.over() {
             card(ui, |ui| {
-                let solved = self.wordle.solved();
-                ui.label(RichText::new(if solved { format!("🎉 {}번 만에 맞혔어요!", self.wordle.guesses.len()) } else { "😅 아쉬워요. 정답은:".to_string() }).size(16.0).color(if solved { GOOD } else { warn() }));
-                ui.horizontal(|ui| {
+                let solved = p.solved();
+                ui.label(RichText::new(if solved { format!("🎉 {}번 만에 맞혔어요!", p.guesses.len()) } else { "😅 아쉬워요. 정답은:".to_string() }).size(16.0).color(if solved { GOOD } else { warn() }));
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(&a.word).size(28.0).strong().color(text_strong()));
                     ui.label(RichText::new(&a.ko).size(17.0).color(muted()));
                     if ui.button("🔊 듣기").clicked() {
@@ -324,8 +390,20 @@ impl App {
                     });
                 }
                 ui.add_space(6.0);
-                if ui.add(egui::Button::new(RichText::new("다음 단어 ▶").size(17.0).color(Color32::WHITE)).fill(ACCENT).min_size(BIG_BUTTON)).clicked() {
-                    self.wordle_new_game();
+                match self.wordle.next_open() {
+                    Some(i) => {
+                        if ui.add(egui::Button::new(RichText::new("다음 단어 ▶").size(17.0).color(Color32::WHITE)).fill(ACCENT).min_size(BIG_BUTTON)).clicked() {
+                            self.wordle_select(i);
+                        }
+                    }
+                    None => {
+                        let n = self.wordle.round.len();
+                        let solved = self.wordle.round.iter().filter(|p| p.solved()).count();
+                        ui.label(RichText::new(format!("🏁 라운드 끝 — {n}개 중 {solved}개 맞혔어요")).size(16.0).strong().color(text_strong()));
+                        if ui.add(egui::Button::new(RichText::new("새 라운드 ▶").size(17.0).color(Color32::WHITE)).fill(ACCENT).min_size(BIG_BUTTON)).clicked() {
+                            self.wordle_new_round();
+                        }
+                    }
                 }
             });
             return;
@@ -372,8 +450,8 @@ impl App {
             self.wordle_enter();
         }
         ui.add_space(6.0);
-        if ui.small_button("🔄 다른 단어로").on_hover_text("이 단어는 건너뛰어요 (기록에 남지 않아요)").clicked() {
-            self.wordle_new_game();
+        if ui.small_button("🔄 새 라운드").on_hover_text("다른 단어들로 새로 시작해요").clicked() {
+            self.wordle_new_round();
         }
     }
 }

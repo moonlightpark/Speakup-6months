@@ -2125,33 +2125,39 @@ fn ft62_wordle_with_learned_words() {
         s.profile.placement_done = true;
         s.profile.start_date = today();
         s.items.push(StudyItem { id: "w:amber".into(), kind: ItemKind::Word, text: "amber".into(), meaning_ko: "호박색".into(), example: "The sky turned amber.".into(), ..Default::default() });
-        // Too short / two words: never an answer.
+        s.items.push(StudyItem { id: "w:umbrella".into(), kind: ItemKind::Word, text: "umbrella".into(), meaning_ko: "우산".into(), ..Default::default() });
+        // Too short: never an answer.
         s.items.push(StudyItem { id: "w:go".into(), kind: ItemKind::Word, text: "go".into(), meaning_ko: "가다".into(), ..Default::default() });
     });
     t.nav("🔁  복습");
     t.click("🔠 낱말 맞추기");
-    assert_eq!(t.app().wordle.answer.as_ref().unwrap().word, "amber");
-    assert!(t.has("이미 배운 5글자 단어"));
+    // Both words in one round, their meanings listed on the left.
+    let mut words: Vec<String> = t.app().wordle.round.iter().map(|p| p.answer.word.clone()).collect();
+    words.sort();
+    assert_eq!(words, vec!["amber", "umbrella"]);
+    assert!(t.has("호박색") && t.has("우산") && !t.has("가다"));
     let type_word = |t: &mut T, w: &str| {
         for c in w.chars() {
             t.click(&c.to_ascii_uppercase().to_string());
         }
         t.click("입력");
     };
+    t.click_contains("우산");
+    assert_eq!(t.app().wordle.puzzle().unwrap().answer.word, "umbrella");
     // Not a word: refused, not counted.
-    type_word(&mut t, "zzqxz");
-    assert!(t.app().wordle.guesses.is_empty());
-    assert!(t.has("단어 목록에 없는 단어예요") || t.app().wordle.popup.is_some());
-    for _ in 0..5 {
+    type_word(&mut t, "zzqxzzqx");
+    assert!(t.app().wordle.puzzle().unwrap().guesses.is_empty());
+    for _ in 0..8 {
         t.click("지우기");
     }
-    type_word(&mut t, "agent");
-    assert_eq!(t.app().wordle.guesses, vec!["agent".to_string()]);
-    t.click("💡 뜻 힌트");
-    assert!(t.has("💡 호박색"));
-    type_word(&mut t, "amber");
-    assert!(t.has("2번 만에 맞혔어요"));
-    assert_eq!((t.app().wordle.played, t.app().wordle.won), (1, 1));
+    type_word(&mut t, "umbrella");
+    assert!(t.has("1번 만에 맞혔어요"));
     t.click("다음 단어 ▶");
-    assert!(t.app().wordle.guesses.is_empty() && t.app().wordle.answer.is_some());
+    assert_eq!(t.app().wordle.puzzle().unwrap().answer.word, "amber");
+    type_word(&mut t, "agent");
+    type_word(&mut t, "amber");
+    assert!(t.has("2번 만에 맞혔어요") && t.has("라운드 끝"));
+    assert_eq!((t.app().wordle.played, t.app().wordle.won), (2, 2));
+    t.click("새 라운드 ▶");
+    assert!(t.app().wordle.round.iter().all(|p| p.guesses.is_empty()));
 }
