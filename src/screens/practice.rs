@@ -1123,7 +1123,16 @@ impl App {
             return;
         }
         page_title(ui, "🔁 복습", "한국어 뜻을 보고 영어로 먼저 말해 본 뒤(기억해 내기), 정답을 여러 번 소리 내어 따라 합니다. 첫 시도 점수로 다음 복습일이 정해져요.");
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.wordle.tab, 0, RichText::new("🔁 복습 카드").size(16.0));
+            ui.selectable_value(&mut self.wordle.tab, 1, RichText::new("🔠 낱말 맞추기").size(16.0));
+        });
         ui.add_space(8.0);
+        if self.wordle.tab == 1 {
+            self.wordle_ui(ui);
+            return;
+        }
         let ids = srs::review_queue(&self.store.items, 40);
         let due = srs::due_count(&self.store.items);
         let weak = self.store.items.iter().filter(|i| i.weak).count();

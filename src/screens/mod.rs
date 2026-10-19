@@ -15,3 +15,4 @@ pub mod history;
 pub mod library;
 pub mod writing;
 pub mod translator;
+pub mod wordle;

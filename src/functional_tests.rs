@@ -2118,3 +2118,40 @@ fn ft61_dictation_speed_setting() {
     t.nav("✏  쓰기");
     assert!(t.has("읽기 속도: 느리게"));
 }
+
+#[test]
+fn ft62_wordle_with_learned_words() {
+    let mut t = launch_at(temp_dir("wordle"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.items.push(StudyItem { id: "w:amber".into(), kind: ItemKind::Word, text: "amber".into(), meaning_ko: "호박색".into(), example: "The sky turned amber.".into(), ..Default::default() });
+        // Too short / two words: never an answer.
+        s.items.push(StudyItem { id: "w:go".into(), kind: ItemKind::Word, text: "go".into(), meaning_ko: "가다".into(), ..Default::default() });
+    });
+    t.nav("🔁  복습");
+    t.click("🔠 낱말 맞추기");
+    assert_eq!(t.app().wordle.answer.as_ref().unwrap().word, "amber");
+    assert!(t.has("이미 배운 5글자 단어"));
+    let type_word = |t: &mut T, w: &str| {
+        for c in w.chars() {
+            t.click(&c.to_ascii_uppercase().to_string());
+        }
+        t.click("입력");
+    };
+    // Not a word: refused, not counted.
+    type_word(&mut t, "zzqxz");
+    assert!(t.app().wordle.guesses.is_empty());
+    assert!(t.has("단어 목록에 없는 단어예요") || t.app().wordle.popup.is_some());
+    for _ in 0..5 {
+        t.click("지우기");
+    }
+    type_word(&mut t, "agent");
+    assert_eq!(t.app().wordle.guesses, vec!["agent".to_string()]);
+    t.click("💡 뜻 힌트");
+    assert!(t.has("💡 호박색"));
+    type_word(&mut t, "amber");
+    assert!(t.has("2번 만에 맞혔어요"));
+    assert_eq!((t.app().wordle.played, t.app().wordle.won), (1, 1));
+    t.click("다음 단어 ▶");
+    assert!(t.app().wordle.guesses.is_empty() && t.app().wordle.answer.is_some());
+}
