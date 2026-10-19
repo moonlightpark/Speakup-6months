@@ -408,11 +408,12 @@ impl Claude {
         })))}));
         let list: String = words.iter().map(|(w, ko)| format!("- {w} ({ko})\n")).collect();
         let user = format!(
-            "Tense frames: for each English word below write three short, natural spoken sentences that use the word, all with the same idea, \
+            "Tense frames: for each English word or phrase below write three short, natural spoken sentences that use it, all with the same idea, \
              for a learner at level {level:.1}/10 (CEFR {cefr}), 5-10 words each:\n\
              present = \"I'm thinking of …ing …\" (Korean: ~할까 생각 중이에요), past = \"I was thinking of …ing …\" (Korean: ~할까 생각했어요), \
-             future = \"I'll think about …ing …\" (Korean: ~할까 생각할 거예요). The word itself must appear in each sentence (any form). \
-             *_ko: natural Korean translations ending with those Korean frames.\n\nWords:\n{list}",
+             future = \"I'll think about …ing …\" (Korean: ~할까 생각할 거예요). The word or phrase itself must appear in each sentence (any form; a phrase that is a question or a frame can be quoted or embedded, \
+             e.g. \"I'm thinking of asking, 'Do you mind if I sit here?'\"). word: exactly as given. \
+             *_ko: natural Korean translations ending with those Korean frames.\n\nWords and phrases:\n{list}",
             cefr = cefr_of(level)
         );
         #[derive(Deserialize)]

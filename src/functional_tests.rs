@@ -1147,14 +1147,15 @@ fn ft27_chunks_first_high_frequency_words_and_one_expression_a_day() {
     assert_eq!(ws.expressions.len(), 1);
     assert_eq!(ws.words[0].word, crate::wordbank::pick(t.app().store.profile.level, 1, |_| false)[0].word);
     assert!(t.has(&format!("🔗 {}", chunks[0].0)));
-    // The chunk is drilled first, then its example, then the next chunk.
+    // The chunk is drilled first, then said in three tenses (like words), then the next chunk.
     t.nav("▶ 시작하기");
     for _ in 0..3 {
         t.say(chunks[0].0, 1.0);
     }
     t.click("다음 ▶");
-    t.say(chunks[0].2, 1.5);
-    t.click("다음 ▶");
+    assert!(t.has("🕐 현재"), "chunks get the tense trio too");
+    assert!(t.app().queue.as_ref().unwrap().drill.target.contains(chunks[0].0));
+    t.say_tense_trio();
     assert!(t.has(chunks[1].0));
     let item = t.app().store.items.iter().find(|i| i.text == chunks[0].0).cloned().expect("chunk saved for review");
     assert!(item.is_chunk() && !item.is_vocab_word() && item.kind == ItemKind::Sentence);

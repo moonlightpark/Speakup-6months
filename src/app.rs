@@ -472,7 +472,7 @@ impl App {
         }
         let Some(c) = self.claude() else { return };
         let ws = self.word_set();
-        let missing: Vec<(String, String)> = ws.words.iter().filter(|w| !self.store.tenses.contains_key(&w.word.to_lowercase())).map(|w| (w.word.clone(), w.meaning_ko.clone())).take(40).collect();
+        let missing: Vec<(String, String)> = ws.phrases.iter().chain(&ws.words).chain(&ws.expressions).filter(|w| !self.store.tenses.contains_key(&w.word.to_lowercase())).map(|w| (w.word.clone(), w.meaning_ko.clone())).take(50).collect();
         self.tense_tried = Some(today());
         if missing.is_empty() {
             return;
@@ -481,12 +481,13 @@ impl App {
         self.tense_job.spawn(move || c.tense_sentences(&missing, level));
     }
 
-    /// A word's 시제 3문장: Claude's, else a frame for its part of speech.
+    /// An entry's 시제 3문장: Claude's, else a frame for its part of speech.
     pub fn tense_for(&self, w: &LessonWord) -> crate::tenses::TenseSet {
         if let Some(t) = self.store.tenses.get(&w.word.to_lowercase()) {
             return t.clone();
         }
-        let pos = crate::dictionary::lookup(&w.word).map(|(b, _)| b.pos_ko.clone()).unwrap_or_default();
+        // Chunks and expressions ("It depends on") have no part of speech: the quoted frame.
+        let pos = if w.word.contains(' ') { String::new() } else { crate::dictionary::lookup(&w.word).map(|(b, _)| b.pos_ko.clone()).unwrap_or_default() };
         crate::tenses::template(&w.word, &pos, &w.meaning_ko)
     }
 
