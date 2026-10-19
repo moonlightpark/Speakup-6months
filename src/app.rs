@@ -51,7 +51,7 @@ pub const STEPS: &[(&str, &str, Screen)] = &[
     ("words", "📚 새 단어", Screen::Words),
     ("reading", "📖 문장 소리내어 읽기", Screen::Reading),
     ("speed", "⚡ 스피드 리딩·말하기", Screen::Speed),
-    ("listening", "🎧 리스닝 · 구간반복", Screen::Listening),
+    ("listening", "🎧 리스닝 랩 · 듣고 따라 말하기", Screen::Listening),
     ("speaking", "💬 자기 표현 말하기", Screen::SelfExpression),
     ("business", "💼 비즈니스 회화", Screen::Business),
     ("library", "📘 리딩 (동화·소설)", Screen::Library),
@@ -1143,7 +1143,7 @@ impl App {
                 let is_done = self.step_done(key);
                 let extra = match *key {
                     "review" => format!("{}개", srs::due_count(&self.store.items)),
-                    "listening" => format!("쉐도잉 {}/5", self.store.profile.today.listening_passes.min(5)),
+                    "listening" => format!("따라 말하기 {}/5", self.store.profile.today.listening_passes.min(5)),
                     "speed" => format!("{}/3 라운드", self.store.profile.today.speed_rounds.min(3)),
                     "library" => format!("{}/{} 문단", self.store.profile.today.paragraphs_read.min(crate::screens::library::READ_GOAL), crate::screens::library::READ_GOAL),
                     "writing" => format!("{}/{}개", self.store.profile.today.writings_done.min(crate::screens::writing::WRITING_GOAL), crate::screens::writing::WRITING_GOAL),
@@ -1539,6 +1539,7 @@ impl App {
                 let _ = open::that(&self.store.dir);
             }
         });
+        crate::credits::credits_ui(ui);
         // App version at the bottom (from Cargo.toml at build time).
         ui.add_space(12.0);
         ui.vertical_centered(|ui| {

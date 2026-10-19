@@ -30,6 +30,7 @@ mod storage;
 mod speed_scripts;
 mod web;
 mod scenes;
+mod credits;
 mod tenses;
 mod stt;
 mod theme;

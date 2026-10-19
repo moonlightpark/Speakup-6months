@@ -382,7 +382,7 @@ fn ft02_skip_placement_and_home_dashboard() {
     let mut t = launch_at(temp_dir("skip"), false, |_| {});
     t.click("테스트 없이 초급(A2)으로 시작");
     assert_eq!(t.app().screen, Screen::Home);
-    for text in ["Day 1 / 182", "1주차", "자기소개 · Introducing yourself", "📚 새 단어", "⚡ 스피드 리딩·말하기", "🎧 리스닝 · 구간반복", "초중급", "0 / 60분", "▶  오늘의 학습 시작", "Claude API 키가 없어"] {
+    for text in ["Day 1 / 182", "1주차", "자기소개 · Introducing yourself", "📚 새 단어", "⚡ 스피드 리딩·말하기", "🎧 리스닝 랩 · 듣고 따라 말하기", "초중급", "0 / 60분", "▶  오늘의 학습 시작", "Claude API 키가 없어"] {
         assert!(t.has(text), "home should show {text:?}");
     }
     // Review/homework steps only appear when there is something to do.
@@ -2167,7 +2167,8 @@ fn ft64_dictation_shows_a_picture_of_the_situation() {
     // Claude turns the sentence into a photo search; the result is kept (no photo in tests).
     t.wait("scene lookup", |a| a.store.scenes.len() == 2);
     let p = t.prompts().into_iter().find(|p| p.starts_with("Scene image:")).unwrap();
-    assert!(p.contains(&format!("Sentence: {first}")));
+    // Only the sentence without a saved photo is looked up (whichever comes first today).
+    assert!(p.contains("Sentence: I like coffee very much."), "{p}");
     let saved = std::fs::read_to_string(t.dir.join("scenes.json")).unwrap();
     assert!(saved.contains("coffee cup cafe"), "{saved}");
     // The sentence with a saved photo shows it with its credit.
@@ -2176,4 +2177,15 @@ fn ft64_dictation_shows_a_picture_of_the_situation() {
         t.steps(3);
     }
     assert!(t.has("사진: Green tea · CC0 (Wikimedia Commons)"));
+}
+
+#[test]
+fn ft65_settings_lists_open_source_and_sources() {
+    let mut t = launch("credits");
+    t.nav("⚙  설정");
+    assert!(t.has("📜 오픈소스 · 출처"));
+    for name in ["egui / eframe", "whisper.cpp", "Kokoro-82M 음성 모델", "Pretendard 글꼴 (길형진)", "YouGlish", "Wikimedia Commons", "Project Gutenberg"] {
+        assert!(t.has(name), "{name}");
+    }
+    assert!(t.has("광고 수익은 각 사이트와 영상 제작자의 것이며, 이 앱과는 아무 관련이 없습니다"));
 }
