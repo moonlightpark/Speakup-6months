@@ -11,7 +11,6 @@
 //!   library.json       reading-library progress per book; library/ holds downloaded books
 //!   writing.json       writing exercises (dictation, translation, free writing)
 //!   models/            whisper speech-recognition and Kokoro voice models
-//!   youtube/ID/        downloaded YouTube audio + English subtitles
 
 use crate::models::*;
 use anyhow::{Context, Result};
@@ -314,10 +313,6 @@ impl Store {
 
     pub fn models_dir(&self) -> PathBuf {
         self.dir.join("models")
-    }
-
-    pub fn youtube_dir(&self) -> PathBuf {
-        self.dir.join("youtube")
     }
 
     /// Record a level change both in profile.json and in the plain-text level_log.csv.

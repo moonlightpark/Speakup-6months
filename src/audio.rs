@@ -503,65 +503,6 @@ pub fn wpm(words: usize, voiced_secs: f32) -> f32 {
     if voiced_secs < 0.3 { 0.0 } else { words as f32 / voiced_secs * 60.0 }
 }
 
-// ---------------------------------------------------------------- time stretching
-
-/// WSOLA time-stretch: changes speed without changing pitch. `speed` < 1 slows down.
-pub fn time_stretch(input: &[f32], rate: u32, speed: f32) -> Vec<f32> {
-    if (speed - 1.0).abs() < 0.01 || input.len() < 4096 {
-        return input.to_vec();
-    }
-    let win = (rate as f32 * 0.040) as usize; // 40 ms window
-    let hop_out = win / 2;
-    let hop_in = (hop_out as f32 * speed) as usize;
-    let tol = (rate as f32 * 0.010) as usize; // ±10 ms search
-    let window: Vec<f32> = (0..win)
-        .map(|i| 0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / win as f32).cos())
-        .collect();
-    let n_frames = input.len().saturating_sub(win + 2 * tol) / hop_in.max(1);
-    let mut out = vec![0.0f32; n_frames * hop_out + win];
-    let mut norm = vec![0.0f32; out.len()];
-    let mut prev_pos = 0usize;
-    for f in 0..n_frames {
-        let nominal = f * hop_in + tol;
-        // Pick the offset whose frame best continues the previous frame's natural successor.
-        let pos = if f == 0 {
-            nominal
-        } else {
-            let natural = prev_pos + hop_out;
-            let mut best = nominal;
-            let mut best_corr = f32::MIN;
-            let lo = nominal.saturating_sub(tol);
-            let hi = (nominal + tol).min(input.len().saturating_sub(win));
-            let cmp_len = hop_out.min(input.len().saturating_sub(natural));
-            for cand in (lo..=hi).step_by(2) {
-                let mut c = 0.0;
-                for k in (0..cmp_len).step_by(4) {
-                    c += input[cand + k] * input[natural + k];
-                }
-                if c > best_corr {
-                    best_corr = c;
-                    best = cand;
-                }
-            }
-            best
-        };
-        let o = f * hop_out;
-        for k in 0..win {
-            if pos + k < input.len() {
-                out[o + k] += input[pos + k] * window[k];
-                norm[o + k] += window[k];
-            }
-        }
-        prev_pos = pos;
-    }
-    for (s, n) in out.iter_mut().zip(&norm) {
-        if *n > 1e-3 {
-            *s /= n;
-        }
-    }
-    out
-}
-
 // ---------------------------------------------------------------- playback
 
 enum PlayCmd {
@@ -618,7 +559,6 @@ pub struct Player {
     playing: Arc<AtomicBool>,
     /// The device could not be opened at all.
     failed: Arc<AtomicBool>,
-    clip_start: Arc<Mutex<Option<Instant>>>,
     pub clip_len: f32,
 }
 
@@ -627,16 +567,15 @@ impl Player {
     #[cfg(test)]
     pub fn silent() -> Self {
         let (tx, _rx) = std::sync::mpsc::channel();
-        Self { tx, opening_since: Arc::default(), playing: Arc::default(), failed: Arc::default(), clip_start: Arc::default(), clip_len: 0.0 }
+        Self { tx, opening_since: Arc::default(), playing: Arc::default(), failed: Arc::default(), clip_len: 0.0 }
     }
 
     pub fn new(device: String) -> Self {
         let (tx, rx) = std::sync::mpsc::channel::<PlayCmd>();
         let playing = Arc::new(AtomicBool::new(false));
         let failed = Arc::new(AtomicBool::new(false));
-        let clip_start: Arc<Mutex<Option<Instant>>> = Arc::default();
         let opening_since: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(Some(Instant::now())));
-        let (pl, fl, cs, os) = (playing.clone(), failed.clone(), clip_start.clone(), opening_since.clone());
+        let (pl, fl, os) = (playing.clone(), failed.clone(), opening_since.clone());
         std::thread::spawn(move || {
             let mut preferred = device;
             // Open the device up front so a broken audio system is detected before the
@@ -667,7 +606,6 @@ impl Player {
                             if let Ok(s) = Sink::try_new(&o.handle) {
                                 s.append(o.clip(samples.clone(), rate));
                                 sink = Some(s);
-                                *cs.lock().unwrap() = Some(Instant::now());
                             }
                         }
                         looping = looped.then_some((samples, rate));
@@ -684,7 +622,6 @@ impl Player {
                                     if let Ok(s) = Sink::try_new(&o.handle) {
                                         s.append(o.clip(samples, rate));
                                         sink = Some(s);
-                                        *cs.lock().unwrap() = Some(Instant::now());
                                     }
                                 }
                             }
@@ -696,7 +633,6 @@ impl Player {
                             s.stop();
                         }
                         looping = None;
-                        *cs.lock().unwrap() = None;
                     }
                     Ok(PlayCmd::Device(name)) => {
                         if let Some(s) = sink.take() {
@@ -716,13 +652,12 @@ impl Player {
                         let mut clip = vec![0.0; (*rate as f32 * 0.6) as usize];
                         clip.extend_from_slice(samples);
                         s.append(o.clip(clip, *rate));
-                        *cs.lock().unwrap() = Some(Instant::now() - Duration::from_millis(600));
                     }
                 }
                 pl.store(sink.as_ref().map(|s| !s.empty()).unwrap_or(false), Ordering::Relaxed);
             }
         });
-        Self { tx, opening_since, playing, failed, clip_start, clip_len: 0.0 }
+        Self { tx, opening_since, playing, failed, clip_len: 0.0 }
     }
 
     /// A cloneable sender for other threads (the speech synthesizer) to play through.
@@ -755,10 +690,6 @@ impl Player {
         self.playing.load(Ordering::Relaxed)
     }
 
-    /// Seconds into the current clip.
-    pub fn position(&self) -> f32 {
-        self.clip_start.lock().unwrap().map(|s| s.elapsed().as_secs_f32()).unwrap_or(0.0)
-    }
 
     pub fn play_samples(&mut self, samples: Vec<f32>, rate: u32, looped: bool) {
         self.clip_len = samples.len() as f32 / rate.max(1) as f32;
@@ -989,14 +920,5 @@ mod tests {
         assert!(err < 0.01, "max error {err}");
         // Downsampling halves the length.
         assert_eq!(resample_hq(&v, 24000, 12000).len(), 12000);
-    }
-
-    #[test]
-    fn stretch_slows_down() {
-        let rate = 16000;
-        let v: Vec<f32> = (0..rate * 2).map(|i| (i as f32 * 0.05).sin()).collect();
-        let out = time_stretch(&v, rate as u32, 0.75);
-        let ratio = out.len() as f32 / v.len() as f32;
-        assert!((ratio - 1.333).abs() < 0.1, "ratio {ratio}");
     }
 }

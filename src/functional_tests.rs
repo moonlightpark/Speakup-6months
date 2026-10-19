@@ -736,50 +736,6 @@ fn ft12_feedback_center_pronunciation_practice_clears_mistakes() {
 }
 
 #[test]
-fn ft13_listening_lab_segments_loop_and_shadowing() {
-    let dir = temp_dir("listening");
-    // A downloaded video: 2 s of audio + parsed subtitle segments.
-    let vdir = dir.join("youtube").join("abcdefghijk");
-    std::fs::create_dir_all(&vdir).unwrap();
-    let wav = vdir.join("audio.wav");
-    let mut w = hound::WavWriter::create(&wav, hound::WavSpec { channels: 1, sample_rate: 16000, bits_per_sample: 16, sample_format: hound::SampleFormat::Int }).unwrap();
-    for i in 0..32000 {
-        w.write_sample(((i as f32 * 0.05).sin() * 8000.0) as i16).unwrap();
-    }
-    w.finalize().unwrap();
-    let video = crate::youtube::Video {
-        id: "abcdefghijk".into(),
-        title: "Test Talk".into(),
-        url: "https://www.youtube.com/watch?v=abcdefghijk".into(),
-        audio: wav,
-        segments: vec![
-            crate::youtube::Segment { start: 0.0, end: 0.9, text: "Hello everyone.".into() },
-            crate::youtube::Segment { start: 1.0, end: 1.9, text: "Welcome back to the show.".into() },
-        ],
-    };
-    std::fs::write(vdir.join("video.json"), serde_json::to_string(&video).unwrap()).unwrap();
-    let mut t = launch_at(dir, true, |s| s.profile.placement_done = true);
-    t.nav("🎧  리스닝 랩");
-    t.click("📺 유튜브 구간반복");
-    t.click_contains("Test Talk");
-    assert!(t.has("Hello everyone.") && t.has("1 / 2"));
-    t.click("▶ 재생");
-    t.wait("segment decoded", |a| !a.listening.clip.running());
-    t.click("자막 숨기기");
-    assert!(t.has("자막 숨김"));
-    t.click("자막 숨기기");
-    t.click("💬 따라 말하기 (쉐도잉)");
-    t.wait("segment decoded", |a| !a.listening.clip.running());
-    t.say("Hello everyone", 1.0);
-    t.say("Hello everyone", 1.0);
-    assert_eq!(t.app().store.profile.today.listening_passes, 2);
-    t.click("다음 ▶");
-    assert!(t.has("2 / 2") && t.has("Welcome back to the show."));
-    t.click("⭐ 이 문장 저장");
-    assert!(t.app().store.items.iter().any(|i| i.text == "Welcome back to the show." && i.category == "youtube"));
-}
-
-#[test]
 fn ft14_settings_persist_and_data_survives_restart() {
     let dir = temp_dir("persist");
     {
@@ -2090,13 +2046,13 @@ fn ft60_listening_lab_shows_todays_sentences_on_playphrase() {
     assert_eq!(url(&t), "https://www.playphrase.me/#/search?q=I+wake+up+early&language=en");
     // Saying it after the clips is scored.
     t.say("I wake up early.", 1.0);
-    assert!(t.app().listening.phrase_result.as_ref().is_some_and(|(_, r)| r.score > 90.0));
+    assert!(t.app().listening.result.as_ref().is_some_and(|(_, r)| r.score > 90.0));
     // A sentence picked from the list.
     t.click("I am a boy.");
     t.steps(1);
     assert!(url(&t).contains("I+am+a+boy"));
     // Other tabs: no web view.
-    t.click("📺 유튜브 구간반복");
+    t.click("👂 듣고 대답하기");
     t.steps(1);
     assert!(t.app().web_req.is_none());
 }
@@ -2160,4 +2116,32 @@ fn ft62_wordle_with_learned_words() {
     assert_eq!((t.app().wordle.played, t.app().wordle.won), (2, 2));
     t.click("새 라운드 ▶");
     assert!(t.app().wordle.round.iter().all(|p| p.guesses.is_empty()));
+}
+
+#[test]
+fn ft63_listening_lab_shows_todays_words_on_youglish() {
+    let mut t = launch_at(temp_dir("youglish"), true, |s| {
+        s.profile.placement_done = true;
+        let words: Vec<LessonWord> = ["peckish", "company", "health"].iter().map(|w| LessonWord { word: w.to_string(), meaning_ko: "뜻".into(), ..Default::default() }).collect();
+        s.profile.today = DayProgress { date: Some(today()), word_set: Some(WordSet { words, ..Default::default() }), idioms: Some(Vec::new()), ..Default::default() };
+    });
+    t.nav("🎧  리스닝 랩");
+    assert!(!t.has("유튜브 구간반복"));
+    t.click("🔤 오늘 단어 발음 (YouGlish)");
+    let words: Vec<String> = t.app_mut().word_set().words.iter().map(|w| w.word.clone()).collect();
+    assert_eq!(words, vec!["peckish", "company", "health"]);
+    let url = |t: &T| t.app().web_req.as_ref().map(|r| r.url.clone()).unwrap_or_default();
+    assert_eq!(url(&t), format!("https://youglish.com/pronounce/{}/english", words[0]));
+    t.click("다음 단어 ▶");
+    t.steps(1);
+    assert_eq!(url(&t), format!("https://youglish.com/pronounce/{}/english", words[1]));
+    // Saying the word after the videos is scored and counts toward today's listening.
+    let w = words[1].clone();
+    t.say(&w, 1.0);
+    assert!(t.app().listening.result.as_ref().is_some_and(|(_, r)| r.score > 90.0));
+    assert_eq!(t.app().store.profile.today.listening_passes, 1);
+    // A word picked from the list.
+    t.click(&words[2]);
+    t.steps(1);
+    assert!(url(&t).ends_with(&format!("/{}/english", words[2])));
 }

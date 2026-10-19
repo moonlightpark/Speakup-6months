@@ -22,7 +22,6 @@ pub struct Settings {
     pub reps_review: u32,
     pub reps_weak: u32,
     pub new_words_per_day: u32,
-    pub ytdlp_path: String,
     pub daily_goal_minutes: u32,
     /// Microphone / speaker names; empty = system default.
     pub input_device: String,
@@ -75,7 +74,6 @@ impl Default for Settings {
             reps_review: 2,
             reps_weak: 5,
             new_words_per_day: 0, // 0 = 35 a day (wordbank::NEW_PER_DAY)
-            ytdlp_path: String::new(),
             // 60 min in the app (+30 min of podcasts/YouTube) ≈ 200-300 h in 6 months.
             daily_goal_minutes: 60,
             input_device: String::new(),

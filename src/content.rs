@@ -294,27 +294,3 @@ pub const SPEED_PASSAGES: &[(&str, &str)] = &[
     ("Weekend Plans", "This weekend, I'm planning to visit my parents. They live in a small town about two hours from Seoul. My mom always cooks way too much food, and my dad loves to show me his garden. On Sunday, I want to go hiking if the weather is nice. Then I'll come back home and get ready for the week."),
     ("Learning English", "When I started learning English, I was too shy to speak. I could read pretty well, but listening was really hard. So I changed my routine. Now I listen to native speakers every day, I repeat what they say out loud, and I talk with an AI tutor. Little by little, I'm getting faster, and I'm not afraid to make mistakes anymore."),
 ];
-
-/// Well-known channels with native-speaker teaching content (opened as YouTube searches so the
-/// links never go stale).
-pub const CHANNELS: &[(&str, &str)] = &[
-    ("BBC Learning English", "영국 BBC 공식 · 6 Minute English, 뉴스 리뷰"),
-    ("VOA Learning English", "미국 VOA · 느린 속도 뉴스와 회화"),
-    ("Rachel's English", "미국식 발음·연음 집중"),
-    ("English with Lucy", "영국식 발음, 어휘, 표현"),
-    ("Speak English With Vanessa", "미국 일상 회화"),
-    ("Business English Pod", "비즈니스 회화 상황별"),
-    ("TED-Ed", "짧은 강연, 원어민 자연 속도"),
-];
-
-pub fn youtube_search_url(query: &str) -> String {
-    let q: String = query
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (b as char).to_string(),
-            b' ' => "+".into(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect();
-    format!("https://www.youtube.com/results?search_query={q}")
-}

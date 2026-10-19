@@ -12,6 +12,23 @@ pub struct WebRequest {
     pub zoom: f32,
 }
 
+/// Runs in every page: on YouGlish, scrolls past the site's header and search box so the
+/// "How to pronounce …" title and the video are at the top of the frame.
+const PAGE_SCRIPT: &str = r#"
+if (location.host.endsWith('youglish.com')) {
+  let n = 0;
+  const t = setInterval(() => {
+    const hits = [...document.querySelectorAll('body *')].filter(e => /^\s*How to pronounce/.test(e.textContent || ''));
+    if (hits.length) {
+      hits.sort((a, b) => a.textContent.length - b.textContent.length);
+      hits[0].scrollIntoView({ block: 'start' });
+      clearInterval(t);
+    }
+    if (++n > 40) clearInterval(t);
+  }, 250);
+}
+"#;
+
 #[derive(Default)]
 pub struct WebPane {
     view: Option<wry::WebView>,
@@ -62,7 +79,7 @@ impl WebPane {
             }
             None if self.failed.is_none() => {
                 let ctx = self.context.get_or_insert_with(|| wry::WebContext::new(Some(data_dir)));
-                let built = wry::WebViewBuilder::new_with_web_context(ctx).with_url(&req.url).with_bounds(bounds).with_autoplay(true).build_as_child(window);
+                let built = wry::WebViewBuilder::new_with_web_context(ctx).with_url(&req.url).with_bounds(bounds).with_autoplay(true).with_initialization_script(PAGE_SCRIPT).build_as_child(window);
                 match built {
                     Ok(v) => {
                         crate::applog!("web: 웹 화면 생성 · {}", req.url);

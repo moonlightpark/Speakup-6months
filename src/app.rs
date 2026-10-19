@@ -117,7 +117,6 @@ pub struct App {
     edit_name: bool,
     prefetched: Option<chrono::NaiveDate>,
     edit_key: bool,
-    pub ytdlp_job: Pending<std::path::PathBuf>,
     pub api_url: String,
     /// The Claude API answered "can't be used" (no credit / key / network): speaking screens
     /// use the built-in offline scripts until an answer comes back.
@@ -227,7 +226,6 @@ impl App {
             edit_name: false,
             prefetched: None,
             edit_key: false,
-            ytdlp_job: Pending::default(),
             api_url: crate::claude::API_URL.to_string(),
             api_down: Default::default(),
             last_activity: Instant::now(),
@@ -847,16 +845,6 @@ impl App {
                     crate::applog!("lesson: 레슨 생성 실패, 다시 시도를 기다림 · {e:#}");
                     self.lesson_error = Some(format!("{e:#}"));
                 }
-            }
-        }
-        if let Some(r) = self.ytdlp_job.poll() {
-            match r {
-                Ok(p) => {
-                    self.store.settings.ytdlp_path = p.to_string_lossy().to_string();
-                    self.store.save_settings();
-                    self.toast("yt-dlp 설치 완료");
-                }
-                Err(e) => self.toast(format!("yt-dlp 설치 실패: {e:#}")),
             }
         }
     }
@@ -1536,28 +1524,6 @@ impl App {
             });
         });
         card(ui, |ui| {
-            ui.label(RichText::new("유튜브 (yt-dlp)").strong());
-            let found = crate::youtube::find_ytdlp(&self.store.settings.ytdlp_path, &self.store.dir.join("bin"));
-            match &found {
-                Some(p) => {
-                    ui.label(RichText::new(format!("✅ {}", p.display())).color(GOOD));
-                }
-                None => {
-                    ui.label(RichText::new("yt-dlp 가 없습니다. 유튜브 원어 영상으로 구간반복하려면 설치하세요.").color(warn()));
-                }
-            }
-            ui.horizontal(|ui| {
-                ui.label("경로:");
-                changed |= ui.text_edit_singleline(&mut self.store.settings.ytdlp_path).changed();
-            });
-            if self.ytdlp_job.running() {
-                spinner_label(ui, "yt-dlp 내려받는 중…");
-            } else if ui.button(if found.is_some() { "yt-dlp 최신 버전으로 업데이트" } else { "⬇ yt-dlp 자동 설치 (GitHub 공식 릴리스)" }).clicked() {
-                let bin = self.store.dir.join("bin");
-                self.ytdlp_job.spawn(move || crate::youtube::install_ytdlp(&bin));
-            }
-        });
-        card(ui, |ui| {
             ui.label(RichText::new("데이터").strong());
             ui.label(format!("저장 위치: {}", self.store.dir.display()));
             ui.label(RichText::new("profile.json(레벨·기록), level_log.csv, items.json(단어·문장), homework.json(숙제), attempts.jsonl(발화 기록)").color(muted()).small());
@@ -1619,7 +1585,7 @@ impl eframe::App for App {
         self.sync_lesson_words();
         self.prefetch_lesson();
         self.track_time(ctx);
-        if self.lesson_job.running() || self.ytdlp_job.running() || self.voice.player.is_playing() {
+        if self.lesson_job.running() || self.voice.player.is_playing() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         // Keep a slow heartbeat so background results show up even without input.
