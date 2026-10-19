@@ -8,6 +8,7 @@ pub mod progress;
 pub mod speaking;
 pub mod test;
 pub mod feedback;
+pub mod read_along;
 pub mod speed;
 pub mod history;
 pub mod library;

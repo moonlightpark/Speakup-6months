@@ -27,6 +27,7 @@ mod scoring;
 mod screens;
 mod srs;
 mod storage;
+mod speed_scripts;
 mod tenses;
 mod stt;
 mod theme;

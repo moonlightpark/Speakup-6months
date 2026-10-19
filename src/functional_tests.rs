@@ -642,16 +642,25 @@ fn ft10_custom_scene_ai_opens_and_collection_exists() {
 fn ft11_speed_reading_wpm_and_quick_response() {
     let mut t = launch("speed");
     t.nav("⚡  스피드 트레이닝");
-    t.click("▶ 지문 받기");
+    // Today's 회차 (day 1) opens by itself: Claude writes its 2-minute script once, kept by day.
     t.wait("passage", |a| a.speed.passage.is_some());
-    assert!(t.has_exact("좋아한다"), "passage shown with 직독직해");
-    // Without the gloss, each sentence sits on its own line (Order.md), translation too.
+    let p = t.prompts().into_iter().find(|p| p.contains("SPEED READING")).unwrap();
+    assert!(p.contains("day 1") && p.contains("Introducing yourself") && p.contains("be verbs") && p.contains("about 2 minutes"), "{p}");
+    assert!(t.app().store.speed_scripts.contains_key(&1), "kept for the day");
+    assert!(t.has("📅 1일차 · 1주차 자기소개") && t.has("I like coffee."));
     t.click("📖 직독직해");
-    assert!(t.has_exact("I like coffee.") && t.has_exact("It is warm."), "one label per sentence");
+    assert!(t.has_exact("좋아한다"), "직독직해 on demand");
+    t.click("📖 직독직해");
     t.click("해석");
     assert!(t.has_exact("나는 커피를 좋아한다.") && t.has_exact("따뜻하다."));
     t.click("해석");
-    t.click("📖 직독직해");
+    // ② Read along sentence by sentence.
+    t.say("I like coffee.", 1.0);
+    assert!(t.app().speed.along.passed[0]);
+    t.click("다음 문장 ▶");
+    t.say("It is warm.", 1.0);
+    t.click("③ 통째로 읽기로 ▶");
+    assert!(t.has("목표는 2분 안에"));
     // 6 words in 2.4 s of speech = 150 WPM
     t.say("I like coffee. It is warm.", 2.4);
     let first = t.app().store.profile.speed_history[0].wpm;
@@ -1194,11 +1203,11 @@ fn ft29_four_three_two_speaking() {
     t.click("✔ 이 대본으로 시작");
     let sentences = t.app().coach.ftt.script.clone().expect("script set");
     assert_eq!(sentences.len(), 3);
-    assert!(t.has("① 듣기") && t.has("🔊 전체 듣기") && t.has("② 따라 읽기"));
+    assert!(t.has("① 듣기") && t.has("🔊 전체 듣기") && t.has("따라 읽기"));
     assert!(t.has(&format!("{} ", sentences[2])), "the whole script is shown");
     // ② Read along: the first sentence, then the next one.
     t.say(&sentences[0], 2.0);
-    assert!(t.app().coach.ftt.followed[0], "read right → passed");
+    assert!(t.app().coach.ftt.along.passed[0], "read right → passed");
     t.click("다음 문장 ▶");
     assert!(t.has("2/3 문장"));
     // ③ The whole script three times in 4 : 3 : 2 time (16 words → 20 s, 15 s, 10 s at least).
@@ -1492,10 +1501,8 @@ fn ft38_speed_reading_pages_through_the_learners_own_books() {
         s.record_level(3.0, "test"); // A2 → stage 1
     });
     t.nav("⚡  스피드 트레이닝");
-    assert!(t.has("책 2권"));
-    t.click("▶ 지문 받기");
+    t.click("📚 내 책 2권에서 읽기");
     assert!(t.has("Pocahontas · 1/3쪽") && t.has("The English came to Virginia."));
-    assert!(t.prompts().iter().all(|p| !p.contains("speed")), "no Claude request for a book page");
     t.click("다음 쪽 ▶");
     assert!(t.has("Pocahontas · 2/3쪽") && t.has("John Smith met Pocahontas."));
     assert_eq!(t.app().store.profile.speed_book_pages.get("Pocahontas"), Some(&1), "where the learner left off");
@@ -1956,4 +1963,19 @@ fn ft56_list_text_size_is_set_in_settings() {
     assert!(std::fs::read_to_string(t.dir.join("settings.json")).unwrap().contains("\"list_text_size\": 21.0"), "remembered");
     t.click("기본(17)");
     assert_eq!(t.app().store.settings.list_text_size, 17.0);
+}
+
+#[test]
+fn ft57_speed_reading_without_claude_uses_the_weeks_built_in_script() {
+    let mut t = launch_at(temp_dir("speed-offline"), false, |s| s.profile.placement_done = true);
+    t.nav("⚡  스피드 트레이닝");
+    t.steps(2);
+    let p = t.app().speed.passage.clone().expect("script shown at once");
+    let builtin = crate::speed_scripts::for_day(1).unwrap();
+    assert_eq!(p.title, builtin.title);
+    assert!(p.passage.split_whitespace().count() >= 200, "about 2 minutes");
+    let first = crate::screens::speaking::split_sentences(&p.passage)[0].clone();
+    assert!(t.has(&first), "the whole script is on screen");
+    assert!(t.has("1/") && t.has("따라 읽기"));
+    assert!(!t.has("◀ 이전 회차") || !t.app().speed.day.is_some_and(|d| d > 1));
 }

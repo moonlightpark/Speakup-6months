@@ -1,6 +1,7 @@
 //! Speed training (Order.md: "빨리 읽고 빨리 말할 수 있는 훈련").
-//! 1) Speed reading aloud — repeated reading of a short passage, measuring words per minute
-//!    over correctly read words, against a level-based target.
+//! 1) Speed reading aloud — each program day (회차) has a 2-minute script on the week's theme:
+//!    hear it, read along sentence by sentence, then read all of it (WPM over correctly read
+//!    words, against a level-based target).
 //! 2) Quick response — a Korean prompt appears, the mic opens automatically, and the learner
 //!    must say the English within a time limit.
 
@@ -31,6 +32,12 @@ pub struct SpeedState {
     /// Books from the passages folder (loaded on first use) and the open one: (book, page).
     pub books: Option<Vec<crate::passages::Book>>,
     pub book: Option<(usize, usize)>,
+    /// The program day (회차) whose 2-minute script is open, and the one Claude is writing.
+    pub day: Option<u32>,
+    pub job_day: u32,
+    /// false = 문장별 따라 읽기, true = 통째로 읽기 (2분 도전).
+    pub whole: bool,
+    pub along: crate::screens::read_along::ReadAlong,
     // quick response
     pub queue: Vec<(String, String)>,
     pub idx: usize,
@@ -79,108 +86,169 @@ impl App {
         self.speed.books.get_or_insert_with(|| crate::passages::load(&dir))
     }
 
+    /// A fresh start on `p`: no attempts yet, read-along from the first sentence.
+    fn set_passage(&mut self, p: SpeedPassage) {
+        self.speed.attempts.clear();
+        self.speed.last = None;
+        self.speed.capture = Capture::default();
+        self.speed.along = crate::screens::read_along::ReadAlong::new(crate::screens::speaking::split_sentences(&p.passage).len());
+        self.speed.whole = false;
+        self.speed.passage = Some(p);
+    }
+
     /// Shows one page of a book from the passages folder as the passage to read.
     fn open_book_page(&mut self, book: usize, page: usize) {
         let Some(b) = self.books().get(book).cloned() else { return };
         let page = page.min(b.pages.len().saturating_sub(1));
-        self.speed.attempts.clear();
-        self.speed.last = None;
         self.speed.error = None;
         self.speed.show_gloss = false;
-        self.speed.passage = Some(SpeedPassage {
+        self.set_passage(SpeedPassage {
             title: format!("{} · {}/{}쪽", b.title, page + 1, b.pages.len()),
             passage: b.pages[page].clone(),
             passage_ko: String::new(),
             chunks: Vec::new(),
         });
         self.speed.book = Some((book, page));
+        self.speed.day = None;
         self.store.profile.speed_book_pages.insert(b.title.clone(), page);
         self.store.save_profile();
     }
 
-    fn new_passage(&mut self) {
-        self.speed.attempts.clear();
-        self.speed.last = None;
+    /// Words in a 2-minute script at the learner's target pace.
+    fn two_minute_words(&self) -> u32 {
+        (target_wpm(self.store.profile.level) * 2.0 / 10.0).round() as u32 * 10
+    }
+
+    /// Opens 회차 `day`'s 2-minute script: the kept one, else Claude writes it (kept for next
+    /// time), else the built-in one for its week.
+    fn open_day(&mut self, day: u32) {
+        self.speed.book = None;
+        self.speed.day = Some(day);
         self.speed.error = None;
-        // The learner's own graded readers come first: the book for the level, where they left off.
-        let level = self.store.profile.level;
-        if let Some(bi) = crate::passages::pick(self.books(), level) {
-            let title = self.books()[bi].title.clone();
-            let page = self.store.profile.speed_book_pages.get(&title).copied().unwrap_or(0);
-            crate::applog!("speed: 지문 {title} {}쪽 (레벨 {level:.1})", page + 1);
-            self.open_book_page(bi, page);
+        self.speed.passage = None;
+        if let Some(p) = self.store.speed_scripts.get(&day).cloned() {
+            self.show_day_script(p);
             return;
         }
-        self.speed.book = None;
-        let p = &self.store.profile;
-        let theme = curriculum::week(curriculum::week_number(p)).theme.to_string();
-        match self.claude() {
+        let week = crate::speed_scripts::week_of(day);
+        let w = curriculum::week(week);
+        match self.claude().filter(|_| !self.talk_offline()) {
             Some(c) => {
-                let level = p.level;
+                let (theme, grammar, level, words) = (w.theme.to_string(), w.grammar.to_string(), self.store.profile.level, self.two_minute_words());
                 let mut known: Vec<String> = self.store.items.iter().filter(|i| i.kind == ItemKind::Word).map(|i| i.text.clone()).collect();
                 known.shuffle(&mut rand::rng());
                 known.truncate(15);
-                let mut avoid: Vec<String> = self.store.profile.speed_history.iter().filter(|r| !r.title.is_empty()).map(|r| r.title.clone()).collect();
-                avoid.dedup();
-                self.speed.job.spawn(move || c.speed_passage(&theme, level, &known, &avoid));
+                let avoid: Vec<String> = self.store.speed_scripts.values().map(|p| p.title.clone()).collect();
+                crate::applog!("speed: {day}일차 2분 대본 요청 ({words}단어, {})", w.theme);
+                self.speed.job_day = day;
+                self.speed.job.spawn(move || c.speed_passage(day, &theme, &grammar, level, words, &known, &avoid));
             }
-            None => {
-                let read: Vec<&str> = p.speed_history.iter().map(|r| r.title.as_str()).collect();
-                let i = (0..content::SPEED_PASSAGES.len())
-                    .find(|i| !read.contains(&content::SPEED_PASSAGES[*i].0))
-                    .unwrap_or(curriculum::day_number(p) as usize % content::SPEED_PASSAGES.len());
-                let (t, text) = content::SPEED_PASSAGES[i];
-                self.speed.passage = Some(SpeedPassage { title: t.into(), passage: text.into(), passage_ko: String::new(), chunks: Vec::new() });
-            }
+            None => self.builtin_day(day),
         }
+    }
+
+    fn builtin_day(&mut self, day: u32) {
+        let p = crate::speed_scripts::for_day(day).unwrap_or_else(|| {
+            let (t, text) = content::SPEED_PASSAGES[day as usize % content::SPEED_PASSAGES.len()];
+            SpeedPassage { title: t.into(), passage: text.into(), passage_ko: String::new(), chunks: Vec::new() }
+        });
+        self.show_day_script(p);
+    }
+
+    fn show_day_script(&mut self, mut p: SpeedPassage) {
+        if p.chunks.is_empty() {
+            p.chunks = self.store.gloss_for(&p.passage);
+        }
+        self.speed.show_gloss = false;
+        self.set_passage(p);
     }
 
     fn speed_reading_ui(&mut self, ui: &mut Ui) {
         if let Some(r) = self.speed.job.poll() {
+            let day = self.speed.job_day;
             match r {
                 Ok(mut p) => {
                     self.store.put_gloss(&p.passage, &p.chunks);
                     p.chunks = self.store.gloss_for(&p.passage);
-                    self.speed.show_gloss = !p.chunks.is_empty() && support_stage(ui.ctx()) == 0;
-                    self.speed.passage = Some(p);
+                    self.store.put_speed_script(day, &p);
+                    if self.speed.day == Some(day) {
+                        self.show_day_script(p);
+                    }
                 }
-                Err(e) => self.speed.error = Some(format!("{e:#}")),
+                Err(e) => {
+                    crate::applog!("speed: 대본 생성 실패 · {e:#}");
+                    if self.speed.day == Some(day) {
+                        self.speed.error = Some(format!("Claude가 대본을 만들지 못해 내장 대본으로 연습해요 ({e:#})"));
+                        self.builtin_day(day);
+                    }
+                }
             }
+        }
+        let today_day = curriculum::day_number(&self.store.profile) as u32;
+        // Today's 회차 opens by itself.
+        if self.speed.passage.is_none() && !self.speed.job.running() && self.speed.book.is_none() {
+            let d = self.speed.day.unwrap_or(today_day);
+            self.open_day(d);
         }
         let level = self.store.profile.level;
         let target = target_wpm(level);
         let best = self.store.profile.speed_history.iter().filter(|r| r.kind == "reading" && r.accuracy >= 85.0).map(|r| r.wpm).fold(0.0f32, f32::max);
         card(ui, |ui| {
-            ui.label(format!("방법: ① 원어민 음성 듣기 → ② 정확하게 한 번 읽기 → ③ 같은 지문을 점점 더 빠르게 2~3번 더 읽기 (반복 읽기)"));
+            ui.label("방법: 회차마다 2분 분량의 영어 대본 — ① 원어민 음성 듣기 → ② 문장별 따라 읽기 → ③ 대본 전체를 2분 안에 통째로 읽기 (반복할수록 빨라져요)");
             ui.label(RichText::new(format!("목표: 정확도 85% 이상 + {target:.0} WPM 이상 · 내 최고 {best:.0} WPM · 원어민 대화 속도 약 150 WPM")).color(ACCENT));
         });
         ui.add_space(6.0);
-        if self.speed.passage.is_none() {
-            if self.speed.job.running() {
-                spinner_label(ui, "Claude가 내 레벨에 맞는 지문을 만들고 있어요…");
-            } else if ui.add(egui::Button::new(RichText::new("▶ 지문 받기").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
-                self.new_passage();
+        // Which script: the 회차 (◀ ▶ to earlier days), or a book from the passages folder.
+        let n_books = self.books().len();
+        let mut open: Option<u32> = None;
+        let mut book_mode = false;
+        ui.horizontal_wrapped(|ui| {
+            match self.speed.day {
+                Some(d) => {
+                    let w = crate::speed_scripts::week_of(d);
+                    if ui.add_enabled(d > 1, egui::Button::new("◀ 이전 회차")).clicked() {
+                        open = Some(d - 1);
+                    }
+                    ui.label(RichText::new(format!("📅 {d}일차 · {w}주차 {}", curriculum::week(w).theme_ko)).size(17.0).strong());
+                    if ui.add_enabled(d < today_day, egui::Button::new("다음 회차 ▶")).clicked() {
+                        open = Some(d + 1);
+                    }
+                    if d != today_day && ui.button("오늘 회차").clicked() {
+                        open = Some(today_day);
+                    }
+                }
+                None => {
+                    if ui.button(format!("📅 오늘 회차({today_day}일차) 대본으로")).clicked() {
+                        open = Some(today_day);
+                    }
+                }
             }
-            let n = self.books().len();
-            ui.label(
-                RichText::new(if n > 0 {
-                    format!("📚 지문 폴더의 책 {n}권에서 내 레벨에 맞는 책을 이어서 한 쪽씩 읽어요.")
-                } else {
-                    "📚 지문 폴더(학습 기록 폴더의 passages)가 비어 있어 Claude가 만든 지문으로 연습해요.".to_string()
-                })
-                .color(muted()),
-            );
-            if ui.button("📂 지문 폴더 열기").clicked() {
-                let d = crate::passages::dir(&self.store.dir);
-                let _ = std::fs::create_dir_all(&d);
-                let _ = open::that(d);
+            if n_books > 0 && self.speed.book.is_none() && ui.button(format!("📚 내 책 {n_books}권에서 읽기")).clicked() {
+                book_mode = true;
             }
-            if let Some(e) = &self.speed.error {
-                error_label(ui, e);
+        });
+        if let Some(d) = open {
+            self.voice.speaker.stop();
+            self.open_day(d);
+            return;
+        }
+        if book_mode {
+            let level = self.store.profile.level;
+            if let Some(bi) = crate::passages::pick(self.books(), level) {
+                let title = self.books()[bi].title.clone();
+                let page = self.store.profile.speed_book_pages.get(&title).copied().unwrap_or(0);
+                crate::applog!("speed: 지문 {title} {}쪽 (레벨 {level:.1})", page + 1);
+                self.open_book_page(bi, page);
             }
             return;
         }
-        let p = self.speed.passage.clone().unwrap();
+        if let Some(e) = &self.speed.error {
+            ui.label(RichText::new(format!("⚠ {e}")).color(warn()).small());
+        }
+        let Some(p) = self.speed.passage.clone() else {
+            spinner_label(ui, "Claude가 오늘 회차의 2분 대본을 만들고 있어요…");
+            return;
+        };
         if let Some((bi, page)) = self.speed.book {
             let books: Vec<(u32, String, usize)> = self.books().iter().map(|b| (b.stage, b.title.clone(), b.pages.len())).collect();
             let pages = books.get(bi).map(|b| b.2).unwrap_or(1);
@@ -207,14 +275,27 @@ impl App {
             }
             ui.add_space(4.0);
         }
+        let sentences = crate::screens::speaking::split_sentences(&p.passage);
+        let words = p.passage.split_whitespace().count();
+        let size = self.store.settings.list_size().max(18.0);
+        let mut jump: Option<usize> = None;
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(&p.title).size(20.0).strong());
-                if ui.button("🔊 원어민 속도").clicked() {
+                ui.label(RichText::new(format!("{words}단어 · 약 {:.1}분", words as f32 / target)).color(muted()));
+            });
+            ui.horizontal_wrapped(|ui| {
+                if ui.add(egui::Button::new("🔊 원어민 속도").min_size(ACTION_BUTTON)).clicked() {
                     self.voice.say(&p.passage);
                 }
-                if ui.button("🐇 빠르게").clicked() {
+                if ui.add(egui::Button::new("🐢 천천히").min_size(ACTION_BUTTON)).clicked() {
+                    self.voice.say_slow(&p.passage);
+                }
+                if ui.add(egui::Button::new("🐇 빠르게").min_size(ACTION_BUTTON)).clicked() {
                     self.voice.say_fast(&p.passage);
+                }
+                if ui.add(egui::Button::new("⏹ 멈춤").min_size(ACTION_BUTTON)).clicked() {
+                    self.voice.speaker.stop();
                 }
                 if !p.chunks.is_empty() {
                     ui.toggle_value(&mut self.speed.show_gloss, "📖 직독직해");
@@ -225,25 +306,56 @@ impl App {
             });
             ui.add_space(4.0);
             let marks = self.speed.last.as_ref().map(|(_, r, _)| r.marks.as_slice());
-            // One sentence per line, so the eyes can run down the passage quickly.
             if self.speed.show_gloss && !p.chunks.is_empty() {
-                chunk_view_lines(ui, &p.chunks, marks, 20.0);
+                chunk_view_lines(ui, &p.chunks, marks, size);
+            } else if let (true, Some((_, r, _))) = (self.speed.whole, &self.speed.last) {
+                // After reading it all: right words green, missed ones red.
+                word_feedback_lines(ui, r, size);
             } else {
-                match &self.speed.last {
-                    Some((_, r, _)) => word_feedback_lines(ui, r, 20.0),
-                    None => sentence_lines(ui, &p.passage, 20.0, text_strong()),
-                }
+                let along = std::mem::take(&mut self.speed.along);
+                jump = self.script_view(ui, &sentences, &along, !self.speed.whole, size);
+                self.speed.along = along;
             }
             if self.speed.show_ko {
                 ui.add_space(4.0);
                 sentence_lines(ui, &p.passage_ko, 16.0, muted());
             }
         });
+        if let Some(k) = jump {
+            self.speed.whole = false;
+            self.speed.along.go(k);
+            self.voice.say(&sentences[k]);
+        }
         ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            let mut whole = self.speed.whole;
+            ui.selectable_value(&mut whole, false, RichText::new("② 문장별 따라 읽기").size(16.0));
+            ui.label(RichText::new("→").color(muted()));
+            ui.selectable_value(&mut whole, true, RichText::new("③ 통째로 읽기 (2분 도전)").size(16.0));
+            if whole != self.speed.whole {
+                self.voice.speaker.stop();
+                self.speed.whole = whole;
+            }
+        });
+        ui.add_space(4.0);
+        if !self.speed.whole {
+            let mut along = std::mem::take(&mut self.speed.along);
+            if self.read_along_ui(ui, &mut along, &sentences, size, "speed-follow", "③ 통째로 읽기로 ▶") {
+                self.speed.whole = true;
+            }
+            self.speed.along = along;
+            return;
+        }
+        let limit = (words as f32 / target * 60.0 * 1.5).max(120.0);
         let mut new_result = None;
         card(ui, |ui| {
+            ui.label(RichText::new("대본 전체를 소리 내어 읽어요. 목표는 2분 안에, 정확하게!").strong());
+            if self.speed.capture.is_recording() && self.voice.recorder.is_recording() {
+                let e = self.voice.recorder.elapsed();
+                ui.label(RichText::new(format!("⏱ {}:{:02} / 목표 2:00", e as u32 / 60, e as u32 % 60)).size(22.0).strong().color(if e <= 120.0 { ACCENT } else { warn() }));
+            }
             ui.vertical_centered(|ui| {
-                if let Some(t) = self.speed.capture.ui(ui, &mut self.voice, 120.0) {
+                if let Some(t) = self.speed.capture.ui(ui, &mut self.voice, limit) {
                     new_result = Some(t);
                 }
             });
@@ -297,12 +409,7 @@ impl App {
                             self.open_book_page(bi, page + 1);
                         }
                     }
-                    None => {
-                        if ui.button("새 지문").clicked() {
-                            self.speed.passage = None;
-                            self.new_passage();
-                        }
-                    }
+                    None => {}
                 }
             });
         }

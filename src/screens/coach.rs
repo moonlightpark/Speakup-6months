@@ -98,11 +98,8 @@ pub struct FourThreeTwoState {
     pub input: String,
     /// The script being practised, split into sentences.
     pub script: Option<Vec<String>>,
-    /// Read-along: the sentence, its capture and the last score.
-    pub follow_idx: usize,
-    pub follow: Capture,
-    pub follow_result: Option<(String, crate::scoring::ScoreResult)>,
-    pub followed: Vec<bool>,
+    /// ② Read along, sentence by sentence.
+    pub along: crate::screens::read_along::ReadAlong,
     /// false = ② read along, true = ③ 4/3/2 rounds (one mic on screen at a time).
     pub rounds: bool,
     pub capture: Capture,
@@ -363,36 +360,14 @@ impl App {
                 }
                 change = ui.add(egui::Button::new("✏ 대본 바꾸기").min_size(ACTION_BUTTON)).clicked();
             });
-            // The whole script, sentence by sentence: the one being read along stands out, passed
-            // ones are green, and a click jumps there (and reads it out).
             ui.add_space(4.0);
-            egui::Frame::new().fill(subtle_fill()).corner_radius(10.0).inner_margin(12.0).show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.horizontal_wrapped(|ui| {
-                    for (k, sen) in sentences.iter().enumerate() {
-                        let current = !self.coach.ftt.rounds && k == self.coach.ftt.follow_idx;
-                        let passed = self.coach.ftt.followed.get(k).copied().unwrap_or(false);
-                        let color = if current { ACCENT } else if passed { GOOD } else { text_strong() };
-                        let mut text = RichText::new(format!("{sen} ")).size(size * 0.9).color(color);
-                        if current {
-                            text = text.strong().underline();
-                        }
-                        let r = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text("클릭하면 이 문장부터 따라 읽어요");
-                        if r.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                        }
-                        if r.clicked() {
-                            jump = Some(k);
-                        }
-                    }
-                });
-            });
+            let along = std::mem::take(&mut self.coach.ftt.along);
+            jump = self.script_view(ui, &sentences, &along, !self.coach.ftt.rounds, size * 0.9);
+            self.coach.ftt.along = along;
         });
         if let Some(k) = jump {
             self.coach.ftt.rounds = false;
-            self.coach.ftt.follow_idx = k;
-            self.coach.ftt.follow_result = None;
-            self.coach.ftt.follow = Capture::default();
+            self.coach.ftt.along.go(k);
             self.voice.say(&sentences[k]);
         }
         if change {
@@ -416,7 +391,11 @@ impl App {
         if self.coach.ftt.rounds {
             self.ftt_rounds_ui(ui, &script, size);
         } else {
-            self.ftt_follow_ui(ui, &sentences, size);
+            let mut along = std::mem::take(&mut self.coach.ftt.along);
+            if self.read_along_ui(ui, &mut along, &sentences, size, "4/3/2 따라 읽기", "③ 통째로 읽기로 ▶") {
+                self.coach.ftt.rounds = true;
+            }
+            self.coach.ftt.along = along;
         }
     }
 
@@ -444,64 +423,12 @@ impl App {
         if start {
             let sentences = crate::screens::speaking::split_sentences(&self.coach.ftt.input.split_whitespace().collect::<Vec<_>>().join(" "));
             crate::applog!("4/3/2: 대본 {}문장으로 시작", sentences.len());
-            self.coach.ftt = FourThreeTwoState { input: std::mem::take(&mut self.coach.ftt.input), followed: vec![false; sentences.len()], script: Some(sentences), ..Default::default() };
-        }
-    }
-
-    /// ② One sentence at a time: hear it, say it, see the score.
-    fn ftt_follow_ui(&mut self, ui: &mut Ui, sentences: &[String], size: f32) {
-        let n = sentences.len();
-        let i = self.coach.ftt.follow_idx.min(n.saturating_sub(1));
-        let sentence = &sentences[i];
-        let pass = self.store.settings.pass_score;
-        let mut go: Option<usize> = None;
-        let mut to_rounds = false;
-        card(ui, |ui| {
-            let done = self.coach.ftt.followed.iter().filter(|d| **d).count();
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("② 따라 읽기").size(18.0).strong().color(ACCENT));
-                ui.label(RichText::new(format!("{}/{n} 문장 · 통과 {done}", i + 1)).color(muted()));
-            });
-            ui.horizontal_wrapped(|ui| {
-                speaker_button(ui, &mut self.voice, sentence);
-                ui.label(RichText::new(sentence).size(size).strong().color(text_strong()));
-            });
-            ui.label(RichText::new("🔊 듣고 → 🎤 눌러서 똑같이 따라 읽어요").color(muted()).small());
-            ui.vertical_centered(|ui| {
-                let limit = 6.0 + word_count(sentence) as f32;
-                if let Some(t) = self.coach.ftt.follow.ui(ui, &mut self.voice, limit) {
-                    let r = crate::scoring::score(sentence, &t);
-                    self.store.log_attempt("4/3/2 따라 읽기", sentence, &t, r.score);
-                    if r.score >= pass {
-                        self.coach.ftt.followed[i] = true;
-                    }
-                    self.coach.ftt.follow_result = Some((t, r));
-                }
-            });
-            if let Some((t, r)) = &self.coach.ftt.follow_result {
-                let ok = r.score >= pass;
-                ui.label(RichText::new(format!("{} {:.0}점 — \"{t}\"", if ok { "✅" } else { "🔁" }, r.score)).color(if ok { GOOD } else { warn() }));
-            }
-            ui.horizontal(|ui| {
-                if ui.add_enabled(i > 0, egui::Button::new("◀ 이전 문장").min_size(ACTION_BUTTON)).clicked() {
-                    go = Some(i - 1);
-                }
-                if ui.add_enabled(i + 1 < n, egui::Button::new("다음 문장 ▶").min_size(ACTION_BUTTON)).clicked() {
-                    go = Some(i + 1);
-                }
-                if i + 1 == n && ui.add(egui::Button::new(RichText::new("③ 통째로 읽기로 ▶").color(egui::Color32::WHITE)).fill(GOOD).min_size(ACTION_BUTTON)).clicked() {
-                    to_rounds = true;
-                }
-            });
-        });
-        if to_rounds {
-            self.coach.ftt.rounds = true;
-        }
-        if let Some(k) = go {
-            self.coach.ftt.follow_idx = k;
-            self.coach.ftt.follow_result = None;
-            self.coach.ftt.follow = Capture::default();
-            self.voice.say(&sentences[k]);
+            self.coach.ftt = FourThreeTwoState {
+                input: std::mem::take(&mut self.coach.ftt.input),
+                along: crate::screens::read_along::ReadAlong::new(sentences.len()),
+                script: Some(sentences),
+                ..Default::default()
+            };
         }
     }
 

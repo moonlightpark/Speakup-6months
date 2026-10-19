@@ -29,6 +29,8 @@ pub struct Store {
     pub homework: Vec<Homework>,
     pub mistakes: Vec<Mistake>,
     pub corrections: Vec<CorrectionRecord>,
+    /// 스피드 리딩 scripts by program day (speed_scripts.json): the same 회차 always reads the same.
+    pub speed_scripts: std::collections::BTreeMap<u32, crate::claude::SpeedPassage>,
     /// 직독직해 glosses by sentence text.
     pub gloss: std::collections::HashMap<String, Vec<Chunk>>,
     /// 시제 3문장 for new words, by lower-case word (tenses.json, written by Claude).
@@ -93,6 +95,7 @@ impl Store {
             corrections: load_json(&dir.join("corrections.json")),
             gloss: load_json(&dir.join("gloss.json")),
             tenses: load_json(&dir.join("tenses.json")),
+            speed_scripts: load_json(&dir.join("speed_scripts.json")),
             history: load_json(&dir.join("history.json")),
             library: load_json(&dir.join("library.json")),
             writings: load_json(&dir.join("writing.json")),
@@ -161,6 +164,11 @@ impl Store {
             self.tenses.insert(t.word.to_lowercase(), t.clone());
         }
         log_err(save_json(&self.dir.join("tenses.json"), &self.tenses));
+    }
+
+    pub fn put_speed_script(&mut self, day: u32, p: &crate::claude::SpeedPassage) {
+        self.speed_scripts.insert(day, p.clone());
+        log_err(save_json(&self.dir.join("speed_scripts.json"), &self.speed_scripts));
     }
 
     pub fn put_gloss(&mut self, text: &str, chunks: &[Chunk]) {

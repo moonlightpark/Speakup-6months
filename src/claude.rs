@@ -6,7 +6,7 @@
 use crate::language::LanguagePack;
 use crate::models::*;
 use anyhow::{Result, anyhow, bail};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -289,14 +289,15 @@ impl Claude {
         self.call(user, schema, "low")
     }
 
-    pub fn speed_passage(&self, theme: &str, level: f32, known: &[String], avoid_titles: &[String]) -> Result<SpeedPassage> {
+    /// The day's 2-minute read-aloud script for 스피드 리딩, on the week's theme and grammar.
+    pub fn speed_passage(&self, day: u32, theme: &str, grammar: &str, level: f32, words: u32, known: &[String], avoid_titles: &[String]) -> Result<SpeedPassage> {
         let schema = obj(json!({"title": s(), "passage": s(), "passage_ko": s(), "chunks": arr(phrase_chunk())}));
-        let words = (40.0 + level * 10.0).round() as u32;
         let user = format!(
-            "Write a short passage for SPEED READING ALOUD practice (repeated reading for fluency).\n\
-             Theme: {theme}. Learner level {level:.1}/10 (CEFR {cefr}). Length: about {words} words.\n\
-             It must sound like natural spoken {lang} (a short story, a monologue or a mini talk), use mostly words the learner knows, \
-             with short-to-medium sentences that are fun to say quickly. Where natural, reuse some of these learned words: {known}.\n\
+            "Write a script for SPEED READING ALOUD practice (read along, then read the whole of it in 2 minutes) — day {day} of the course.\n\
+             Theme: {theme}. Practise this grammar naturally and often: {grammar}. Learner level {level:.1}/10 (CEFR {cefr}).\n\
+             Length: {words} words (±10) — about 2 minutes read aloud at the learner's target pace.\n\
+             It must sound like natural spoken {lang} (a first-person story, monologue or mini talk), use mostly words the learner knows, \
+             with short-to-medium sentences (each ending with . ? or !) that are fun to say quickly. Where natural, reuse some of these learned words: {known}.\n\
              Pick a fresh topic: the learner already read passages titled {avoid}.\n\
              passage_ko: a natural Korean translation. {chunk_rule} (Here the whole passage is the sentence.)",
             cefr = cefr_of(level),
@@ -596,7 +597,7 @@ pub struct RoleplayTurn {
     pub summary_ko: String,
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SpeedPassage {
     pub title: String,
     pub passage: String,
@@ -788,7 +789,7 @@ mod tests {
         assert!(!turn.reply.is_empty());
         let open = c.roleplay_turn(&BusinessScenario { title: "Hotel".into(), scenario_ko: "호텔 예약 누락 항의".into(), ai_role: "hotel manager".into(), user_role: "guest".into(), ..Default::default() }, &[], 3.0).expect("open");
         println!("custom scene opening: {:?}", open.reply);
-        let sp = c.speed_passage("Daily routines", 3.0, &["usually".into()], &["My Morning".into()]).expect("passage");
+        let sp = c.speed_passage(8, "Daily routines", "present simple", 3.0, 210, &["usually".into()], &["My Morning".into()]).expect("passage");
         println!("speed passage: {} words, chunks ok={}", sp.passage.split_whitespace().count(), crate::storage::chunks_match(&sp.passage, &sp.chunks));
         let w = c.check_word_use("deadline", "마감일", "the deadline of project is next monday").expect("word");
         println!("word use: ok={} {}", w.ok, w.feedback_ko);
