@@ -90,6 +90,15 @@ impl WritingState {
     pub fn translation_done(&self) -> bool {
         self.translation_result.is_some()
     }
+    #[cfg(test)]
+    pub fn queue_current(&self) -> String {
+        self.queue[self.idx % self.queue.len()].0.clone()
+    }
+    #[cfg(test)]
+    pub fn next_sentence(&mut self) {
+        self.idx += 1;
+        self.played = false;
+    }
 }
 
 impl App {
@@ -120,6 +129,59 @@ impl App {
         let shift = (today().ordinal() as usize) % v.len().max(1);
         v.rotate_left(shift);
         v
+    }
+
+    /// Looks up the pictures of `sentences` (the current one, then the next) one at a time.
+    fn ensure_scenes(&mut self, sentences: &[&str]) {
+        if let Some(r) = self.scene_job.poll() {
+            match r {
+                Ok((sentence, img)) => {
+                    crate::applog!("scene: {sentence} → \"{}\" {}", img.query, if img.file.is_empty() { "(사진 없음)" } else { &img.file });
+                    self.store.put_scene(&sentence, img);
+                }
+                Err(e) => crate::applog!("scene: 사진 찾기 실패 · {e:#}"),
+            }
+        }
+        if self.scene_job.running() {
+            return;
+        }
+        let Some(s) = sentences.iter().find(|s| !self.store.scenes.contains_key(&s.trim().to_lowercase()) && !self.scene_tried.contains(**s)) else { return };
+        let sentence = s.to_string();
+        self.scene_tried.insert(sentence.clone());
+        let (claude, dir) = (self.claude().filter(|_| !self.talk_offline()), self.store.scenes_dir());
+        self.scene_job.spawn(move || {
+            let query = claude.and_then(|c| c.scene_query(&sentence).ok()).filter(|q| !q.is_empty()).unwrap_or_else(|| crate::scenes::fallback_query(&sentence));
+            let img = crate::scenes::fetch(&query, &dir)?;
+            Ok((sentence, img))
+        });
+    }
+
+    /// The picture of a sentence's situation, above the exercise (nothing while none is known).
+    fn scene_ui(&mut self, ui: &mut Ui, sentence: &str) {
+        let Some(img) = self.store.scenes.get(&sentence.trim().to_lowercase()).cloned() else {
+            if self.scene_job.running() {
+                spinner_label(ui, "🖼 상황 그림을 찾는 중…");
+                ui.add_space(6.0);
+            }
+            return;
+        };
+        if img.file.is_empty() {
+            return;
+        }
+        let path = self.store.scenes_dir().join(&img.file);
+        let tex = self.scene_tex.entry(img.file.clone()).or_insert_with(|| crate::scenes::load(&path).map(|c| ui.ctx().load_texture(format!("scene-{}", img.file), c, egui::TextureOptions::LINEAR))).clone();
+        let Some(tex) = tex else { return };
+        card(ui, |ui| {
+            let size = tex.size_vec2();
+            let max_h = 300.0_f32.min(ui.available_width() * 0.5);
+            let scale = (max_h / size.y).min(ui.available_width() / size.x);
+            ui.vertical_centered(|ui| {
+                ui.add(egui::Image::new(&tex).fit_to_exact_size(size * scale).corner_radius(10.0));
+                let credit = [img.title.as_str(), img.artist.as_str(), img.license.as_str()].iter().filter(|s| !s.is_empty()).copied().collect::<Vec<_>>().join(" · ");
+                ui.label(RichText::new(format!("사진: {credit} (Wikimedia Commons)")).size(11.5).color(muted()));
+            });
+        });
+        ui.add_space(6.0);
     }
 
     pub fn writing_ui(&mut self, ui: &mut Ui) {
@@ -175,6 +237,12 @@ impl App {
         let t_check = crate::art::since_event(ui, egui::Id::new("cheer_writing_check"), check_key);
         let mut next = false;
         let mut finished: Option<(f32, String)> = None;
+        if dictation {
+            let following = st.queue[(st.idx + 1) % st.queue.len()].0.clone();
+            self.ensure_scenes(&[&en, &following]);
+            self.scene_ui(ui, &en);
+        }
+        let st = &mut self.writing;
         // Read at the level's pace (설정 > 받아쓰기 읽기 속도).
         let speed_set = self.store.settings.dictation_speed.min(DICTATION_SPEEDS.len() - 1);
         let rate = dictation_rate(self.store.profile.level, speed_set);

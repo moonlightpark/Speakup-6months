@@ -31,6 +31,8 @@ pub struct Store {
     /// 문장 읽기 sentences in three tenses, by lower-case sentence (sentence_tenses.json, written
     /// by Claude; empty fields = the sentence can't change tense).
     pub sentence_tenses: std::collections::HashMap<String, crate::tenses::TenseSet>,
+    /// 받아쓰기 pictures by lower-case sentence (scenes.json; the photos are in scenes/).
+    pub scenes: std::collections::HashMap<String, crate::scenes::SceneImage>,
     /// 스피드 리딩 scripts by program day (speed_scripts.json): the same 회차 always reads the same.
     pub speed_scripts: std::collections::BTreeMap<u32, crate::claude::SpeedPassage>,
     /// 직독직해 glosses by sentence text.
@@ -99,6 +101,7 @@ impl Store {
             tenses: load_json(&dir.join("tenses.json")),
             speed_scripts: load_json(&dir.join("speed_scripts.json")),
             sentence_tenses: load_json(&dir.join("sentence_tenses.json")),
+            scenes: load_json(&dir.join("scenes.json")),
             history: load_json(&dir.join("history.json")),
             library: load_json(&dir.join("library.json")),
             writings: load_json(&dir.join("writing.json")),
@@ -174,6 +177,15 @@ impl Store {
             self.sentence_tenses.insert(t.word.trim().to_lowercase(), t.clone());
         }
         log_err(save_json(&self.dir.join("sentence_tenses.json"), &self.sentence_tenses));
+    }
+
+    pub fn put_scene(&mut self, sentence: &str, img: crate::scenes::SceneImage) {
+        self.scenes.insert(sentence.trim().to_lowercase(), img);
+        log_err(save_json(&self.dir.join("scenes.json"), &self.scenes));
+    }
+
+    pub fn scenes_dir(&self) -> PathBuf {
+        self.dir.join("scenes")
     }
 
     pub fn put_speed_script(&mut self, day: u32, p: &crate::claude::SpeedPassage) {

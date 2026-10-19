@@ -91,6 +91,11 @@ pub struct App {
     pub tense_job: Pending<Vec<crate::tenses::TenseSet>>,
     pub tense_tried: Option<chrono::NaiveDate>,
     pub sentence_tense_job: Pending<Vec<crate::tenses::TenseSet>>,
+    /// 받아쓰기 picture being looked up (sentence, result), sentences already tried this run,
+    /// and the decoded pictures by file name.
+    pub scene_job: Pending<(String, crate::scenes::SceneImage)>,
+    pub scene_tried: std::collections::HashSet<String>,
+    pub scene_tex: std::collections::HashMap<String, Option<egui::TextureHandle>>,
     pub sentence_tense_tried: Option<chrono::NaiveDate>,
     /// 오늘의 문장 만들기 in progress: (word, mission).
     pub word_mission: Option<(String, crate::screens::mission::Mission)>,
@@ -203,6 +208,9 @@ impl App {
             tense_job: Pending::default(),
             tense_tried: None,
             sentence_tense_job: Pending::default(),
+            scene_job: Pending::default(),
+            scene_tried: Default::default(),
+            scene_tex: Default::default(),
             sentence_tense_tried: None,
             selfx: SelfExprState::default(),
             roleplay: RoleplayState::default(),

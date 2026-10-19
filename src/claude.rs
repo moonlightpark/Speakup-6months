@@ -462,6 +462,23 @@ impl Claude {
             .collect())
     }
 
+    /// 받아쓰기 picture: a short photo search for the situation of a sentence.
+    pub fn scene_query(&self, sentence: &str) -> Result<String> {
+        let schema = obj(json!({"query": s()}));
+        let user = format!(
+            "Scene image: a learner hears this English sentence and a photo of its situation is shown with it. \
+             Give a short photo search (2-4 plain English words, concrete things or a place, no names, no abstract words) \
+             that would find a fitting stock photo on Wikimedia Commons, e.g. \"I'd like a cup of coffee.\" → \"coffee cup cafe\", \
+             \"Where were you born?\" → \"newborn baby hospital\".\n\nSentence: {sentence}"
+        );
+        #[derive(Deserialize)]
+        struct Out {
+            query: String,
+        }
+        let out: Out = self.call(user, schema, "low")?;
+        Ok(out.query.trim().to_string())
+    }
+
     /// 오늘의 문장 만들기: an original sentence with one of the day's words, on the week's theme,
     /// practising the week's grammar.
     pub fn check_sentence_mission(&self, word: &str, meaning_ko: &str, theme: &str, grammar: &str, transcript: &str, level: f32) -> Result<WordUseCheck> {

@@ -128,6 +128,8 @@ fn respond(body: &Value) -> Value {
             })
             .collect();
         json!({"items": items})
+    } else if prompt.starts_with("Scene image:") {
+        json!({"query": "coffee cup cafe"})
     } else if prompt.starts_with("Sentence tenses:") {
         // Only "I wake up early." changes tense here; the idioms stay as they are.
         let items: Vec<Value> = prompt
@@ -2144,4 +2146,34 @@ fn ft63_listening_lab_shows_todays_words_on_youglish() {
     t.click(&words[2]);
     t.steps(1);
     assert!(url(&t).ends_with(&format!("/{}/english", words[2])));
+}
+
+#[test]
+fn ft64_dictation_shows_a_picture_of_the_situation() {
+    let dir = temp_dir("scenes");
+    // A saved picture for the second sentence.
+    std::fs::create_dir_all(dir.join("scenes")).unwrap();
+    image::RgbImage::from_pixel(40, 30, image::Rgb([200, 120, 40])).save(dir.join("scenes").join("tea.png")).unwrap();
+    let mut t = launch_at(dir, true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.items.push(StudyItem { id: "s:1".into(), kind: ItemKind::Sentence, text: "I like coffee very much.".into(), meaning_ko: "나는 커피를 아주 좋아해.".into(), ..Default::default() });
+        s.items.push(StudyItem { id: "s:2".into(), kind: ItemKind::Sentence, text: "I drink green tea.".into(), meaning_ko: "나는 녹차를 마셔.".into(), ..Default::default() });
+        let img = crate::scenes::SceneImage { query: "green tea".into(), file: "tea.png".into(), title: "Green tea".into(), license: "CC0".into(), artist: String::new() };
+        s.scenes.insert("i drink green tea.".into(), img);
+    });
+    t.nav("✏  쓰기");
+    let first = t.app().writing.queue_current();
+    // Claude turns the sentence into a photo search; the result is kept (no photo in tests).
+    t.wait("scene lookup", |a| a.store.scenes.len() == 2);
+    let p = t.prompts().into_iter().find(|p| p.starts_with("Scene image:")).unwrap();
+    assert!(p.contains(&format!("Sentence: {first}")));
+    let saved = std::fs::read_to_string(t.dir.join("scenes.json")).unwrap();
+    assert!(saved.contains("coffee cup cafe"), "{saved}");
+    // The sentence with a saved photo shows it with its credit.
+    if first != "I drink green tea." {
+        t.app_mut().writing.next_sentence();
+        t.steps(3);
+    }
+    assert!(t.has("사진: Green tea · CC0 (Wikimedia Commons)"));
 }

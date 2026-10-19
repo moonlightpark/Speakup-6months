@@ -29,6 +29,7 @@ mod srs;
 mod storage;
 mod speed_scripts;
 mod web;
+mod scenes;
 mod tenses;
 mod stt;
 mod theme;
