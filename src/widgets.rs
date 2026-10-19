@@ -232,6 +232,22 @@ pub struct Capture {
     pub stopped_at: Option<std::time::Instant>,
     /// Recognize Korean instead of the target language (translator).
     pub korean: bool,
+    /// When the microphone really started listening, and when sound last came in.
+    listening_since: Option<std::time::Instant>,
+    last_sound: Option<std::time::Instant>,
+    heard_sound: bool,
+}
+
+/// The "듣고 있어요…" line appears this long after listening starts (the red button says it first).
+pub const LISTEN_LABEL_DELAY: f32 = 1.5;
+/// Listening ends after this long without any sound: cancelled if nothing was heard at all.
+pub const SILENCE_CANCEL_SECS: f32 = 8.0;
+const SOUND_LEVEL: f32 = 0.05;
+
+/// What to do after `quiet` seconds without sound: None = keep listening, Some(true) = stop and
+/// recognize what was said, Some(false) = cancel (nothing was said).
+pub fn silence_action(quiet: f32, heard_sound: bool) -> Option<bool> {
+    (quiet >= SILENCE_CANCEL_SECS).then_some(heard_sound)
 }
 
 impl Capture {
@@ -256,6 +272,9 @@ impl Capture {
         self.error = None;
         self.heard_voice = false;
         self.silent_since = None;
+        self.listening_since = None;
+        self.last_sound = None;
+        self.heard_sound = false;
         voice.speaker.stop();
         voice.player.stop();
         if voice.recorder.is_recording() {
@@ -282,6 +301,14 @@ impl Capture {
         voice.last_recording = audio.clone();
         let stt = if self.korean { &voice.stt_ko } else { &voice.stt };
         self.rx.from_receiver(stt.transcribe(audio));
+    }
+
+    /// Stops listening without recognizing anything (nothing was said).
+    fn cancel_silent(&mut self, voice: &mut Voice) {
+        self.recording = false;
+        voice.recorder.stop();
+        crate::applog::write("mic: 소리 없음 — 녹음 자동 취소");
+        self.error = Some(format!("🔇 {SILENCE_CANCEL_SECS:.0}초 동안 소리가 들리지 않아 녹음을 취소했어요. 다시 눌러서 말해 보세요."));
     }
 
     /// Big round mic button. Returns the transcript once recognition finishes.
@@ -344,6 +371,21 @@ impl Capture {
         if self.recording && voice.recorder.problem().is_some() && voice.recorder.elapsed() > 1.5 {
             self.finish(voice);
         }
+        // Nothing heard for a while: cancel (or, after speech, stop and recognize it).
+        if self.recording && !starting && voice.recorder.state() == crate::audio::RecState::Recording {
+            let now = std::time::Instant::now();
+            self.listening_since.get_or_insert(now);
+            if voice.recorder.level() > SOUND_LEVEL {
+                self.heard_sound = true;
+                self.last_sound = Some(now);
+            }
+            let quiet = now.duration_since(self.last_sound.or(self.listening_since).unwrap_or(now)).as_secs_f32();
+            match silence_action(quiet, self.heard_sound) {
+                Some(true) => self.finish(voice),
+                Some(false) => self.cancel_silent(voice),
+                None => {}
+            }
+        }
         if self.recording && self.auto_stop {
             let lvl = voice.recorder.level();
             if lvl > 0.08 {
@@ -358,6 +400,9 @@ impl Capture {
         }
         let status = if starting {
             "마이크 준비 중…".to_string()
+        } else if self.recording && self.listening_since.is_none_or(|t| t.elapsed().as_secs_f32() < LISTEN_LABEL_DELAY) {
+            // Blank at first (same height), so the line doesn't flash up the moment the mic opens.
+            " ".to_string()
         } else if self.recording {
             format!("듣고 있어요… {:.0}초 (다 말하면 다시 누르세요)", voice.recorder.elapsed())
         } else if transcribing {
@@ -522,6 +567,13 @@ pub enum DrillEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn silence_cancels_or_stops_after_eight_seconds() {
+        assert_eq!(silence_action(7.9, false), None);
+        assert_eq!(silence_action(8.0, false), Some(false), "nothing said: cancel");
+        assert_eq!(silence_action(8.5, true), Some(true), "said something, then quiet: recognize it");
+    }
 
     #[test]
     fn sentence_end_detection() {
