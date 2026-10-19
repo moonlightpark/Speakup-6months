@@ -261,6 +261,10 @@ impl Capture {
         Self { auto_stop: true, ..Default::default() }
     }
 
+    pub fn is_recording(&self) -> bool {
+        self.recording
+    }
+
     /// Starts recording immediately (used to auto-start the mic in speed drills).
     pub fn start_now(&mut self, voice: &mut Voice) {
         if !self.recording && !self.rx.running() {

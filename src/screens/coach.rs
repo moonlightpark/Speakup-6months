@@ -14,8 +14,29 @@ pub const WEEKLY_QUESTION: (&str, &str) = ("Tell me about yourself and what you 
 /// Human tutor lessons are recommended from month 3.
 pub const TUTOR_FROM_DAY: i64 = 61;
 pub const MOCK_TEST_EVERY_DAYS: i64 = 14;
-/// 4/3/2: the same topic in 4, 3 and 2 minutes.
+/// 4/3/2: the same script read three times, in time limits of 4 : 3 : 2 (at most 4, 3, 2 minutes).
 pub const ROUNDS: [f32; 3] = [240.0, 180.0, 120.0];
+
+/// 4/3/2 time limits for a script: the last round is the script at the target pace for the
+/// level, the first two get 4/2 and 3/2 of that (never under 10 s, never over 4/3/2 minutes).
+pub fn round_limits(words: usize, target_wpm: f32) -> [f32; 3] {
+    let last = (words as f32 / target_wpm * 60.0).max(10.0);
+    let mut out = [0.0; 3];
+    for (k, cap) in ROUNDS.iter().enumerate() {
+        out[k] = (last * cap / ROUNDS[2]).min(*cap).round();
+    }
+    out
+}
+
+/// "1분 20초" / "40초".
+fn mmss(secs: f32) -> String {
+    let s = secs.round() as u32;
+    match (s / 60, s % 60) {
+        (0, x) => format!("{x}초"),
+        (m, 0) => format!("{m}분"),
+        (m, x) => format!("{m}분 {x}초"),
+    }
+}
 
 /// Offline listen-and-respond questions: (question, 한국어, sample answer).
 const LISTEN_QUESTIONS: &[(&str, &str, &str)] = &[
@@ -33,13 +54,13 @@ const LISTEN_QUESTIONS: &[(&str, &str, &str)] = &[
     ("What's the best thing about your job?", "일에서 제일 좋은 점이 뭐예요?", "I like my team. Everyone helps each other."),
 ];
 
-/// Offline 4/3/2 topics: (topic, 한국어).
-const TOPICS: &[(&str, &str)] = &[
-    ("Describe your typical day.", "평범한 하루를 설명해 보세요."),
-    ("Talk about a trip you remember well.", "기억에 남는 여행 이야기를 해 보세요."),
-    ("Describe your job or your studies.", "하는 일이나 공부를 설명해 보세요."),
-    ("Talk about a friend who is important to you.", "소중한 친구에 대해 이야기해 보세요."),
-    ("What do you like to do on weekends, and why?", "주말에 무엇을 즐겨 하는지, 그 이유도 말해 보세요."),
+/// Example scripts for 4/3/2 when nothing is pasted: (title, script).
+const SAMPLE_SCRIPTS: &[(&str, &str)] = &[
+    ("My typical day", "I usually get up at seven. I make coffee and check my messages. Then I take the subway to work. It takes about forty minutes, so I listen to podcasts on the way. At work, I have a lot of meetings in the morning. After lunch, I focus on my own tasks. I get home at around seven and cook a simple dinner. Before bed, I read a book for half an hour."),
+    ("A trip I remember", "Last spring, I went to Jeju Island with two friends. We rented a small car and drove along the coast. The sea was so blue, and the weather was perfect. On the second day, we climbed a mountain early in the morning. It was hard, but the view from the top was amazing. In the evening, we ate fresh seafood at a local market. It was a short trip, but I still remember every moment."),
+    ("My job", "I work at a small design company in Seoul. My team makes websites and apps for other businesses. Every morning, we have a short meeting to share our plans for the day. I spend most of my time talking with clients and checking the schedule. Sometimes the deadlines are tight, so it can be stressful. But I like my job because I learn something new every week."),
+    ("A good friend", "My best friend's name is Minji. We met in high school, so we have known each other for fifteen years. She is funny, kind, and very honest. When I have a problem, she always listens to me first. We don't meet very often now because she lives in Busan. But we call each other every weekend and talk for hours. I'm really lucky to have a friend like her."),
+    ("My weekends", "On weekends, I try to relax and do things I enjoy. On Saturday mornings, I go to the gym or ride my bike along the river. In the afternoon, I often meet my friends for coffee. On Sundays, I usually stay home and clean the house. In the evening, I watch a movie or an English drama. It helps me rest and get ready for the new week."),
 ];
 
 #[derive(Default)]
@@ -65,11 +86,25 @@ pub struct RoundResult {
     pub secs: f32,
     pub words: usize,
     pub wpm: f32,
+    /// How much of the script was read right (0-100).
+    pub accuracy: f32,
 }
 
+/// 4/3/2 reading: paste an English script, hear it, read along sentence by sentence, then read
+/// the whole of it three times in shorter and shorter time.
 #[derive(Default)]
 pub struct FourThreeTwoState {
-    pub topic: Option<(String, String)>,
+    /// What is in the paste box.
+    pub input: String,
+    /// The script being practised, split into sentences.
+    pub script: Option<Vec<String>>,
+    /// Read-along: the sentence, its capture and the last score.
+    pub follow_idx: usize,
+    pub follow: Capture,
+    pub follow_result: Option<(String, crate::scoring::ScoreResult)>,
+    pub followed: Vec<bool>,
+    /// false = ② read along, true = ③ 4/3/2 rounds (one mic on screen at a time).
+    pub rounds: bool,
     pub capture: Capture,
     pub results: Vec<RoundResult>,
 }
@@ -294,56 +329,190 @@ impl App {
 
     // ------------------------------------------------------------ 4/3/2 speaking
 
-    /// The same topic for 4, then 3, then 2 minutes: more fluent each round.
+    /// 4/3/2 reading: paste a script → ① listen → ② read along sentence by sentence → ③ read
+    /// the whole script 3 times in 4 : 3 : 2 time.
     pub fn four_three_two_ui(&mut self, ui: &mut Ui) {
         card(ui, |ui| {
-            ui.label("4/3/2 말하기: 같은 주제를 4분 → 3분 → 2분 동안 반복해서 말해요. 같은 내용을 더 짧은 시간에 말하면서 유창해집니다.");
-            ui.label(RichText::new("첫 라운드는 정확하게, 라운드마다 조금 더 빨리. 시간이 끝나면 자동으로 멈춰요.").color(muted()));
+            ui.label("4/3/2 따라 읽기: 영어 대본을 붙여넣으면 ① 원어민 음성으로 들려주고 ② 문장마다 따라 읽은 뒤 ③ 대본 전체를 3번, 4 : 3 : 2 시간 안에 점점 빠르게 읽어요.");
+            ui.label(RichText::new("같은 대본을 더 짧은 시간에 정확하게 읽을수록 문장이 입에 붙어요. 시간이 끝나면 자동으로 멈춰요.").color(muted()));
         });
         ui.add_space(6.0);
-        let Some((topic, topic_ko)) = self.coach.ftt.topic.clone() else {
-            if ui.add(egui::Button::new(RichText::new("▶ 시작하기").size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
-                let q = self.lesson.as_ref().map(|l| (l.self_expression.question.clone(), l.self_expression.question_ko.clone())).filter(|q| !q.0.is_empty());
-                let day = curriculum::day_number(&self.store.profile) as usize;
-                let fallback = TOPICS[day % TOPICS.len()];
-                self.coach.ftt.topic = Some(q.unwrap_or((fallback.0.into(), fallback.1.into())));
-                self.coach.ftt.results.clear();
-                self.coach.ftt.capture = Capture::default();
-            }
+        let Some(sentences) = self.coach.ftt.script.clone() else {
+            self.ftt_paste_ui(ui);
             return;
         };
+        let script = sentences.join(" ");
+        let size = self.store.settings.list_size().max(18.0);
+        let mut change = false;
+        // ① Listen to the whole script.
+        card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("① 듣기").size(18.0).strong().color(ACCENT));
+                ui.label(RichText::new(format!("{}문장 · {}단어", sentences.len(), word_count(&script))).color(muted()));
+            });
+            ui.horizontal_wrapped(|ui| {
+                if ui.add(egui::Button::new("🔊 전체 듣기").min_size(ACTION_BUTTON)).clicked() {
+                    self.voice.say(&script);
+                }
+                if ui.add(egui::Button::new("🐢 천천히 듣기").min_size(ACTION_BUTTON)).clicked() {
+                    self.voice.say_slow(&script);
+                }
+                if ui.add(egui::Button::new("⏹ 멈춤").min_size(ACTION_BUTTON)).clicked() {
+                    self.voice.speaker.stop();
+                }
+                change = ui.add(egui::Button::new("✏ 대본 바꾸기").min_size(ACTION_BUTTON)).clicked();
+            });
+        });
+        if change {
+            self.voice.speaker.stop();
+            self.coach.ftt.input = script;
+            self.coach.ftt.script = None;
+            return;
+        }
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            let mut rounds = self.coach.ftt.rounds;
+            ui.selectable_value(&mut rounds, false, RichText::new("② 문장별 따라 읽기").size(16.0));
+            ui.label(RichText::new("→").color(muted()));
+            ui.selectable_value(&mut rounds, true, RichText::new("③ 4/3/2 통째로 읽기").size(16.0));
+            if rounds != self.coach.ftt.rounds {
+                self.voice.speaker.stop();
+                self.coach.ftt.rounds = rounds;
+            }
+        });
+        ui.add_space(4.0);
+        if self.coach.ftt.rounds {
+            self.ftt_rounds_ui(ui, &script, size);
+        } else {
+            self.ftt_follow_ui(ui, &sentences, size);
+        }
+    }
+
+    fn ftt_paste_ui(&mut self, ui: &mut Ui) {
+        let mut start = false;
+        card(ui, |ui| {
+            ui.label(RichText::new("📋 영어 대본 붙여넣기").size(18.0).strong());
+            ui.label(RichText::new("연습할 영어 글(대본·기사·스피치·드라마 대사 등)을 붙여넣으세요. 문장 단위로 나눠서 연습해요.").color(muted()));
+            ui.add(egui::TextEdit::multiline(&mut self.coach.ftt.input).desired_rows(8).desired_width(f32::INFINITY).hint_text("Paste an English script here…"));
+            let ok = self.coach.ftt.input.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 10;
+            ui.horizontal_wrapped(|ui| {
+                start = ui.add_enabled(ok, egui::Button::new(RichText::new("✔ 이 대본으로 시작").size(17.0).color(egui::Color32::WHITE)).fill(ACCENT).min_size(BIG_BUTTON)).clicked();
+                if ui.add(egui::Button::new("📄 예시 대본 넣기").min_size(ACTION_BUTTON)).clicked() {
+                    let day = curriculum::day_number(&self.store.profile) as usize;
+                    self.coach.ftt.input = SAMPLE_SCRIPTS[day % SAMPLE_SCRIPTS.len()].1.to_string();
+                }
+                if !self.coach.ftt.input.is_empty() && ui.add(egui::Button::new("🗑 지우기").min_size(ACTION_BUTTON)).clicked() {
+                    self.coach.ftt.input.clear();
+                }
+            });
+            if !ok && !self.coach.ftt.input.trim().is_empty() {
+                ui.label(RichText::new("영어 문장을 붙여넣어 주세요.").color(warn()).small());
+            }
+        });
+        if start {
+            let sentences = crate::screens::speaking::split_sentences(&self.coach.ftt.input.split_whitespace().collect::<Vec<_>>().join(" "));
+            crate::applog!("4/3/2: 대본 {}문장으로 시작", sentences.len());
+            self.coach.ftt = FourThreeTwoState { input: std::mem::take(&mut self.coach.ftt.input), followed: vec![false; sentences.len()], script: Some(sentences), ..Default::default() };
+        }
+    }
+
+    /// ② One sentence at a time: hear it, say it, see the score.
+    fn ftt_follow_ui(&mut self, ui: &mut Ui, sentences: &[String], size: f32) {
+        let n = sentences.len();
+        let i = self.coach.ftt.follow_idx.min(n.saturating_sub(1));
+        let sentence = &sentences[i];
+        let pass = self.store.settings.pass_score;
+        let mut go: Option<usize> = None;
+        let mut to_rounds = false;
+        card(ui, |ui| {
+            let done = self.coach.ftt.followed.iter().filter(|d| **d).count();
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("② 따라 읽기").size(18.0).strong().color(ACCENT));
+                ui.label(RichText::new(format!("{}/{n} 문장 · 통과 {done}", i + 1)).color(muted()));
+            });
+            ui.horizontal_wrapped(|ui| {
+                speaker_button(ui, &mut self.voice, sentence);
+                ui.label(RichText::new(sentence).size(size).strong().color(text_strong()));
+            });
+            ui.label(RichText::new("🔊 듣고 → 🎤 눌러서 똑같이 따라 읽어요").color(muted()).small());
+            ui.vertical_centered(|ui| {
+                let limit = 6.0 + word_count(sentence) as f32;
+                if let Some(t) = self.coach.ftt.follow.ui(ui, &mut self.voice, limit) {
+                    let r = crate::scoring::score(sentence, &t);
+                    self.store.log_attempt("4/3/2 따라 읽기", sentence, &t, r.score);
+                    if r.score >= pass {
+                        self.coach.ftt.followed[i] = true;
+                    }
+                    self.coach.ftt.follow_result = Some((t, r));
+                }
+            });
+            if let Some((t, r)) = &self.coach.ftt.follow_result {
+                let ok = r.score >= pass;
+                ui.label(RichText::new(format!("{} {:.0}점 — \"{t}\"", if ok { "✅" } else { "🔁" }, r.score)).color(if ok { GOOD } else { warn() }));
+            }
+            ui.horizontal(|ui| {
+                if ui.add_enabled(i > 0, egui::Button::new("◀ 이전 문장").min_size(ACTION_BUTTON)).clicked() {
+                    go = Some(i - 1);
+                }
+                if ui.add_enabled(i + 1 < n, egui::Button::new("다음 문장 ▶").min_size(ACTION_BUTTON)).clicked() {
+                    go = Some(i + 1);
+                }
+                if i + 1 == n && ui.add(egui::Button::new(RichText::new("③ 통째로 읽기로 ▶").color(egui::Color32::WHITE)).fill(GOOD).min_size(ACTION_BUTTON)).clicked() {
+                    to_rounds = true;
+                }
+            });
+        });
+        if to_rounds {
+            self.coach.ftt.rounds = true;
+        }
+        if let Some(k) = go {
+            self.coach.ftt.follow_idx = k;
+            self.coach.ftt.follow_result = None;
+            self.coach.ftt.follow = Capture::default();
+            self.voice.say(&sentences[k]);
+        }
+    }
+
+    /// ③ The whole script three times, in 4 : 3 : 2 time.
+    fn ftt_rounds_ui(&mut self, ui: &mut Ui, script: &str, size: f32) {
+        let words = word_count(script);
+        let limits = round_limits(words, crate::screens::speed::target_wpm(self.store.profile.level));
         let round = self.coach.ftt.results.len();
         card(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                speaker_button(ui, &mut self.voice, &topic);
-                ui.label(RichText::new(&topic).size(20.0).strong());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("③ 4/3/2 읽기").size(18.0).strong().color(ACCENT));
+                ui.label(RichText::new(format!("{} → {} → {}", mmss(limits[0]), mmss(limits[1]), mmss(limits[2]))).color(muted()));
             });
-            crate::grammar::ko_label(ui, &topic_ko, 16.0, muted());
-            ui.add_space(6.0);
             if round < ROUNDS.len() {
-                let limit = ROUNDS[round];
-                ui.label(RichText::new(format!("라운드 {}/3 · {:.0}분", round + 1, limit / 60.0)).size(18.0).strong().color(ACCENT));
-                if self.voice.recorder.is_recording() {
+                let limit = limits[round];
+                ui.label(RichText::new(format!("라운드 {}/3 · {} 안에 대본 전체 읽기", round + 1, mmss(limit))).size(18.0).strong());
+                if self.voice.recorder.is_recording() && self.coach.ftt.capture.is_recording() {
                     let left = (limit - self.voice.recorder.elapsed()).max(0.0);
                     ui.label(RichText::new(format!("남은 시간 {}:{:02}", left as u32 / 60, left as u32 % 60)).size(22.0).strong());
                 }
+                egui::Frame::new().fill(subtle_fill()).corner_radius(10.0).inner_margin(12.0).show(ui, |ui| {
+                    ui.label(RichText::new(script).size(size * 0.9).color(text_strong()));
+                });
                 ui.vertical_centered(|ui| {
                     if let Some(t) = self.coach.ftt.capture.ui(ui, &mut self.voice, limit) {
                         let secs = (self.voice.last_recording.len() as f32 / crate::audio::STT_RATE as f32).max(1.0);
-                        let words = word_count(&t);
-                        self.coach.ftt.results.push(RoundResult { limit, secs, words, wpm: words as f32 / (secs / 60.0) });
+                        let said = word_count(&t);
+                        let accuracy = crate::scoring::score(script, &t).score;
+                        self.store.log_attempt("4/3/2", &format!("라운드 {}", round + 1), &t, accuracy);
+                        self.coach.ftt.results.push(RoundResult { limit, secs, words: said, wpm: said as f32 / (secs / 60.0), accuracy });
                     }
                 });
             }
             for (i, r) in self.coach.ftt.results.iter().enumerate() {
                 ui.label(format!(
-                    "라운드 {} ({:.0}분): {}:{:02} 동안 {}단어 · {:.0} WPM",
+                    "라운드 {} ({} 제한): {}:{:02} 동안 {}단어 · {:.0} WPM · 정확도 {:.0}%",
                     i + 1,
-                    r.limit / 60.0,
+                    mmss(r.limit),
                     r.secs as u32 / 60,
                     r.secs as u32 % 60,
                     r.words,
-                    r.wpm
+                    r.wpm,
+                    r.accuracy
                 ));
             }
         });
@@ -351,14 +520,17 @@ impl App {
             self.speed_round_done();
         }
         if self.coach.ftt.results.len() == ROUNDS.len() {
-            let (a, b) = (self.coach.ftt.results[0].wpm, self.coach.ftt.results[2].wpm);
+            let r = &self.coach.ftt.results;
+            let (a, b) = (r[0].wpm, r[2].wpm);
             card(ui, |ui| {
                 let gain = if a > 0.0 { (b / a - 1.0) * 100.0 } else { 0.0 };
-                ui.label(RichText::new(format!("말하기 속도 {a:.0} → {b:.0} WPM ({gain:+.0}%)")).size(22.0).strong().color(if b >= a { GOOD } else { warn() }));
-                ui.label(RichText::new("같은 내용을 더 짧게, 더 빠르게 말할수록 말이 입에 붙어요.").color(muted()));
+                ui.label(RichText::new(format!("읽기 속도 {a:.0} → {b:.0} WPM ({gain:+.0}%)")).size(22.0).strong().color(if b >= a { GOOD } else { warn() }));
+                ui.label(RichText::new(format!("정확도 {:.0}% → {:.0}%", r[0].accuracy, r[2].accuracy)).size(18.0));
+                ui.label(RichText::new("속도가 올라도 정확도가 유지되면 성공! 같은 대본을 내일 한 번 더 하면 더 빨라져요.").color(muted()));
             });
-            if ui.button("↻ 다른 주제로 다시").clicked() {
-                self.coach.ftt.topic = None;
+            if ui.button("↻ 같은 대본으로 다시").clicked() {
+                self.coach.ftt.results.clear();
+                self.coach.ftt.capture = Capture::default();
             }
         }
     }
@@ -547,6 +719,15 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn round_limits_keep_the_4_3_2_ratio() {
+        // 60 words at 120 WPM: 30 s in the last round → 60 s, 45 s, 30 s.
+        assert_eq!(round_limits(60, 120.0), [60.0, 45.0, 30.0]);
+        // A very long script is capped at 4, 3, 2 minutes; a tiny one gets at least 10 s.
+        assert_eq!(round_limits(2000, 120.0), [240.0, 180.0, 120.0]);
+        assert_eq!(round_limits(3, 120.0), [20.0, 15.0, 10.0]);
+    }
 
     #[test]
     fn weekly_tutor_and_mock_test_schedules() {

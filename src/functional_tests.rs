@@ -1186,19 +1186,38 @@ fn ft29_four_three_two_speaking() {
     let mut t = launch("ftt");
     t.nav("⚡  스피드 트레이닝");
     t.click("⏱ 4/3/2 말하기");
-    t.nav("▶ 시작하기");
-    t.steps(3);
-    assert!(t.has("라운드 1/3 · 4분"));
-    t.say("I usually get up at seven and go to work by bus", 20.0);
-    assert!(t.has("라운드 2/3 · 3분"));
-    t.say("I usually get up at seven and go to work by bus", 12.0);
-    t.say("I usually get up at seven and go to work by bus", 8.0);
+    // Paste a script (the example one here), then start.
+    t.click("📄 예시 대본 넣기");
+    assert!(!t.app().coach.ftt.input.is_empty());
+    t.app_mut().coach.ftt.input = "I usually get up at seven. Then I go to work by bus. I like my job a lot.".into();
+    t.steps(2);
+    t.click("✔ 이 대본으로 시작");
+    let sentences = t.app().coach.ftt.script.clone().expect("script set");
+    assert_eq!(sentences.len(), 3);
+    assert!(t.has("① 듣기") && t.has("🔊 전체 듣기") && t.has("② 따라 읽기"));
+    // ② Read along: the first sentence, then the next one.
+    t.say(&sentences[0], 2.0);
+    assert!(t.app().coach.ftt.followed[0], "read right → passed");
+    t.click("다음 문장 ▶");
+    assert!(t.has("2/3 문장"));
+    // ③ The whole script three times in 4 : 3 : 2 time (16 words → 20 s, 15 s, 10 s at least).
+    t.click("③ 4/3/2 통째로 읽기");
+    assert!(t.has("라운드 1/3"));
+    let script = sentences.join(" ");
+    t.say(&script, 9.0);
+    assert!(t.has("라운드 2/3"));
+    t.say(&script, 7.0);
+    t.say(&script, 5.0);
     let r = &t.app().coach.ftt.results;
     assert_eq!(r.len(), 3);
-    assert!(r[2].wpm > r[0].wpm, "same words in less time → faster");
-    assert!(t.has("말하기 속도"));
+    assert!(r[2].wpm > r[0].wpm, "same script in less time → faster");
+    assert!(r[0].accuracy > 90.0, "read the script right");
+    assert!(t.has("읽기 속도") && t.has("정확도"));
     assert_eq!(t.app().store.profile.today.speed_rounds, 3);
     assert!(t.app().step_done("speed"));
+    // Back to the paste box with the script kept.
+    t.click("✏ 대본 바꾸기");
+    assert!(t.app().coach.ftt.script.is_none() && t.app().coach.ftt.input.contains("I like my job"));
 }
 
 #[test]
