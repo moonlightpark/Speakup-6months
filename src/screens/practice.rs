@@ -873,6 +873,32 @@ impl App {
         }
     }
 
+    /// Words and sentences not finished yet — today's first, then earlier days' — for the
+    /// notifications.
+    pub fn unfinished_items(&mut self) -> (Vec<String>, Vec<String>) {
+        let ws = self.word_set();
+        let mut words: Vec<String> = ws
+            .phrases
+            .iter()
+            .map(|w| (w, WordKind::Chunk))
+            .chain(ws.words.iter().map(|w| (w, WordKind::Word)))
+            .chain(ws.expressions.iter().map(|w| (w, WordKind::Expression)))
+            .filter(|(w, k)| !self.entry_passed(&w.word, *k) && !self.is_known(&w.word, *k))
+            .map(|(w, _)| w.word.clone())
+            .collect();
+        words.extend(self.past_unfinished().into_iter().flat_map(|(_, v)| v.into_iter().map(|(w, _)| w.word)));
+        let lesson = self.lesson.clone().filter(|l| l.date == Some(today())).unwrap_or_default();
+        let idioms = self.idiom_set();
+        let in_deck = |t: &str| {
+            let id = srs::make_id(ItemKind::Sentence, t);
+            self.store.items.iter().any(|i| i.id == id)
+        };
+        let mut sentences: Vec<String> = idioms.iter().map(|i| i.en.clone()).chain(lesson.sentences.iter().map(|s| s.text.clone())).filter(|t| !in_deck(t)).collect();
+        let reps = self.store.settings.reps_new;
+        sentences.extend(self.past_reading_unfinished(reps).into_iter().flat_map(|(_, v)| v.into_iter().map(|(_, _, spec)| spec.target)));
+        (words, sentences)
+    }
+
     /// Already saved in the deck (passed on an earlier day or before a restart).
     fn entry_passed(&self, text: &str, kind: WordKind) -> bool {
         let id = srs::make_id(if kind == WordKind::Chunk { ItemKind::Sentence } else { ItemKind::Word }, text);

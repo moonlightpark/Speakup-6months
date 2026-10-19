@@ -47,6 +47,8 @@ pub struct Settings {
     /// Size of the English words and sentences in the 새 단어 / 문장 읽기 lists (설정 > 글자 크기),
     /// big enough to copy into a notebook.
     pub list_text_size: f32,
+    /// Minutes between notifications (top right); 0 = off.
+    pub notify_minutes: u32,
 }
 
 impl Settings {
@@ -85,6 +87,7 @@ impl Default for Settings {
             goal_cefr: "B1".into(),
             ko_colors_faded: false,
             list_text_size: 17.0,
+            notify_minutes: 5,
         }
     }
 }

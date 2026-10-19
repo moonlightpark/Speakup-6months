@@ -106,6 +106,7 @@ pub struct App {
     pub coach: crate::screens::coach::CoachState,
     pub test: Option<LevelTest>,
     pub toast: Option<(String, Instant)>,
+    pub notifier: crate::screens::notify::Notifier,
     pub vocab_filter: String,
     pub vocab_mode: usize,
     pub show_key: bool,
@@ -212,6 +213,7 @@ impl App {
             coach: Default::default(),
             test: None,
             toast: None,
+            notifier: Default::default(),
             vocab_filter: String::new(),
             vocab_mode: 0,
             show_key: false,
@@ -1404,6 +1406,11 @@ impl App {
             });
             ui.label(RichText::new("화면 색을 어둡게(다크) 또는 밝게(라이트) 바꿉니다. 바로 적용돼요.").color(muted()).small());
         });
+        card(ui, |ui| {
+            ui.label(RichText::new("🔔 알림").strong());
+            changed |= ui.add(egui::Slider::new(&mut self.store.settings.notify_minutes, 0..=30).text("분마다 알림 (0 = 끄기)")).changed();
+            ui.label(RichText::new("화면 오른쪽 위에 못 끝낸 단어·문장, 진행 중인 주차와 진척, 배운 내용, 다음 레벨을 앞당기는 방법을 번갈아 알려 줘요. 말하는 중에는 뜨지 않아요.").color(muted()).small());
+        });
         // English in the 새 단어 / 문장 읽기 lists, big enough to copy into a notebook.
         card(ui, |ui| {
             ui.label(RichText::new("🔠 단어·문장 리스트 글자 크기").strong());
@@ -1639,6 +1646,7 @@ impl eframe::App for App {
                 });
             });
         });
+        self.notifications_ui(ctx);
         if let Some((msg, at)) = &self.toast {
             if at.elapsed() < Duration::from_secs(3) {
                 // Every alert in the app: bottom right, wrapped so a long one stays on screen.

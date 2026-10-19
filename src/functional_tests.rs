@@ -2031,3 +2031,46 @@ fn ft58_reading_sentences_in_three_tenses_twice_each() {
     // A sentence that can't change tense: just itself.
     assert!(t.app().sentence_tense_specs("I am a boy.").is_empty());
 }
+
+#[test]
+fn ft59_notifications_at_the_top_right_take_turns() {
+    let mut t = launch("notify");
+    t.nav("📚  새 단어");
+    t.wait("lesson", |a| a.lesson.is_some());
+    t.nav("🏠  홈");
+    assert!(t.app().notifier.shown.is_none(), "not right away");
+    let mut show = |t: &mut T, kind: usize| {
+        t.app_mut().notifier.shown = None;
+        t.app_mut().notifier.idx = kind;
+        t.app_mut().notifier.next_at = std::time::Instant::now();
+        t.steps(2);
+        assert!(t.app().notifier.shown.is_some(), "kind {kind} shown");
+    };
+    // Unfinished words, with some of them named.
+    show(&mut t, 0);
+    assert!(t.has("아직 못 끝낸 단어") && t.has("deadline"));
+    // Unfinished sentences.
+    show(&mut t, 1);
+    assert!(t.has("아직 못 끝낸 문장"));
+    // The week of the program and how far along.
+    show(&mut t, 2);
+    assert!(t.has("1주차 프로그램 · 자기소개") && t.has("1일차 / 182일"));
+    // Progress and what was learned.
+    show(&mut t, 3);
+    assert!(t.has("시간 공부했어요") && t.has("숙어 문장"));
+    // How to reach the next level sooner.
+    show(&mut t, 4);
+    assert!(t.has("다음 레벨") && t.has("하루 20분만 더 하면"));
+    // A click opens the screen; ✖ closes.
+    t.click("📈 레벨 · 평가로 ▶");
+    assert_eq!(t.app().screen, Screen::Progress);
+    assert!(t.app().notifier.shown.is_none());
+    show(&mut t, 2);
+    t.click("✖");
+    assert!(t.app().notifier.shown.is_none());
+    // Off in settings: nothing comes.
+    t.app_mut().store.settings.notify_minutes = 0;
+    t.app_mut().notifier.next_at = std::time::Instant::now();
+    t.steps(2);
+    assert!(t.app().notifier.shown.is_none());
+}
