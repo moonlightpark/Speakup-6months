@@ -1195,6 +1195,7 @@ fn ft29_four_three_two_speaking() {
     let sentences = t.app().coach.ftt.script.clone().expect("script set");
     assert_eq!(sentences.len(), 3);
     assert!(t.has("① 듣기") && t.has("🔊 전체 듣기") && t.has("② 따라 읽기"));
+    assert!(t.has(&format!("{} ", sentences[2])), "the whole script is shown");
     // ② Read along: the first sentence, then the next one.
     t.say(&sentences[0], 2.0);
     assert!(t.app().coach.ftt.followed[0], "read right → passed");

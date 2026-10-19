@@ -344,6 +344,7 @@ impl App {
         let script = sentences.join(" ");
         let size = self.store.settings.list_size().max(18.0);
         let mut change = false;
+        let mut jump: Option<usize> = None;
         // ① Listen to the whole script.
         card(ui, |ui| {
             ui.horizontal(|ui| {
@@ -362,7 +363,38 @@ impl App {
                 }
                 change = ui.add(egui::Button::new("✏ 대본 바꾸기").min_size(ACTION_BUTTON)).clicked();
             });
+            // The whole script, sentence by sentence: the one being read along stands out, passed
+            // ones are green, and a click jumps there (and reads it out).
+            ui.add_space(4.0);
+            egui::Frame::new().fill(subtle_fill()).corner_radius(10.0).inner_margin(12.0).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal_wrapped(|ui| {
+                    for (k, sen) in sentences.iter().enumerate() {
+                        let current = !self.coach.ftt.rounds && k == self.coach.ftt.follow_idx;
+                        let passed = self.coach.ftt.followed.get(k).copied().unwrap_or(false);
+                        let color = if current { ACCENT } else if passed { GOOD } else { text_strong() };
+                        let mut text = RichText::new(format!("{sen} ")).size(size * 0.9).color(color);
+                        if current {
+                            text = text.strong().underline();
+                        }
+                        let r = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text("클릭하면 이 문장부터 따라 읽어요");
+                        if r.hovered() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if r.clicked() {
+                            jump = Some(k);
+                        }
+                    }
+                });
+            });
         });
+        if let Some(k) = jump {
+            self.coach.ftt.rounds = false;
+            self.coach.ftt.follow_idx = k;
+            self.coach.ftt.follow_result = None;
+            self.coach.ftt.follow = Capture::default();
+            self.voice.say(&sentences[k]);
+        }
         if change {
             self.voice.speaker.stop();
             self.coach.ftt.input = script;
