@@ -1924,3 +1924,16 @@ fn ft55_new_words_are_said_in_three_tenses_three_times_each() {
     let w = LessonWord { word: "explain".into(), meaning_ko: "설명하다".into(), ..Default::default() };
     assert_eq!(t2.app().tense_for(&w).past, "I was thinking of explaining.");
 }
+
+#[test]
+fn ft56_list_text_size_is_set_in_settings() {
+    let mut t = launch("listsize");
+    assert_eq!(t.app().store.settings.list_size(), 17.0);
+    t.nav("⚙  설정");
+    t.click("가 +");
+    t.click("가 +");
+    assert_eq!(t.app().store.settings.list_text_size, 21.0);
+    assert!(std::fs::read_to_string(t.dir.join("settings.json")).unwrap().contains("\"list_text_size\": 21.0"), "remembered");
+    t.click("기본(17)");
+    assert_eq!(t.app().store.settings.list_text_size, 17.0);
+}

@@ -279,7 +279,7 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, en);
                     let color = mark.map(|m| m.0).unwrap_or(text_strong());
-                    let text = RichText::new(en).size(17.0).strong().color(color);
+                    let text = RichText::new(en).size(self.store.settings.list_size()).strong().color(color);
                     if mark.is_some() {
                         // Click a word to practise just that one right away.
                         let r = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
@@ -615,7 +615,7 @@ impl App {
                                     WordKind::Expression => format!("💬 {}", w.word),
                                     WordKind::Word => w.word.clone(),
                                 };
-                                let r = ui.add(egui::Label::new(RichText::new(label).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                                let r = ui.add(egui::Label::new(RichText::new(label).size(self.store.settings.list_size()).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
                                 if r.hovered() {
                                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                                 }
@@ -777,7 +777,7 @@ impl App {
                             let (color, mark) = word_mark(self.store.word_stat(&spec.target).passes);
                             ui.horizontal_wrapped(|ui| {
                                 speaker_button(ui, &mut self.voice, &spec.target);
-                                let r = ui.add(egui::Label::new(RichText::new(label).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                                let r = ui.add(egui::Label::new(RichText::new(label).size(self.store.settings.list_size()).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
                                 if r.hovered() {
                                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                                 }
@@ -844,7 +844,7 @@ impl App {
                 let (color, mark) = word_mark(self.store.word_stat(target).passes);
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, target);
-                    let resp = ui.add(egui::Label::new(RichText::new(&r.label).size(16.5).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                    let resp = ui.add(egui::Label::new(RichText::new(&r.label).size(self.store.settings.list_size()).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
                     if resp.hovered() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                     }

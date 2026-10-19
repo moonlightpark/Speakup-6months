@@ -1375,6 +1375,33 @@ impl App {
             });
             ui.label(RichText::new("화면 색을 어둡게(다크) 또는 밝게(라이트) 바꿉니다. 바로 적용돼요.").color(muted()).small());
         });
+        // English in the 새 단어 / 문장 읽기 lists, big enough to copy into a notebook.
+        card(ui, |ui| {
+            ui.label(RichText::new("🔠 단어·문장 리스트 글자 크기").strong());
+            let range = crate::models::Settings::LIST_TEXT_SIZES;
+            let size = &mut self.store.settings.list_text_size;
+            ui.horizontal(|ui| {
+                if ui.add_enabled(*size > *range.start(), egui::Button::new("가 −")).clicked() {
+                    *size = (*size - 2.0).max(*range.start());
+                    changed = true;
+                }
+                changed |= ui.add(egui::Slider::new(size, range.clone()).step_by(1.0).suffix(" pt")).changed();
+                if ui.add_enabled(*size < *range.end(), egui::Button::new("가 +")).clicked() {
+                    *size = (*size + 2.0).min(*range.end());
+                    changed = true;
+                }
+                if ui.button("기본(17)").clicked() {
+                    *size = 17.0;
+                    changed = true;
+                }
+            });
+            let s = self.store.settings.list_size();
+            egui::Frame::new().fill(subtle_fill()).corner_radius(10.0).inner_margin(10.0).show(ui, |ui| {
+                ui.label(RichText::new("deadline").size(s).strong().color(text_strong()));
+                ui.label(RichText::new("I've got a lot on my plate.").size(s).strong().color(text_strong()));
+            });
+            ui.label(RichText::new("📚 새 단어 · 📖 문장 읽기 목록의 영어 단어와 문장만 커집니다 (노트에 옮겨 적을 때). 바로 적용돼요.").color(muted()).small());
+        });
         card(ui, |ui| {
             ui.label(RichText::new("Claude API").strong());
             ui.horizontal(|ui| {
