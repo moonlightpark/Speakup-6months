@@ -1612,8 +1612,10 @@ impl eframe::App for App {
         });
         if let Some((msg, at)) = &self.toast {
             if at.elapsed() < Duration::from_secs(3) {
-                egui::Area::new(egui::Id::new("toast")).anchor(egui::Align2::CENTER_BOTTOM, Vec2::new(0.0, -30.0)).show(ctx, |ui| {
-                    egui::Frame::new().fill(subtle_fill()).corner_radius(10.0).inner_margin(12.0).show(ui, |ui| {
+                // Every alert in the app: bottom right, wrapped so a long one stays on screen.
+                egui::Area::new(egui::Id::new("toast")).anchor(egui::Align2::RIGHT_BOTTOM, Vec2::new(-24.0, -24.0)).show(ctx, |ui| {
+                    ui.set_max_width(420.0);
+                    egui::Frame::new().fill(subtle_fill()).stroke(egui::Stroke::new(1.0, muted().gamma_multiply(0.5))).corner_radius(10.0).inner_margin(12.0).show(ui, |ui| {
                         ui.label(RichText::new(msg).size(16.0));
                     });
                 });
