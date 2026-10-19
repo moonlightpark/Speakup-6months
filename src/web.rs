@@ -12,19 +12,46 @@ pub struct WebRequest {
     pub zoom: f32,
 }
 
-/// Runs in every page: on YouGlish, scrolls past the site's header and search box so the
-/// "How to pronounce …" title and the video are at the top of the frame.
+/// Runs in every page: on YouGlish, shows only the video, its control bar and the caption box
+/// below it, as wide as the frame (everything else hidden). If the page isn't laid out as
+/// expected (the site changed), it is left as is, scrolled to the "How to pronounce" title.
 const PAGE_SCRIPT: &str = r#"
 if (location.host.endsWith('youglish.com')) {
-  let n = 0;
-  const t = setInterval(() => {
-    const hits = [...document.querySelectorAll('body *')].filter(e => /^\s*How to pronounce/.test(e.textContent || ''));
-    if (hits.length) {
-      hits.sort((a, b) => a.textContent.length - b.textContent.length);
-      hits[0].scrollIntoView({ block: 'start' });
-      clearInterval(t);
+  const KEEP = ['videowrapper', 'controlIdParent', 'captioncont', 'overlay', 'captcha_container'];
+  const isolate = () => {
+    const kept = KEEP.map(id => document.getElementById(id)).filter(Boolean);
+    if (!document.getElementById('videowrapper')) return false;
+    const chain = new Set();
+    for (const k of kept) for (let e = k; e && e !== document.documentElement; e = e.parentElement) chain.add(e);
+    for (const e of chain) {
+      if (kept.includes(e)) continue;
+      for (const c of e.children) {
+        if (!chain.has(c) && c.tagName !== 'SCRIPT' && c.tagName !== 'STYLE') c.style.setProperty('display', 'none', 'important');
+      }
+      if (e !== document.body) for (const [k, v] of [['margin', '0'], ['padding', '0'], ['max-width', 'none'], ['width', '100%'], ['border', 'none'], ['box-shadow', 'none']]) e.style.setProperty(k, v, 'important');
     }
-    if (++n > 40) clearInterval(t);
+    for (const id of ['videowrapper', 'controlIdParent', 'captioncont']) {
+      const e = document.getElementById(id);
+      if (e) { e.style.setProperty('max-width', 'none', 'important'); e.style.setProperty('margin', '0', 'important'); }
+    }
+    document.body.style.setProperty('margin', '0', 'important');
+    document.body.style.setProperty('padding', '0', 'important');
+    document.body.style.setProperty('overflow-x', 'hidden', 'important');
+    window.scrollTo(0, 0);
+    return true;
+  };
+  let n = 0, done = false;
+  // Repeated for a while: the site adds parts of the page after loading.
+  const t = setInterval(() => {
+    if (isolate()) done = true;
+    if (++n > 40) {
+      clearInterval(t);
+      if (!done) {
+        const hits = [...document.querySelectorAll('body *')].filter(e => /^\s*How to pronounce/.test(e.textContent || ''));
+        hits.sort((a, b) => a.textContent.length - b.textContent.length);
+        if (hits[0]) hits[0].scrollIntoView({ block: 'start' });
+      }
+    }
   }, 250);
 }
 "#;

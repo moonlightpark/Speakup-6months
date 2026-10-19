@@ -183,9 +183,10 @@ impl App {
             });
         });
         ui.add_space(6.0);
-        // YouGlish: the video with its caption and controls under it, as wide as the page.
+        // YouGlish shows only the video (16:9, as wide as the page), its control bar and the
+        // caption box under it.
         let video_w = ui.available_width().max(320.0);
-        let h = (video_w * 0.62 + 170.0).clamp(420.0, 900.0);
+        let h = video_w * 9.0 / 16.0 + 190.0;
         self.web_frame(ui, &url, video_w, h, 1.0, "YouGlish");
         ui.add_space(6.0);
         self.say_after_ui(ui, &w.word, "youglish", "🎤 영상 속 원어민 발음처럼 따라 말해 보세요");
