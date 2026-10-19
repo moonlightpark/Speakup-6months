@@ -238,7 +238,7 @@ pub struct Capture {
     heard_sound: bool,
 }
 
-/// The "듣고 있어요…" line appears this long after listening starts (the red button says it first).
+/// The mic stays grey ("마이크 준비 중…") this long after listening starts, then turns red with "듣고 있어요…".
 pub const LISTEN_LABEL_DELAY: f32 = 1.5;
 /// Listening ends after this long without any sound: cancelled if nothing was heard at all.
 pub const SILENCE_CANCEL_SECS: f32 = 8.0;
@@ -341,7 +341,9 @@ impl Capture {
         let p = ui.painter();
         let transcribing = self.rx.running();
         let starting = self.recording && voice.recorder.state() == crate::audio::RecState::Starting;
-        if starting {
+        // Grey (and "준비 중") until the mic has been listening LISTEN_LABEL_DELAY, then red.
+        let warming = starting || self.recording && self.listening_since.is_none_or(|t| t.elapsed().as_secs_f32() < LISTEN_LABEL_DELAY);
+        if warming {
             // Grey until the microphone is really listening, then red.
             p.circle_filled(c, size / 2.0, MIC_WAITING);
             draw_mic_icon(p, c);
@@ -398,11 +400,8 @@ impl Capture {
                 }
             }
         }
-        let status = if starting {
+        let status = if warming {
             "마이크 준비 중…".to_string()
-        } else if self.recording && self.listening_since.is_none_or(|t| t.elapsed().as_secs_f32() < LISTEN_LABEL_DELAY) {
-            // Blank at first (same height), so the line doesn't flash up the moment the mic opens.
-            " ".to_string()
         } else if self.recording {
             format!("듣고 있어요… {:.0}초 (다 말하면 다시 누르세요)", voice.recorder.elapsed())
         } else if transcribing {
