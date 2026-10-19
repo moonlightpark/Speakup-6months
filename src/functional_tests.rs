@@ -760,6 +760,7 @@ fn ft13_listening_lab_segments_loop_and_shadowing() {
     std::fs::write(vdir.join("video.json"), serde_json::to_string(&video).unwrap()).unwrap();
     let mut t = launch_at(dir, true, |s| s.profile.placement_done = true);
     t.nav("🎧  리스닝 랩");
+    t.click("📺 유튜브 구간반복");
     t.click_contains("Test Talk");
     assert!(t.has("Hello everyone.") && t.has("1 / 2"));
     t.click("▶ 재생");
@@ -2073,4 +2074,29 @@ fn ft59_notifications_at_the_top_right_take_turns() {
     t.app_mut().notifier.next_at = std::time::Instant::now();
     t.steps(2);
     assert!(t.app().notifier.shown.is_none());
+}
+
+#[test]
+fn ft60_listening_lab_shows_todays_sentences_on_playphrase() {
+    let mut t = launch("playphrase");
+    t.nav("🎧  리스닝 랩");
+    t.wait("lesson", |a| a.lesson.is_some());
+    assert!(t.has("🎬 오늘 문장 영상 (playphrase)") && t.has("🌐 브라우저로 열기"));
+    // Today's 문장 읽기 sentences (here the lesson's): the web view is asked for the first.
+    let url = |t: &T| t.app().web_req.as_ref().map(|r| r.url.clone()).unwrap_or_default();
+    assert_eq!(url(&t), "https://www.playphrase.me/#/search?q=I+am+a+boy&language=en");
+    t.click("다음 문장 ▶");
+    t.steps(1);
+    assert_eq!(url(&t), "https://www.playphrase.me/#/search?q=I+wake+up+early&language=en");
+    // Saying it after the clips is scored.
+    t.say("I wake up early.", 1.0);
+    assert!(t.app().listening.phrase_result.as_ref().is_some_and(|(_, r)| r.score > 90.0));
+    // A sentence picked from the list.
+    t.click("I am a boy.");
+    t.steps(1);
+    assert!(url(&t).contains("I+am+a+boy"));
+    // Other tabs: no web view.
+    t.click("📺 유튜브 구간반복");
+    t.steps(1);
+    assert!(t.app().web_req.is_none());
 }

@@ -107,6 +107,9 @@ pub struct App {
     pub test: Option<LevelTest>,
     pub toast: Option<(String, Instant)>,
     pub notifier: crate::screens::notify::Notifier,
+    /// The in-window web page and what a screen asked of it this frame.
+    pub web: crate::web::WebPane,
+    pub web_req: Option<crate::web::WebRequest>,
     pub vocab_filter: String,
     pub vocab_mode: usize,
     pub show_key: bool,
@@ -214,6 +217,8 @@ impl App {
             test: None,
             toast: None,
             notifier: Default::default(),
+            web: Default::default(),
+            web_req: None,
             vocab_filter: String::new(),
             vocab_mode: 0,
             show_key: false,
@@ -1581,7 +1586,8 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.web_req = None;
         self.roll_day();
         self.poll_jobs();
         self.apply_support_stage(ctx);
@@ -1647,6 +1653,8 @@ impl eframe::App for App {
             });
         });
         self.notifications_ui(ctx);
+        // The web page is a native view over the window: shown only while a screen asks for it.
+        self.web.sync(frame, self.web_req.as_ref(), ctx.zoom_factor(), self.store.dir.join("webview"));
         if let Some((msg, at)) = &self.toast {
             if at.elapsed() < Duration::from_secs(3) {
                 // Every alert in the app: bottom right, wrapped so a long one stays on screen.

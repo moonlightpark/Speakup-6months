@@ -1,6 +1,6 @@
 [package]
 name = "speakup"
-version = "1.19.0"
+version = "1.20.0"
 edition = "2024"
 rust-version = "1.86"
 description = "6개월 영어 듣기·말하기 완성 – 음성 지원 영어 학습 데스크톱 앱 (Claude API)"
@@ -23,6 +23,8 @@ rand = "0.9"
 open = "5"
 bzip2 = "0.5"
 tar = "0.4"
+# playphrase.me clips inside the window (macOS WKWebView / Windows WebView2).
+wry = { version = "0.53", default-features = false, features = ["os-webview"] }
 
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["eframe"] }

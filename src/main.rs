@@ -28,6 +28,7 @@ mod screens;
 mod srs;
 mod storage;
 mod speed_scripts;
+mod web;
 mod tenses;
 mod stt;
 mod theme;

@@ -12,8 +12,12 @@ use crate::youtube::{self, Video};
 use egui::{RichText, Ui};
 
 pub struct ListeningState {
-    /// 0 = YouTube shadowing, 1 = listen and respond.
+    /// 0 = YouTube shadowing, 1 = listen and respond, 2 = today's sentences on playphrase.me.
     pub tab: usize,
+    /// 🎬 tab: the sentence shown, and saying it after the clips.
+    pub phrase_idx: usize,
+    pub phrase_cap: Capture,
+    pub phrase_result: Option<(String, crate::scoring::ScoreResult)>,
     pub url: String,
     pub fetch: Pending<Video>,
     pub video: Option<Video>,
@@ -34,7 +38,10 @@ pub struct ListeningState {
 impl Default for ListeningState {
     fn default() -> Self {
         Self {
-            tab: 0,
+            tab: 2,
+            phrase_idx: 0,
+            phrase_cap: Capture::default(),
+            phrase_result: None,
             url: String::new(),
             fetch: Pending::default(),
             video: None,
@@ -53,7 +60,118 @@ impl Default for ListeningState {
     }
 }
 
+/// playphrase.me search for a sentence: "I'm a little peckish." →
+/// https://www.playphrase.me/#/search?q=I'm+a+little+peckish&language=en
+pub fn playphrase_url(sentence: &str) -> String {
+    let q = sentence.trim().trim_end_matches(['.', '!', '?', ',']).trim();
+    let mut enc = String::new();
+    for c in q.chars() {
+        match c {
+            ' ' => enc.push('+'),
+            c if c.is_ascii_alphanumeric() || "'-_.~".contains(c) => enc.push(c),
+            '’' => enc.push('\''),
+            c => {
+                let mut b = [0u8; 4];
+                for byte in c.encode_utf8(&mut b).bytes() {
+                    enc.push_str(&format!("%{byte:02X}"));
+                }
+            }
+        }
+    }
+    format!("https://www.playphrase.me/#/search?q={enc}&language=en")
+}
+
 impl App {
+    /// 🎬 Today's 문장 읽기 sentences: pick one and playphrase.me shows the film and TV
+    /// clips where people say it, inside the window; then say it yourself.
+    fn playphrase_ui(&mut self, ui: &mut Ui) {
+        // Today's longer sentences come with the lesson.
+        self.ensure_lesson();
+        let lesson = self.lesson.clone().filter(|l| l.date == Some(today())).unwrap_or_default();
+        let sentences: Vec<(String, String)> = self.idiom_set().iter().map(|i| (i.en.clone(), i.ko.clone())).chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone()))).collect();
+        if sentences.is_empty() {
+            card(ui, |ui| {
+                ui.label(RichText::new("오늘 문장이 아직 없어요. 📖 문장 읽기를 먼저 열어 주세요.").color(muted()));
+            });
+            return;
+        }
+        let i = self.listening.phrase_idx.min(sentences.len() - 1);
+        let (en, ko) = sentences[i].clone();
+        let url = playphrase_url(&en);
+        let mut pick: Option<usize> = None;
+        // The sentence, its controls and the mic.
+        card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                speaker_button(ui, &mut self.voice, &en);
+                ui.label(RichText::new(&en).size(self.store.settings.list_size().max(20.0)).strong().color(text_strong()));
+                ui.label(RichText::new(format!("{}/{}", i + 1, sentences.len())).color(muted()));
+            });
+            crate::grammar::ko_label(ui, &ko, 16.0, muted());
+            ui.horizontal_wrapped(|ui| {
+                if ui.add_enabled(i > 0, egui::Button::new("◀ 이전 문장").min_size(ACTION_BUTTON)).clicked() {
+                    pick = Some(i - 1);
+                }
+                if ui.add_enabled(i + 1 < sentences.len(), egui::Button::new("다음 문장 ▶").min_size(ACTION_BUTTON)).clicked() {
+                    pick = Some(i + 1);
+                }
+                if ui.add(egui::Button::new("🌐 브라우저로 열기").min_size(ACTION_BUTTON)).on_hover_text(&url).clicked() {
+                    let _ = open::that(&url);
+                }
+            });
+        });
+        ui.add_space(6.0);
+        // The list on the left, the clips on the right.
+        let list_w = 300.0;
+        let video_w = (ui.available_width() - list_w - 12.0).max(320.0);
+        let h = (video_w * 0.62).clamp(340.0, 620.0);
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(list_w);
+                egui::ScrollArea::vertical().id_salt("phrase_list").max_height(h).show(ui, |ui| {
+                    for (k, (s, _)) in sentences.iter().enumerate() {
+                        let text = RichText::new(s).size(15.0).color(if k == i { egui::Color32::WHITE } else { text_strong() });
+                        if ui.selectable_label(k == i, if k == i { text.strong() } else { text }).clicked() && k != i {
+                            pick = Some(k);
+                        }
+                    }
+                });
+            });
+            ui.add_space(12.0);
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(video_w, h), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 12.0, subtle_fill());
+            let msg = match &self.web.failed {
+                Some(e) => format!("이 컴퓨터에서는 앱 안에 웹 화면을 띄울 수 없어요 ({e}).\n🌐 브라우저로 열기를 눌러 주세요."),
+                None => "🎬 playphrase.me 영상을 불러오는 중…".to_string(),
+            };
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(16.0), muted());
+            // Only the part on screen (the page may be scrolled).
+            let shown = rect.intersect(ui.clip_rect());
+            if shown.height() > 60.0 && shown.width() > 60.0 {
+                self.web_req = Some(crate::web::WebRequest { url: url.clone(), rect: shown });
+            }
+        });
+        ui.add_space(6.0);
+        card(ui, |ui| {
+            ui.label(RichText::new("🎤 영상 속 원어민처럼 따라 말해 보세요").strong());
+            ui.vertical_centered(|ui| {
+                if let Some(t) = self.listening.phrase_cap.ui(ui, &mut self.voice, 15.0) {
+                    let r = crate::scoring::score(&en, &t);
+                    self.store.log_attempt("playphrase", &en, &t, r.score);
+                    self.listening.phrase_result = Some((t, r));
+                }
+            });
+            if let Some((t, r)) = &self.listening.phrase_result {
+                let ok = r.score >= self.store.settings.pass_score;
+                ui.label(RichText::new(format!("{} {:.0}점 — \"{t}\"", if ok { "✅" } else { "🔁" }, r.score)).color(if ok { GOOD } else { warn() }));
+            }
+        });
+        if let Some(k) = pick {
+            self.listening.phrase_idx = k;
+            self.listening.phrase_cap = Capture::default();
+            self.listening.phrase_result = None;
+        }
+    }
+
     fn play_segment(&mut self, i: usize) {
         let Some(v) = &self.listening.video else { return };
         let Some(seg) = v.segments.get(i) else { return };
@@ -106,14 +224,19 @@ impl App {
             }
         }
 
-        page_title(ui, "🎧 리스닝 랩 · 구간반복", "유튜브 원어민 영상을 자막 문장 단위로 반복해서 듣고, 바로 따라 말하세요(쉐도잉). 오늘 목표: 쉐도잉 5문장 통과.");
+        page_title(ui, "🎧 리스닝 랩 · 구간반복", "오늘 배운 문장이 실제 영화·드라마에서 쓰이는 장면을 보고 듣고, 따라 말하세요. 유튜브 영상으로 구간반복·쉐도잉도 할 수 있어요.");
         ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.listening.tab, 2, "🎬 오늘 문장 영상 (playphrase)");
             ui.selectable_value(&mut self.listening.tab, 0, "📺 유튜브 구간반복");
             ui.selectable_value(&mut self.listening.tab, 1, "👂 듣고 대답하기");
         });
         ui.add_space(6.0);
         if self.listening.tab == 1 {
             self.listen_respond_ui(ui);
+            return;
+        }
+        if self.listening.tab == 2 {
+            self.playphrase_ui(ui);
             return;
         }
 
@@ -344,5 +467,16 @@ impl App {
                 let _ = open::that(format!("{}&t={}s", video.url, seg.start as u32));
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn playphrase_search_urls() {
+        assert_eq!(super::playphrase_url("I'm a little peckish."), "https://www.playphrase.me/#/search?q=I'm+a+little+peckish&language=en");
+        assert_eq!(super::playphrase_url(" What's up? "), "https://www.playphrase.me/#/search?q=What's+up&language=en");
+        assert_eq!(super::playphrase_url("Rock & roll, baby!"), "https://www.playphrase.me/#/search?q=Rock+%26+roll%2C+baby&language=en");
+        assert_eq!(super::playphrase_url("I’m in"), "https://www.playphrase.me/#/search?q=I'm+in&language=en");
     }
 }
