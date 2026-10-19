@@ -2040,7 +2040,7 @@ fn ft59_notifications_at_the_top_right_take_turns() {
     t.wait("lesson", |a| a.lesson.is_some());
     t.nav("🏠  홈");
     assert!(t.app().notifier.shown.is_none(), "not right away");
-    let mut show = |t: &mut T, kind: usize| {
+    let show = |t: &mut T, kind: usize| {
         t.app_mut().notifier.shown = None;
         t.app_mut().notifier.idx = kind;
         t.app_mut().notifier.next_at = std::time::Instant::now();

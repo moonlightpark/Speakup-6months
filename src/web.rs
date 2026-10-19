@@ -8,6 +8,8 @@ use std::path::PathBuf;
 pub struct WebRequest {
     pub url: String,
     pub rect: egui::Rect,
+    /// Page zoom (1 = as the site lays it out), to enlarge a page drawn at a fixed size.
+    pub zoom: f32,
 }
 
 #[derive(Default)]
@@ -15,6 +17,7 @@ pub struct WebPane {
     view: Option<wry::WebView>,
     context: Option<wry::WebContext>,
     url: String,
+    zoom: f32,
     visible: bool,
     /// The web view couldn't be created (e.g. no WebView2 on Windows): the page says so.
     pub failed: Option<String>,
@@ -41,6 +44,10 @@ impl WebPane {
         match &self.view {
             Some(v) => {
                 let _ = v.set_bounds(bounds);
+                if (self.zoom - req.zoom).abs() > 0.01 {
+                    let _ = v.zoom(req.zoom as f64);
+                    self.zoom = req.zoom;
+                }
                 if !self.visible {
                     let _ = v.set_visible(true);
                     self.visible = true;
@@ -59,6 +66,8 @@ impl WebPane {
                 match built {
                     Ok(v) => {
                         crate::applog!("web: 웹 화면 생성 · {}", req.url);
+                        let _ = v.zoom(req.zoom as f64);
+                        self.zoom = req.zoom;
                         self.view = Some(v);
                         self.url = req.url.clone();
                         self.visible = true;

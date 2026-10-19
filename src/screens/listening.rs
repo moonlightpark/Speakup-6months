@@ -120,36 +120,37 @@ impl App {
             });
         });
         ui.add_space(6.0);
-        // The list on the left, the clips on the right.
-        let list_w = 300.0;
-        let video_w = (ui.available_width() - list_w - 12.0).max(320.0);
-        let h = (video_w * 0.62).clamp(340.0, 620.0);
-        ui.horizontal_top(|ui| {
-            ui.vertical(|ui| {
-                ui.set_width(list_w);
-                egui::ScrollArea::vertical().id_salt("phrase_list").max_height(h).show(ui, |ui| {
-                    for (k, (s, _)) in sentences.iter().enumerate() {
-                        let text = RichText::new(s).size(15.0).color(if k == i { egui::Color32::WHITE } else { text_strong() });
-                        if ui.selectable_label(k == i, if k == i { text.strong() } else { text }).clicked() && k != i {
-                            pick = Some(k);
-                        }
+        card(ui, |ui| {
+            ui.label(RichText::new(format!("📖 오늘 문장 {}개 — 누르면 그 문장의 영상으로 바뀌어요", sentences.len())).strong());
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                for (k, (s, _)) in sentences.iter().enumerate() {
+                    let text = RichText::new(s).size(15.0).color(if k == i { egui::Color32::WHITE } else { text_strong() });
+                    if ui.selectable_label(k == i, if k == i { text.strong() } else { text }).clicked() && k != i {
+                        pick = Some(k);
                     }
-                });
+                }
             });
-            ui.add_space(12.0);
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(video_w, h), egui::Sense::hover());
-            ui.painter().rect_filled(rect, 12.0, subtle_fill());
-            let msg = match &self.web.failed {
-                Some(e) => format!("이 컴퓨터에서는 앱 안에 웹 화면을 띄울 수 없어요 ({e}).\n🌐 브라우저로 열기를 눌러 주세요."),
-                None => "🎬 playphrase.me 영상을 불러오는 중…".to_string(),
-            };
-            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(16.0), muted());
-            // Only the part on screen (the page may be scrolled).
-            let shown = rect.intersect(ui.clip_rect());
-            if shown.height() > 60.0 && shown.width() > 60.0 {
-                self.web_req = Some(crate::web::WebRequest { url: url.clone(), rect: shown });
-            }
         });
+        ui.add_space(6.0);
+        // The clips as wide as the page, then the mic.
+        let video_w = ui.available_width().max(320.0);
+        // playphrase draws its player about 250 px high whatever the width (wider only crops
+        // it), so the page is zoomed to fill the width: laid out ~600 px wide, then scaled.
+        let zoom = (video_w / 600.0).clamp(1.0, 2.2);
+        let h = 251.0 * zoom;
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(video_w, h), egui::Sense::hover());
+        ui.painter().rect_filled(rect, 12.0, subtle_fill());
+        let msg = match &self.web.failed {
+            Some(e) => format!("이 컴퓨터에서는 앱 안에 웹 화면을 띄울 수 없어요 ({e}).\n🌐 브라우저로 열기를 눌러 주세요."),
+            None => "🎬 playphrase.me 영상을 불러오는 중…".to_string(),
+        };
+        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(16.0), muted());
+        // Only the part on screen (the page may be scrolled).
+        let shown = rect.intersect(ui.clip_rect());
+        if shown.height() > 60.0 && shown.width() > 60.0 {
+            self.web_req = Some(crate::web::WebRequest { url: url.clone(), rect: shown, zoom });
+        }
         ui.add_space(6.0);
         card(ui, |ui| {
             ui.label(RichText::new("🎤 영상 속 원어민처럼 따라 말해 보세요").strong());
