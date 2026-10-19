@@ -1486,6 +1486,23 @@ impl App {
                 self.voice.say("Hello! Let's practice speaking English together.");
             }
             ui.add_space(6.0);
+            // 받아쓰기: the level's pace, a little faster by default so it isn't too easy.
+            let level = self.store.profile.level;
+            ui.label(RichText::new(format!("✏ 받아쓰기 읽기 속도 (내 레벨 {} 기준)", cefr_of(level))).color(text_strong()));
+            ui.horizontal(|ui| {
+                let extra = ["레벨 속도", "레벨 속도 +3%", "레벨 속도 +15%"];
+                for (i, (name, _)) in DICTATION_SPEEDS.iter().enumerate() {
+                    if ui.radio_value(&mut self.store.settings.dictation_speed, i, *name).on_hover_text(extra[i]).changed() {
+                        changed = true;
+                    }
+                }
+                if ui.button("🔊 들어 보기").clicked() {
+                    let r = dictation_rate(level, self.store.settings.dictation_speed);
+                    self.voice.say_at("I usually take the subway to work, but today I walked.", r);
+                }
+            });
+            ui.label(RichText::new("느리게 = 레벨에 맞는 속도 · 보통 = 레벨 속도보다 3% 빠르게 (기본) · 빠르게 = 15% 빠르게. 레벨이 오르면 속도도 함께 올라가요.").color(muted()).small());
+            ui.add_space(6.0);
             ui.label("음성 인식 모델");
             self.stt_setup_ui(ui);
         });

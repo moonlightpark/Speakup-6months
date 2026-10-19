@@ -49,6 +49,8 @@ pub struct Settings {
     pub list_text_size: f32,
     /// Minutes between notifications (top right); 0 = off.
     pub notify_minutes: u32,
+    /// 받아쓰기 reading speed: index in `DICTATION_SPEEDS` (0 느리게, 1 보통, 2 빠르게).
+    pub dictation_speed: usize,
 }
 
 impl Settings {
@@ -88,6 +90,7 @@ impl Default for Settings {
             ko_colors_faded: false,
             list_text_size: 17.0,
             notify_minutes: 5,
+            dictation_speed: 1,
         }
     }
 }
@@ -384,6 +387,21 @@ pub const GOAL_DESC: [&str; 7] = [
     "어떤 주제든 정확하고 유연하게 말하기",
 ];
 
+/// Speech speed that suits a level (× the normal voice speed): slower for beginners, natural
+/// from about B2 — level 1 → 0.72, level 3 → 0.80, level 5 → 0.88, level 8+ → 1.0.
+pub fn level_speech_rate(level: f32) -> f32 {
+    (0.68 + 0.04 * level).clamp(0.72, 1.0)
+}
+
+/// 받아쓰기 speeds over the level's pace: 느리게 = the level's, 보통 = 3% faster (a little
+/// stretch, so it isn't too easy), 빠르게 = 15% faster.
+pub const DICTATION_SPEEDS: [(&str, f32); 3] = [("느리게", 1.0), ("보통", 1.03), ("빠르게", 1.15)];
+
+/// The 받아쓰기 speed for a level and the chosen setting.
+pub fn dictation_rate(level: f32, setting: usize) -> f32 {
+    level_speech_rate(level) * DICTATION_SPEEDS[setting.min(DICTATION_SPEEDS.len() - 1)].1
+}
+
 /// Index in `LEVEL_BANDS` of a level score, or of a CEFR name.
 pub fn band_index(level: f32) -> usize {
     LEVEL_BANDS.iter().position(|b| level < b.0).unwrap_or(LEVEL_BANDS.len() - 1)
@@ -623,3 +641,19 @@ pub struct WordStat {
 
 /// Repetitions after which a word counts as memorized (기억 완료).
 pub const WORD_DONE_PASSES: u32 = 10;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dictation_speed_follows_the_level() {
+        assert!(level_speech_rate(1.0) < level_speech_rate(5.0) && level_speech_rate(5.0) < level_speech_rate(8.0));
+        assert_eq!(level_speech_rate(10.0), 1.0);
+        let base = level_speech_rate(3.0);
+        assert!((dictation_rate(3.0, 0) - base).abs() < 1e-6, "느리게 = the level's pace");
+        assert!((dictation_rate(3.0, 1) - base * 1.03).abs() < 1e-6, "보통 = +3%");
+        assert!((dictation_rate(3.0, 2) - base * 1.15).abs() < 1e-6, "빠르게 = +15%");
+        assert_eq!(Settings::default().dictation_speed, 1, "보통 by default");
+    }
+}

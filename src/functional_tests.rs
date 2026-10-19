@@ -2100,3 +2100,21 @@ fn ft60_listening_lab_shows_todays_sentences_on_playphrase() {
     t.steps(1);
     assert!(t.app().web_req.is_none());
 }
+
+#[test]
+fn ft61_dictation_speed_setting() {
+    let mut t = launch_at(temp_dir("dictspeed"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.items.push(StudyItem { id: "s:1".into(), kind: ItemKind::Sentence, text: "I like coffee.".into(), meaning_ko: "나는 커피를 좋아해.".into(), ..Default::default() });
+    });
+    t.nav("⚙  설정");
+    assert!(t.has("✏ 받아쓰기 읽기 속도"));
+    t.click("빠르게");
+    assert_eq!(t.app().store.settings.dictation_speed, 2);
+    assert!(std::fs::read_to_string(t.dir.join("settings.json")).unwrap().contains("\"dictation_speed\": 2"));
+    t.click("느리게");
+    assert_eq!(t.app().store.settings.dictation_speed, 0);
+    t.nav("✏  쓰기");
+    assert!(t.has("읽기 속도: 느리게"));
+}

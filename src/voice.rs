@@ -156,6 +156,12 @@ impl Voice {
         let r = self.base_rate;
         self.speaker.say(text, r);
     }
+    /// Speaks at `factor` × the voice speed set in settings (받아쓰기: the level's pace).
+    pub fn say_at(&mut self, text: &str, factor: f32) {
+        self.player.stop();
+        let r = self.base_rate * factor;
+        self.speaker.say(text, r);
+    }
     pub fn say_slow(&mut self, text: &str) {
         self.player.stop();
         let r = self.base_rate * if self.speaker.neural_wanted() { 0.75 } else { 0.7 };

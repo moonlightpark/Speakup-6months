@@ -175,20 +175,24 @@ impl App {
         let t_check = crate::art::since_event(ui, egui::Id::new("cheer_writing_check"), check_key);
         let mut next = false;
         let mut finished: Option<(f32, String)> = None;
+        // Read at the level's pace (설정 > 받아쓰기 읽기 속도).
+        let speed_set = self.store.settings.dictation_speed.min(DICTATION_SPEEDS.len() - 1);
+        let rate = dictation_rate(self.store.profile.level, speed_set);
         card(ui, |ui| {
             if dictation {
                 ui.label(RichText::new("문장을 듣고 그대로 써 보세요.").size(17.0));
                 if !st.played {
                     st.played = true;
-                    self.voice.say(&en);
+                    self.voice.say_at(&en, rate);
                 }
                 ui.horizontal(|ui| {
                     if ui.button("🔊 다시 듣기").clicked() {
-                        self.voice.say(&en);
+                        self.voice.say_at(&en, rate);
                     }
                     if ui.button("🐢 천천히").clicked() {
-                        self.voice.say_slow(&en);
+                        self.voice.say_at(&en, rate * 0.8);
                     }
+                    ui.label(RichText::new(format!("읽기 속도: {}", DICTATION_SPEEDS[speed_set].0)).color(muted()).small()).on_hover_text("설정 > 받아쓰기 읽기 속도에서 바꿀 수 있어요");
                     ui.label(RichText::new(format!("힌트: {}", ko)).color(muted()).small());
                 });
             } else {
