@@ -929,6 +929,7 @@ fn ft21_writing_dictation_translation_and_diary() {
         s.items.push(StudyItem { id: "s:1".into(), kind: ItemKind::Sentence, text: "I like coffee.".into(), meaning_ko: "나는 커피를 좋아해.".into(), ..Default::default() });
     });
     t.nav("✏  쓰기");
+    t.wait("picture lookup", |a| !a.scene_job.running());
     // Dictation: exact answer scores 100.
     t.app_mut().writing.input = "I like coffee".into();
     t.click("확인");

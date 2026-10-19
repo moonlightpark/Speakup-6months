@@ -158,13 +158,8 @@ impl App {
 
     /// The picture of a sentence's situation, above the exercise (nothing while none is known).
     fn scene_ui(&mut self, ui: &mut Ui, sentence: &str) {
-        let Some(img) = self.store.scenes.get(&sentence.trim().to_lowercase()).cloned() else {
-            if self.scene_job.running() {
-                spinner_label(ui, "🖼 상황 그림을 찾는 중…");
-                ui.add_space(6.0);
-            }
-            return;
-        };
+        // Nothing while it is being looked up (the exercise doesn't jump around meanwhile).
+        let Some(img) = self.store.scenes.get(&sentence.trim().to_lowercase()).cloned() else { return };
         if img.file.is_empty() {
             return;
         }
