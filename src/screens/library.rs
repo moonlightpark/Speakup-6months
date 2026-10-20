@@ -14,7 +14,8 @@ pub struct LibraryState {
     download: Pending<std::path::PathBuf>,
     downloading: Option<&'static str>,
     pub error: Option<String>,
-    show_all: bool,
+    /// The level whose shelf is shown (`LEVEL_BANDS` index); None = the learner's own.
+    pub shelf: Option<usize>,
 }
 
 pub struct Reader {
@@ -112,16 +113,34 @@ impl App {
         page_title(ui, "📘 리딩 라이브러리", "동화책부터 소설까지 — 내 수준에 맞는 책을 소리 내어 읽고, 모르는 문장은 직독직해로 확인하세요.");
         let level = self.store.profile.level;
         let today_read = self.store.profile.today.paragraphs_read;
+        let mine = band_index(level);
+        let shelf = self.library.shelf.unwrap_or(mine);
         ui.horizontal_wrapped(|ui| {
             chip(ui, &format!("내 레벨 {} {}", level_name_of(level), cefr_of(level)), ACCENT);
             chip(ui, &format!("오늘 읽은 문단 {today_read}개 (목표 {READ_GOAL}개)"), if today_read >= READ_GOAL { GOOD } else { muted() });
-            ui.checkbox(&mut self.library.show_all, "모든 책 보기");
+        });
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("레벨별 책장").color(muted()));
+            for (i, band) in LEVEL_BANDS.iter().enumerate() {
+                let label = if i == mine { format!("{} {} · 내 레벨", band.2, band.1) } else { format!("{} {}", band.2, band.1) };
+                if ui.selectable_label(i == shelf, label).clicked() {
+                    self.library.shelf = (i != mine).then_some(i);
+                }
+            }
         });
         if let Some(e) = &self.library.error {
             error_label(ui, e);
         }
         ui.add_space(6.0);
-        let books: Vec<&'static Book> = if self.library.show_all { library::BOOKS.iter().collect() } else { library::recommended(level) };
+        let books = library::shelf(shelf);
+        let note = if shelf == mine {
+            format!("내 레벨({}) 책 {}권", LEVEL_BANDS[shelf].2, books.len())
+        } else {
+            format!("{} 레벨 책 {}권 — 내 레벨보다 {}", LEVEL_BANDS[shelf].2, books.len(), if shelf > mine { "어려워요" } else { "쉬워요" })
+        };
+        ui.label(RichText::new(note).color(muted()).small());
+        ui.add_space(4.0);
         let mut open: Option<&'static Book> = None;
         let mut fetch: Option<&'static Book> = None;
         for b in books {
@@ -135,7 +154,15 @@ impl App {
                     ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(6.0, rect.height())), 3.0, Color32::from_black_alpha(60));
                     let icon = match b.kind {
                         "동화" => "🐰",
+                        "그림책" => "🎨",
+                        "동물 이야기" => "🐾",
+                        "읽기 교재" => "✏",
                         "어린이 고전" => "🌈",
+                        "추리 소설" => "🔍",
+                        "SF·모험" => "🚀",
+                        "단편집" => "📑",
+                        "논픽션" => "💡",
+                        "고전 문학" => "📜",
                         _ => "📖",
                     };
                     ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(24.0), Color32::WHITE);
@@ -143,7 +170,7 @@ impl App {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(RichText::new(b.title).size(18.0).strong());
                             chip(ui, b.kind, crate::art::badge_colors(b.kind).0);
-                            chip(ui, &format!("{}~{}", cefr_of(b.min_level), cefr_of(b.max_level)), muted());
+                            chip(ui, LEVEL_BANDS[b.level].2, muted());
                         });
                         ui.label(RichText::new(format!("{} · {}", b.title_ko, b.author)).color(muted()));
                         ui.label(RichText::new(b.blurb_ko).color(muted()).small());

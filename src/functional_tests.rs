@@ -899,7 +899,10 @@ fn ft19_saved_name_and_key_are_not_asked_again() {
 fn ft20_library_reads_a_story_and_tracks_progress() {
     let mut t = launch("library");
     t.nav("📘  리딩 라이브러리");
-    assert!(t.has("The Lion and the Mouse") && t.has("동화"));
+    // The learner's level (A2) is shown first; an easier shelf is one click away.
+    assert!(t.has("내 레벨(A2) 책 50권") && t.has("Goldilocks and the Three Bears") && !t.has("The Lion and the Mouse"));
+    t.click("A1 초급");
+    assert!(t.has("A1 레벨 책 50권 — 내 레벨보다 쉬워요") && t.has("The Lion and the Mouse") && t.has("동화"));
     t.h.get_all_by_label("읽기 ›").next().unwrap().click();
     t.steps(3);
     assert!(t.has("A big lion was sleeping under a tree."));

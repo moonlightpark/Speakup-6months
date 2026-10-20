@@ -1,11 +1,14 @@
 //! Reading library: graded stories from picture-book fables to classic novels.
 //!
-//! Short fables are built in (retold for learners). Longer books are public-domain originals
-//! from Project Gutenberg, downloaded once on request and cached in the data folder.
+//! Short fables are built in (retold for learners). The other books are public-domain originals
+//! from Project Gutenberg (`library_books.tsv`, 50 per level with the fables), downloaded once on
+//! request and cached in the data folder.
 //! Books are split into pages of paragraphs so a session is a comfortable read.
 
 use anyhow::{Result, anyhow};
+use crate::models::band_index_of_cefr;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Source {
@@ -20,40 +23,59 @@ pub struct Book {
     pub title: &'static str,
     pub title_ko: &'static str,
     pub author: &'static str,
-    /// Suitable learner levels (1..=10, see `cefr_of`).
-    pub min_level: f32,
-    pub max_level: f32,
+    /// The learner level it's shelved under (index in `LEVEL_BANDS`).
+    pub level: usize,
     pub kind: &'static str,
     pub blurb_ko: &'static str,
     pub source: Source,
 }
 
-pub const BOOKS: &[Book] = &[
-    Book { id: "lion-mouse", title: "The Lion and the Mouse", title_ko: "사자와 생쥐", author: "Aesop (retold)", min_level: 1.0, max_level: 3.0, kind: "동화", blurb_ko: "작은 친구도 큰 도움이 될 수 있어요.", source: Source::Builtin(LION_MOUSE) },
-    Book { id: "boy-wolf", title: "The Boy Who Cried Wolf", title_ko: "양치기 소년", author: "Aesop (retold)", min_level: 1.0, max_level: 3.0, kind: "동화", blurb_ko: "거짓말을 하면 아무도 믿지 않아요.", source: Source::Builtin(BOY_WOLF) },
-    Book { id: "tortoise-hare", title: "The Tortoise and the Hare", title_ko: "토끼와 거북이", author: "Aesop (retold)", min_level: 1.5, max_level: 3.5, kind: "동화", blurb_ko: "천천히 꾸준히 가면 이겨요.", source: Source::Builtin(TORTOISE_HARE) },
-    Book { id: "ant-grasshopper", title: "The Ant and the Grasshopper", title_ko: "개미와 베짱이", author: "Aesop (retold)", min_level: 1.5, max_level: 3.5, kind: "동화", blurb_ko: "미리 준비하는 지혜.", source: Source::Builtin(ANT_GRASSHOPPER) },
-    Book { id: "red-hen", title: "The Little Red Hen", title_ko: "빨간 암탉", author: "Folk tale (retold)", min_level: 2.0, max_level: 4.0, kind: "동화", blurb_ko: "일한 사람이 빵을 먹어요.", source: Source::Builtin(RED_HEN) },
-    Book { id: "goldilocks", title: "Goldilocks and the Three Bears", title_ko: "골디락스와 곰 세 마리", author: "Folk tale (retold)", min_level: 2.0, max_level: 4.5, kind: "동화", blurb_ko: "너무 뜨겁지도, 차갑지도 않게.", source: Source::Builtin(GOLDILOCKS) },
-    Book { id: "ugly-duckling", title: "The Ugly Duckling", title_ko: "미운 오리 새끼", author: "H. C. Andersen (retold)", min_level: 3.0, max_level: 5.0, kind: "동화", blurb_ko: "나다움을 찾아가는 이야기.", source: Source::Builtin(UGLY_DUCKLING) },
-    Book { id: "peter-rabbit", title: "The Tale of Peter Rabbit", title_ko: "피터 래빗 이야기", author: "Beatrix Potter", min_level: 3.5, max_level: 6.0, kind: "어린이 고전", blurb_ko: "말썽꾸러기 토끼의 모험 (원문).", source: Source::Gutenberg(14838) },
-    Book { id: "oz", title: "The Wonderful Wizard of Oz", title_ko: "오즈의 마법사", author: "L. Frank Baum", min_level: 4.5, max_level: 7.0, kind: "어린이 고전", blurb_ko: "도로시와 친구들의 여행.", source: Source::Gutenberg(55) },
-    Book { id: "alice", title: "Alice's Adventures in Wonderland", title_ko: "이상한 나라의 앨리스", author: "Lewis Carroll", min_level: 5.0, max_level: 8.0, kind: "어린이 고전", blurb_ko: "토끼 굴 속 이상한 세계.", source: Source::Gutenberg(11) },
-    Book { id: "secret-garden", title: "The Secret Garden", title_ko: "비밀의 화원", author: "Frances Hodgson Burnett", min_level: 5.5, max_level: 8.0, kind: "소설", blurb_ko: "닫힌 정원과 마음이 열리는 이야기.", source: Source::Gutenberg(113) },
-    Book { id: "tom-sawyer", title: "The Adventures of Tom Sawyer", title_ko: "톰 소여의 모험", author: "Mark Twain", min_level: 6.0, max_level: 9.0, kind: "소설", blurb_ko: "미시시피 강가 소년의 장난과 모험.", source: Source::Gutenberg(74) },
-    Book { id: "christmas-carol", title: "A Christmas Carol", title_ko: "크리스마스 캐럴", author: "Charles Dickens", min_level: 6.5, max_level: 9.0, kind: "소설", blurb_ko: "구두쇠 스크루지의 하룻밤.", source: Source::Gutenberg(46) },
-    Book { id: "sherlock", title: "The Adventures of Sherlock Holmes", title_ko: "셜록 홈즈의 모험", author: "Arthur Conan Doyle", min_level: 7.0, max_level: 10.0, kind: "소설", blurb_ko: "명탐정의 추리 단편집.", source: Source::Gutenberg(1661) },
-    Book { id: "gatsby", title: "The Great Gatsby", title_ko: "위대한 개츠비", author: "F. Scott Fitzgerald", min_level: 8.0, max_level: 10.0, kind: "소설", blurb_ko: "재즈 시대의 꿈과 사랑.", source: Source::Gutenberg(64317) },
-    Book { id: "pride", title: "Pride and Prejudice", title_ko: "오만과 편견", author: "Jane Austen", min_level: 8.5, max_level: 10.0, kind: "소설", blurb_ko: "엘리자베스와 다아시의 이야기.", source: Source::Gutenberg(1342) },
+/// Short fables retold for learners (levels A1–A2); the rest of the shelf is `library_books.tsv`.
+const BUILTIN: &[Book] = &[
+    Book { id: "lion-mouse", title: "The Lion and the Mouse", title_ko: "사자와 생쥐", author: "Aesop (retold)", level: 0, kind: "동화", blurb_ko: "작은 친구도 큰 도움이 될 수 있어요.", source: Source::Builtin(LION_MOUSE) },
+    Book { id: "boy-wolf", title: "The Boy Who Cried Wolf", title_ko: "양치기 소년", author: "Aesop (retold)", level: 0, kind: "동화", blurb_ko: "거짓말을 하면 아무도 믿지 않아요.", source: Source::Builtin(BOY_WOLF) },
+    Book { id: "tortoise-hare", title: "The Tortoise and the Hare", title_ko: "토끼와 거북이", author: "Aesop (retold)", level: 0, kind: "동화", blurb_ko: "천천히 꾸준히 가면 이겨요.", source: Source::Builtin(TORTOISE_HARE) },
+    Book { id: "ant-grasshopper", title: "The Ant and the Grasshopper", title_ko: "개미와 베짱이", author: "Aesop (retold)", level: 0, kind: "동화", blurb_ko: "미리 준비하는 지혜.", source: Source::Builtin(ANT_GRASSHOPPER) },
+    Book { id: "red-hen", title: "The Little Red Hen", title_ko: "빨간 암탉", author: "Folk tale (retold)", level: 1, kind: "동화", blurb_ko: "일한 사람이 빵을 먹어요.", source: Source::Builtin(RED_HEN) },
+    Book { id: "goldilocks", title: "Goldilocks and the Three Bears", title_ko: "골디락스와 곰 세 마리", author: "Folk tale (retold)", level: 1, kind: "동화", blurb_ko: "너무 뜨겁지도, 차갑지도 않게.", source: Source::Builtin(GOLDILOCKS) },
+    Book { id: "ugly-duckling", title: "The Ugly Duckling", title_ko: "미운 오리 새끼", author: "H. C. Andersen (retold)", level: 1, kind: "동화", blurb_ko: "나다움을 찾아가는 이야기.", source: Source::Builtin(UGLY_DUCKLING) },
 ];
 
-pub fn book(id: &str) -> Option<&'static Book> {
-    BOOKS.iter().find(|b| b.id == id)
+/// Project Gutenberg books, one per line:
+/// level, id ("-" = "pg<number>"), number, kind, title, Korean title, author, Korean blurb.
+const CATALOG: &str = include_str!("library_books.tsv");
+
+fn parse_catalog() -> Vec<Book> {
+    CATALOG
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .filter_map(|l| {
+            let f: Vec<&'static str> = l.split('\t').collect();
+            let [level, id, num, kind, title, title_ko, author, blurb_ko] = f[..] else { return None };
+            let num: u32 = num.parse().ok()?;
+            let id: &'static str = if id == "-" { Box::leak(format!("pg{num}").into_boxed_str()) } else { id };
+            Some(Book { id, title, title_ko, author, level: band_index_of_cefr(level)?, kind, blurb_ko, source: Source::Gutenberg(num) })
+        })
+        .collect()
 }
 
-/// Books that fit the learner now (a little easier to a little harder), easiest first.
-pub fn recommended(level: f32) -> Vec<&'static Book> {
-    BOOKS.iter().filter(|b| level + 0.5 >= b.min_level && level - 1.0 <= b.max_level).collect()
+/// Every book on the shelf, easiest level first.
+pub fn books() -> &'static [Book] {
+    static ALL: OnceLock<Vec<Book>> = OnceLock::new();
+    ALL.get_or_init(|| {
+        let mut all: Vec<Book> = BUILTIN.iter().copied().chain(parse_catalog()).collect();
+        all.sort_by_key(|b| b.level);
+        all
+    })
+}
+
+pub fn book(id: &str) -> Option<&'static Book> {
+    books().iter().find(|b| b.id == id)
+}
+
+/// The books shelved under a level (`LEVEL_BANDS` index).
+pub fn shelf(level: usize) -> Vec<&'static Book> {
+    books().iter().filter(|b| b.level == level).collect()
 }
 
 /// A readable unit: a title and its paragraphs.
@@ -157,7 +179,7 @@ fn is_prose(p: &str) -> bool {
     let low = p.to_lowercase();
     word_count(p) >= 8
         && p.chars().any(|c| c.is_lowercase())
-        && !["printed", "published", "copyright", "edition", "illustrated by", "contents"].iter().any(|k| low.contains(k))
+        && !["printed", "published", "copyright", "edition", "illustrated by", "contents", "produced by", "prepared by", "proofreading", "author of", "gutenberg", "e-text"].iter().any(|k| low.contains(k))
 }
 
 /// Splits a book into chapters (by headings), then into pages of a few paragraphs.
@@ -166,7 +188,11 @@ pub fn paginate(text: &str) -> Vec<Page> {
     let headings: Vec<usize> = (0..paras.len()).filter(|&i| is_chapter_heading(&paras[i])).collect();
     // The story starts at the first chapter heading followed by real prose (a table of
     // contents has headings right after each other); books without chapters start at the
-    // first run of three sentence-like paragraphs.
+    // first run of three sentence-like paragraphs. A heading found only far into the book
+    // (chapters not marked in the text, the headings being notes or an index) isn't the
+    // start either.
+    let prose_start = || (0..paras.len()).find(|&i| is_prose(&paras[i]) && paras[i..].iter().take(3).filter(|p| is_prose(p)).count() >= 2).unwrap_or(0);
+    let total: usize = paras.iter().map(|p| word_count(p)).sum();
     let start = headings
         .iter()
         .find(|&&h| {
@@ -174,9 +200,8 @@ pub fn paginate(text: &str) -> Vec<Page> {
             paras[h + 1..next].iter().filter(|p| is_prose(p)).map(|p| word_count(p)).sum::<usize>() >= 200
         })
         .copied()
-        .unwrap_or_else(|| {
-            (0..paras.len()).find(|&i| is_prose(&paras[i]) && paras[i..].iter().take(3).filter(|p| is_prose(p)).count() >= 2).unwrap_or(0)
-        });
+        .filter(|&h| paras[..h].iter().map(|p| word_count(p)).sum::<usize>() * 100 <= total * 15)
+        .unwrap_or_else(prose_start);
     let mut chapters: Vec<(String, Vec<String>)> = Vec::new();
     for p in &paras[start..] {
         // A short line right after "CHAPTER I." is the chapter's title ("Down the Rabbit-Hole").
@@ -325,7 +350,7 @@ mod tests {
 
     #[test]
     fn builtin_books_have_paragraphs() {
-        for b in BOOKS.iter().filter(|b| matches!(b.source, Source::Builtin(_))) {
+        for b in books().iter().filter(|b| matches!(b.source, Source::Builtin(_))) {
             let pages = load_pages(Path::new("."), b).unwrap();
             assert!(pages[0].paragraphs.len() >= 5, "{}", b.id);
         }
@@ -354,21 +379,49 @@ mod tests {
     #[ignore]
     fn real_books_paginate() {
         let dir = PathBuf::from(std::env::var("SPEAKUP_TEST_LIBRARY").expect("SPEAKUP_TEST_LIBRARY"));
-        for b in BOOKS.iter().filter(|b| matches!(b.source, Source::Gutenberg(_))) {
+        let mut bad = Vec::new();
+        for b in books().iter().filter(|b| matches!(b.source, Source::Gutenberg(_))) {
             if let Source::Gutenberg(id) = b.source {
-                download(&dir, id).unwrap();
+                if let Err(e) = download(&dir, id) {
+                    bad.push(format!("{} ({id}): download {e:#}", b.id));
+                    continue;
+                }
             }
             let pages = load_pages(&dir, b).unwrap();
-            println!("{}: {} pages | first: {:?} | {:.80}", b.id, pages.len(), pages[0].heading, pages[0].paragraphs[0]);
-            assert!(pages.len() >= 2, "{}", b.id);
-            assert!(pages.iter().all(|p| !p.paragraphs.iter().any(|x| x.contains("Project Gutenberg License"))));
+            let paras: usize = pages.iter().map(|p| p.paragraphs.len()).sum();
+            println!("{}: {} pages, {paras} paragraphs | first: {:?} | {:.80}", b.id, pages.len(), pages.first().map(|p| p.heading.as_str()), pages.first().and_then(|p| p.paragraphs.first()).map(|s| s.as_str()).unwrap_or(""));
+            if paras < 5 || pages.iter().any(|p| p.paragraphs.iter().any(|x| x.contains("Project Gutenberg License"))) {
+                bad.push(format!("{} ({}): {} pages, {paras} paragraphs", b.id, b.title, pages.len()));
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    #[test]
+    fn fifty_books_per_level() {
+        for (i, band) in crate::models::LEVEL_BANDS.iter().enumerate() {
+            assert_eq!(shelf(i).len(), 50, "{}", band.2);
+        }
+        let mut ids: Vec<&str> = books().iter().map(|b| b.id).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), books().len(), "duplicate ids");
+        let mut nums: Vec<u32> = books().iter().filter_map(|b| if let Source::Gutenberg(n) = b.source { Some(n) } else { None }).collect();
+        nums.sort();
+        nums.dedup();
+        assert_eq!(nums.len(), books().len() - BUILTIN.len(), "a book listed twice");
+        // Reading progress is kept under these ids.
+        for id in ["peter-rabbit", "oz", "alice", "secret-garden", "tom-sawyer", "christmas-carol", "sherlock", "gatsby", "pride"] {
+            assert!(book(id).is_some(), "{id}");
         }
     }
 
     #[test]
     fn recommendations_follow_level() {
-        assert!(recommended(1.5).iter().all(|b| b.kind == "동화"));
-        assert!(recommended(9.0).iter().any(|b| b.id == "pride"));
+        let recommended = |level: f32| shelf(crate::models::band_index(level));
+        assert!(recommended(1.5).iter().all(|b| b.level == 0) && recommended(1.5).iter().any(|b| b.id == "lion-mouse"));
+        assert!(recommended(9.5).iter().any(|b| b.id == "pride"));
         assert!(!recommended(2.0).iter().any(|b| b.id == "pride"));
+        assert_eq!(recommended(2.0).len(), 50);
     }
 }

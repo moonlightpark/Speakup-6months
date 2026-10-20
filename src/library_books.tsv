@@ -1,0 +1,345 @@
+# Reading library: Project Gutenberg books (public domain), 50 per level with the built-in fables.
+# level	id (- = pg<number>)	Gutenberg number	kind	title	Korean title	author	Korean blurb
+A1	-	14407	그림책	The Tale of Benjamin Bunny	벤저민 버니 이야기	Beatrix Potter	피터의 사촌 벤저민과 함께 옷을 찾으러 가요.
+A1	-	14220	그림책	The Tale of the Flopsy Bunnies	플롭시 버니 이야기	Beatrix Potter	상추를 먹고 잠든 아기 토끼들.
+A1	-	14797	그림책	The Tale of Timmy Tiptoes	티미 팁토스 이야기	Beatrix Potter	도토리를 숨기는 다람쥐 부부.
+A1	-	14814	그림책	The Tale of Jemima Puddle-Duck	제미마 퍼들덕 이야기	Beatrix Potter	알을 품을 곳을 찾는 오리.
+A1	-	14837	그림책	The Tale of Tom Kitten	톰 키튼 이야기	Beatrix Potter	예쁜 옷을 입은 장난꾸러기 아기 고양이.
+A1	-	14848	그림책	The Story of Miss Moppet	모펫 아가씨 이야기	Beatrix Potter	아기 고양이와 생쥐의 숨바꼭질.
+A1	-	14872	그림책	The Tale of Squirrel Nutkin	다람쥐 넛킨 이야기	Beatrix Potter	수수께끼를 좋아하는 버릇없는 다람쥐.
+A1	-	14877	그림책	The Tale of Ginger and Pickles	진저와 피클스 이야기	Beatrix Potter	외상만 주다 문을 닫은 가게.
+A1	-	15077	그림책	The Tale of Mr. Jeremy Fisher	제레미 피셔 씨 이야기	Beatrix Potter	낚시하러 간 개구리 아저씨.
+A1	-	12103	그림책	The Tale of Mrs. Tiggy-Winkle	티기 윙클 부인 이야기	Beatrix Potter	빨래를 해 주는 고슴도치 아주머니.
+A1	-	15234	그림책	The Tale of the Pie and the Patty-Pan	파이와 파이 틀 이야기	Beatrix Potter	고양이와 강아지의 엉뚱한 티 파티.
+A1	-	15284	그림책	The Tale of Johnny Town-Mouse	도시 쥐 조니 이야기	Beatrix Potter	시골 쥐와 도시 쥐, 어디가 좋을까?
+A1	-	17089	그림책	The Tale of Mrs. Tittlemouse	티틀마우스 부인 이야기	Beatrix Potter	손님 때문에 바쁜 깔끔쟁이 생쥐.
+A1	-	45264	그림책	The Tale of Two Bad Mice	말썽꾸러기 생쥐 두 마리	Beatrix Potter	인형의 집에 들어간 생쥐들.
+A1	-	45265	그림책	The Story of a Fierce Bad Rabbit	사나운 나쁜 토끼 이야기	Beatrix Potter	남의 당근을 빼앗은 토끼의 최후.
+A1	-	14642	읽기 교재	McGuffey's Eclectic Primer	맥거피 첫 읽기책	William H. McGuffey	가장 쉬운 단어와 짧은 문장부터.
+A1	-	14640	읽기 교재	McGuffey's First Eclectic Reader	맥거피 1단계 리더	William H. McGuffey	짧은 문장으로 된 생활 이야기.
+A1	-	1489	읽기 교재	The New McGuffey First Reader	새 맥거피 1단계 리더	William H. McGuffey	그림과 함께 읽는 쉬운 이야기.
+A1	-	13853	읽기 교재	New National First Reader	뉴 내셔널 1단계 리더	Charles J. Barnes	아이들이 처음 읽는 짧은 글.
+A1	-	40415	읽기 교재	Tower's Little Primer	타워의 작은 읽기책	Anna E. Tower	한두 문장씩 읽는 첫 교재.
+A1	-	7841	읽기 교재	A Primary Reader	초급 리더	E. Louise Smythe	옛이야기를 아주 쉽게 다시 쓴 책.
+A1	-	22896	동화	Little Stories for Little Children	어린이를 위한 짧은 이야기	Anonymous	한 장 남짓한 짧은 이야기 모음.
+A1	-	24669	동화	Little Scenes for Little Folks	꼬마들의 작은 장면들	Anonymous	두 음절 이하 쉬운 단어로만 쓴 이야기.
+A1	-	30050	동화	Tales from Catland, for Little Kittens	고양이 나라 이야기	Tabitha Grimalkin	고양이들이 들려주는 귀여운 이야기.
+A1	-	43808	그림책	Mary's Little Lamb	메리의 어린 양	Edith Francis Foster	그림을 보고 맞히는 이야기.
+A1	-	18155	그림책	The Story of the Three Little Pigs	아기 돼지 삼 형제	L. Leslie Brooke	짚, 나무, 벽돌집과 늑대.
+A1	-	15661	동화	The Golden Goose Book	황금 거위 책	L. Leslie Brooke	황금 거위, 곰 세 마리, 엄지 톰.
+A1	-	20437	그림책	The Frog Prince and Other Stories	개구리 왕자	Walter Crane	개구리 왕자와 옛이야기.
+A1	-	23521	그림책	The Sleeping Beauty Picture Book	잠자는 숲속의 공주 그림책	Walter Crane	백 년 동안 잠든 공주.
+A1	-	25714	그림책	Mother Hubbard, Her Picture Book	허버드 아줌마 그림책	Walter Crane	허버드 아줌마와 곰 세 마리.
+A1	-	10557	그림책	Johnny Crow's Party	조니 까마귀의 파티	L. Leslie Brooke	정원에서 열린 동물 파티.
+A1	-	12109	그림책	The House That Jack Built	잭이 지은 집	Randolph Caldecott	한 줄씩 늘어나는 말놀이 이야기.
+A1	-	25433	그림책	The Baby's Own Aesop	아기를 위한 이솝	Walter Crane	이솝 우화를 짧은 시로.
+A1	-	10607	그림책	The Real Mother Goose	마더 구스 동요	Blanche Fisher Wright	영어권 아이들이 다 아는 동요.
+A1	-	23598	그림책	Little Bo-Peep	꼬마 보핍	L. Leslie Brooke	양을 잃어버린 꼬마 양치기.
+A1	-	20652	그림책	Ring O' Roses	링 오 로지스 동요 그림책	L. Leslie Brooke	노래로 배우는 쉬운 영어.
+A1	-	18735	동화	The Little Red Hen	빨간 암탉 (원작 그림책)	Florence White Williams	아무도 돕지 않던 친구들.
+A1	-	29980	동화	The Cock, the Mouse, and the Little Red Hen	수탉, 생쥐, 그리고 빨간 암탉	Félicité Lefèvre	부지런한 암탉과 여우.
+A1	-	19772	그림책	Denslow's Three Bears	덴슬로의 곰 세 마리	W. W. Denslow	골디락스 이야기를 그림으로.
+A1	-	23322	동화	The Three Bears	곰 세 마리	Anonymous	너무 뜨겁고, 너무 차갑고, 딱 좋고.
+A1	-	16982	동화	Bunny Rabbit's Diary	토끼의 일기	Mary Frances Blaisdell	아기 토끼가 쓴 하루하루.
+A1	-	11092	동화	The History of Tom Thumb and Other Stories	엄지 톰과 다른 이야기	Anonymous	엄지만 한 소년의 모험.
+A1	-	13213	동화	The Night Before Christmas and Other Stories	크리스마스 전날 밤	Various	크리스마스 시와 옛이야기.
+A1	-	19889	동화	Naughty Miss Bunny	말썽꾸러기 버니 아가씨	Clara Mulholland	말을 안 듣는 꼬마 소녀 이야기.
+A2	peter-rabbit	14838	그림책	The Tale of Peter Rabbit	피터 래빗 이야기	Beatrix Potter	말썽꾸러기 토끼의 모험 (원문).
+A2	-	14868	그림책	The Tailor of Gloucester	글로스터의 재단사	Beatrix Potter	크리스마스 밤, 생쥐들이 옷을 지어요.
+A2	-	15575	그림책	The Tale of Samuel Whiskers	새뮤얼 위스커스 이야기	Beatrix Potter	쥐들에게 붙잡힌 톰 키튼.
+A2	-	19805	그림책	The Tale of Mr. Tod	토드 씨 이야기	Beatrix Potter	여우와 오소리 사이의 아기 토끼들.
+A2	-	1825	동물 이야기	The Adventures of Reddy Fox	여우 레디의 모험	Thornton W. Burgess	꾀 많은 아기 여우의 장난.
+A2	-	2493	동물 이야기	The Adventures of Paddy the Beaver	비버 패디의 모험	Thornton W. Burgess	댐을 짓는 부지런한 비버.
+A2	-	2557	동물 이야기	Old Mother West Wind	서풍 할머니	Thornton W. Burgess	초원 친구들의 짧은 이야기.
+A2	-	5110	동물 이야기	The Adventures of Jerry Muskrat	사향쥐 제리의 모험	Thornton W. Burgess	연못에 사는 사향쥐.
+A2	-	5844	동물 이야기	The Adventures of Johnny Chuck	마멋 조니의 모험	Thornton W. Burgess	겨울잠을 자는 마멋.
+A2	-	5846	동물 이야기	The Adventures of Poor Mrs. Quack	가엾은 꽥 부인의 모험	Thornton W. Burgess	사냥꾼을 피하는 오리 가족.
+A2	-	11915	동물 이야기	The Adventures of Mr. Mocker	흉내쟁이 새 모커 씨	Thornton W. Burgess	남의 소리를 흉내 내는 새.
+A2	-	12630	동물 이야기	The Adventures of Old Mr. Toad	두꺼비 할아버지의 모험	Thornton W. Burgess	노래하는 두꺼비.
+A2	-	14375	동물 이야기	The Adventures of Grandfather Frog	개구리 할아버지의 모험	Thornton W. Burgess	연못의 지혜로운 개구리.
+A2	-	14732	동물 이야기	The Adventures of Unc' Billy Possum	주머니쥐 빌리 아저씨	Thornton W. Burgess	달걀을 좋아하는 주머니쥐.
+A2	-	15521	동물 이야기	The Adventures of Prickly Porky	호저 프리클리 포키	Thornton W. Burgess	가시가 무기인 느긋한 호저.
+A2	-	21015	동물 이야기	The Adventures of Jimmy Skunk	스컹크 지미의 모험	Thornton W. Burgess	아무도 건드리지 않는 스컹크.
+A2	-	22816	동물 이야기	The Adventures of Buster Bear	곰 버스터의 모험	Thornton W. Burgess	숲에 새로 온 커다란 곰.
+A2	-	25301	동물 이야기	The Adventures of Danny Meadow Mouse	들쥐 대니의 모험	Thornton W. Burgess	꼬리가 짧아 고민인 들쥐.
+A2	-	37952	동물 이야기	The Adventures of Chatterer the Red Squirrel	붉은 다람쥐 채터러	Thornton W. Burgess	수다쟁이 다람쥐의 위기.
+A2	-	43596	동물 이야기	The Adventures of Sammy Jay	어치 새미의 모험	Thornton W. Burgess	숲의 소식을 알리는 어치.
+A2	-	46866	동물 이야기	The Adventures of Peter Cottontail	솜꼬리 토끼 피터의 모험	Thornton W. Burgess	이름을 바꾸고 싶은 토끼.
+A2	-	46951	동물 이야기	The Adventures of Bobby Coon	너구리 바비의 모험	Thornton W. Burgess	다친 너구리를 도와준 친구들.
+A2	-	14958	동물 이야기	Mother West Wind "Why" Stories	서풍 할머니의 "왜" 이야기	Thornton W. Burgess	동물들은 왜 그렇게 생겼을까?
+A2	-	15281	동물 이야기	Uncle Wiggily's Adventures	위글리 아저씨의 모험	Howard R. Garis	지팡이를 짚은 토끼 신사.
+A2	-	15282	동물 이야기	Uncle Wiggily's Travels	위글리 아저씨의 여행	Howard R. Garis	행운을 찾아 떠난 토끼 아저씨.
+A2	-	17807	동물 이야기	Uncle Wiggily in the Woods	숲속의 위글리 아저씨	Howard R. Garis	숲에서 만난 친구들과 사건들.
+A2	-	42574	동물 이야기	Uncle Wiggily in Wonderland	이상한 나라의 위글리 아저씨	Howard R. Garis	토끼 아저씨가 간 이상한 나라.
+A2	-	60625	동물 이야기	Uncle Wiggily's Story Book	위글리 아저씨 이야기책	Howard R. Garis	잠들기 전 읽는 짧은 이야기.
+A2	-	5701	동물 이야기	The Tale of Fatty Coon	뚱보 너구리 이야기	Arthur Scott Bailey	먹보 너구리의 소동.
+A2	-	5727	동물 이야기	The Tale of Freddie Firefly	반딧불이 프레디 이야기	Arthur Scott Bailey	불빛을 자랑하는 반딧불이.
+A2	-	5955	동물 이야기	The Tale of Tommy Fox	여우 토미 이야기	Arthur Scott Bailey	농장 닭을 노리는 아기 여우.
+A2	-	6754	동물 이야기	The Tale of Brownie Beaver	비버 브라우니 이야기	Arthur Scott Bailey	솜씨 좋은 비버.
+A2	-	9462	동물 이야기	The Tale of Sandy Chipmunk	줄무늬다람쥐 샌디 이야기	Arthur Scott Bailey	돌담에 사는 다람쥐.
+A2	-	14402	동물 이야기	The Tale of Old Mr. Crow	까마귀 할아버지 이야기	Arthur Scott Bailey	허수아비를 비웃는 까마귀.
+A2	-	15528	동물 이야기	The Tale of Cuffy Bear	아기곰 커피 이야기	Arthur Scott Bailey	꿀을 좋아하는 아기곰.
+A2	-	16663	동물 이야기	The Tale of Solomon Owl	부엉이 솔로몬 이야기	Arthur Scott Bailey	밤의 숲을 지키는 부엉이.
+A2	-	18630	동물 이야기	The Tale of Frisky Squirrel	날쌘 다람쥐 이야기	Arthur Scott Bailey	겁 없는 꼬마 다람쥐.
+A2	-	18652	동물 이야기	The Tale of Henrietta Hen	암탉 헨리에타 이야기	Arthur Scott Bailey	잘난 척하는 농장 암탉.
+A2	-	20716	동물 이야기	The Tale of Timothy Turtle	거북 티모시 이야기	Arthur Scott Bailey	느긋한 늪지 거북.
+A2	-	21078	동물 이야기	The Tale of Miss Kitty Cat	키티 고양이 아가씨 이야기	Arthur Scott Bailey	농장의 새침한 고양이.
+A2	-	24628	동물 이야기	The Tale of Jimmy Rabbit	토끼 지미 이야기	Arthur Scott Bailey	장난꾸러기 토끼의 하루.
+A2	-	24731	동물 이야기	The Tale of Grunty Pig	꿀꿀이 그런티 이야기	Arthur Scott Bailey	먹을 것만 생각하는 돼지.
+A2	-	14668	읽기 교재	McGuffey's Second Eclectic Reader	맥거피 2단계 리더	William H. McGuffey	조금 긴 생활 이야기와 교훈.
+A2	-	15659	읽기 교재	The Beacon Second Reader	비컨 2단계 리더	James H. Fassett	옛이야기를 쉬운 문장으로.
+A2	-	6685	읽기 교재	Story Hour Readers — Book Three	스토리 아워 리더 3권	Ida Coe, Alice Christie Dillon	세계 옛이야기 모음.
+A2	-	5732	동화	Bunny Brown and His Sister Sue	버니 브라운과 여동생 수	Laura Lee Hope	남매의 신나는 하루하루.
+A2	-	5947	동물 이야기	Billy Bunny and Uncle Bull Frog	토끼 빌리와 황소개구리 아저씨	David Cory	토끼와 개구리의 우정.
+B1	oz	55	어린이 고전	The Wonderful Wizard of Oz	오즈의 마법사	L. Frank Baum	도로시와 친구들의 여행.
+B1	alice	11	어린이 고전	Alice's Adventures in Wonderland	이상한 나라의 앨리스	Lewis Carroll	토끼 굴 속 이상한 세계.
+B1	-	54	어린이 고전	The Marvelous Land of Oz	환상의 나라 오즈	L. Frank Baum	소년 팁과 호박 머리 잭.
+B1	-	486	어린이 고전	Ozma of Oz	오즈의 오즈마 공주	L. Frank Baum	도로시가 다시 오즈로.
+B1	-	420	어린이 고전	Dorothy and the Wizard in Oz	도로시와 오즈의 마법사	L. Frank Baum	땅속 세계로 떨어진 도로시.
+B1	-	485	어린이 고전	The Road to Oz	오즈로 가는 길	L. Frank Baum	오즈마의 생일 파티로 가는 길.
+B1	-	517	어린이 고전	The Emerald City of Oz	오즈의 에메랄드 시	L. Frank Baum	도로시 가족이 오즈로 이사해요.
+B1	-	4357	동화	American Fairy Tales	미국 동화	L. Frank Baum	오즈 작가의 기발한 짧은 동화.
+B1	-	2781	어린이 고전	Just So Stories	그래서 그렇게 됐대요	Rudyard Kipling	코끼리 코는 왜 길까?
+B1	-	501	어린이 고전	The Story of Doctor Dolittle	둘리틀 박사 이야기	Hugh Lofting	동물과 말하는 의사.
+B1	-	1154	어린이 고전	The Voyages of Doctor Dolittle	둘리틀 박사의 항해	Hugh Lofting	거미원숭이섬으로 떠난 모험.
+B1	-	500	어린이 고전	The Adventures of Pinocchio	피노키오의 모험	Carlo Collodi	거짓말하면 코가 길어지는 나무 인형.
+B1	-	503	동화	The Blue Fairy Book	파랑 동화책	Andrew Lang	신데렐라, 알라딘 등 세계 명작 동화.
+B1	-	540	동화	The Red Fairy Book	빨강 동화책	Andrew Lang	잭과 콩나무 등 세계 옛이야기.
+B1	-	640	동화	The Yellow Fairy Book	노랑 동화책	Andrew Lang	유럽 각지의 신기한 이야기.
+B1	-	2591	동화	Grimms' Fairy Tales	그림 형제 동화	Jacob & Wilhelm Grimm	헨젤과 그레텔, 라푼젤 원작.
+B1	-	1597	동화	Andersen's Fairy Tales	안데르센 동화	H. C. Andersen	인어 공주, 성냥팔이 소녀.
+B1	-	21	동화	Three Hundred Aesop's Fables	이솝 우화 300편	Aesop	짧고 교훈적인 우화 모음.
+B1	-	28	동화	The Fables of Aesop	이솝 우화 (제이콥스 판)	Joseph Jacobs	다시 들려주는 이솝 이야기.
+B1	-	5312	동화	Mother Goose in Prose	이야기로 읽는 마더 구스	L. Frank Baum	동요 속 인물들의 숨은 이야기.
+B1	-	17208	동화	The Tales of Mother Goose	페로 동화집	Charles Perrault	빨간 모자, 장화 신은 고양이.
+B1	-	7439	동화	English Fairy Tales	영국 옛이야기	Joseph Jacobs	잭과 콩나무, 아기 돼지 삼 형제.
+B1	-	7885	동화	Celtic Fairy Tales	켈트 옛이야기	Joseph Jacobs	아일랜드·스코틀랜드의 신비한 이야기.
+B1	-	7128	동화	Indian Fairy Tales	인도 옛이야기	Joseph Jacobs	지혜로운 동물과 왕들의 이야기.
+B1	-	4018	동화	Japanese Fairy Tales	일본 옛이야기	Yei Theodora Ozaki	모모타로, 우라시마 타로.
+B1	-	473	동화	Stories to Tell to Children	아이에게 들려주는 이야기	Sara Cone Bryant	소리 내어 읽기 좋은 짧은 이야기.
+B1	-	18442	어린이 고전	Fifty Famous Stories Retold	유명한 이야기 50편	James Baldwin	역사 속 유명한 일화를 쉽게.
+B1	-	10070	논픽션	Stories of Great Americans for Little Americans	어린이를 위한 위인 이야기	Edward Eggleston	미국 위인들의 짧은 일화.
+B1	-	30800	동화	Nature Myths and Stories for Little Children	자연 신화 이야기	Flora J. Cooke	해, 바람, 꽃에 얽힌 신화.
+B1	-	163	동화	Flower Fables	꽃 요정 이야기	Louisa May Alcott	작은 숲 요정들의 이야기.
+B1	-	11757	어린이 고전	The Velveteen Rabbit	벨벳 토끼	Margery Williams	사랑받으면 진짜가 될까?
+B1	-	67098	어린이 고전	Winnie-the-Pooh	곰돌이 푸	A. A. Milne	꿀을 좋아하는 곰과 친구들.
+B1	-	18190	어린이 고전	Raggedy Ann Stories	래기디 앤 이야기	Johnny Gruelle	헝겊 인형의 따뜻한 모험.
+B1	-	23661	동화	The Book of Dragons	용 이야기책	E. Nesbit	유쾌한 용 이야기 모음.
+B1	-	24053	어린이 고전	The Little Lame Prince (for Young Readers)	다리가 불편한 꼬마 왕자	Dinah Craik, Margaret Waters	마법 망토를 탄 왕자.
+B1	-	14766	읽기 교재	McGuffey's Third Eclectic Reader	맥거피 3단계 리더	William H. McGuffey	이야기와 시로 읽기 연습.
+B1	-	2441	논픽션	The Burgess Animal Book for Children	버지스 동물 책	Thornton W. Burgess	이야기로 배우는 동물 지식.
+B1	-	3074	논픽션	The Burgess Bird Book for Children	버지스 새 책	Thornton W. Burgess	이야기로 배우는 새 이야기.
+B1	-	5791	동물 이야기	Mrs. Peter Rabbit	피터 래빗 부인	Thornton W. Burgess	피터 토끼의 결혼 이야기.
+B1	-	13355	동물 이야기	Happy Jack	행복한 다람쥐 잭	Thornton W. Burgess	회색 다람쥐의 숲속 생활.
+B1	-	15168	동물 이야기	Bowser the Hound	사냥개 바우저	Thornton W. Burgess	여우를 쫓는 사냥개.
+B1	-	4670	동물 이야기	Lightfoot the Deer	사슴 라이트풋	Thornton W. Burgess	사냥철을 견디는 사슴.
+B1	-	4698	동물 이야기	Whitefoot the Wood Mouse	숲쥐 화이트풋	Thornton W. Burgess	겁 많은 숲쥐의 하루.
+B1	-	4979	동물 이야기	Blacky the Crow	까마귀 블래키	Thornton W. Burgess	영리한 까마귀의 꾀.
+B1	-	4980	동물 이야기	Old Granny Fox	여우 할머니	Thornton W. Burgess	겨울을 나는 늙은 여우.
+B1	-	1448	어린이 고전	Heidi	하이디	Johanna Spyri	알프스 소녀 하이디.
+B1	-	26654	어린이 고전	Peter and Wendy	피터와 웬디	J. M. Barrie	자라지 않는 소년 피터 팬.
+B1	-	1332	어린이 고전	Peter Pan in Kensington Gardens	켄싱턴 공원의 피터 팬	J. M. Barrie	피터 팬의 첫 이야기.
+B1	-	10935	어린이 고전	The Wonderful Adventures of Nils	닐스의 신기한 모험	Selma Lagerlöf	거위를 타고 스웨덴을 여행해요.
+B1	-	902	동화	The Happy Prince and Other Tales	행복한 왕자	Oscar Wilde	행복한 왕자, 거인의 정원.
+B1+	-	697	동화	The Light Princess	가벼운 공주	George MacDonald	무게가 없는 공주의 이야기.
+B1+	secret-garden	113	어린이 고전	The Secret Garden	비밀의 화원	Frances Hodgson Burnett	닫힌 정원과 마음이 열리는 이야기.
+B1+	tom-sawyer	74	소설	The Adventures of Tom Sawyer	톰 소여의 모험	Mark Twain	미시시피 강가 소년의 장난과 모험.
+B1+	-	236	어린이 고전	The Jungle Book	정글북	Rudyard Kipling	늑대가 기른 소년 모글리.
+B1+	-	1937	어린이 고전	The Second Jungle Book	두 번째 정글북	Rudyard Kipling	모글리의 정글 이야기 계속.
+B1+	-	271	어린이 고전	Black Beauty	블랙 뷰티	Anna Sewell	말이 직접 들려주는 일생.
+B1+	-	289	어린이 고전	The Wind in the Willows	버드나무에 부는 바람	Kenneth Grahame	두더지, 물쥐, 두꺼비의 강가 생활.
+B1+	-	45	어린이 고전	Anne of Green Gables	빨간 머리 앤	L. M. Montgomery	상상력 넘치는 고아 소녀 앤.
+B1+	-	47	어린이 고전	Anne of Avonlea	에이번리의 앤	L. M. Montgomery	선생님이 된 앤.
+B1+	-	51	어린이 고전	Anne of the Island	레드먼드의 앤	L. M. Montgomery	대학에 간 앤.
+B1+	-	514	소설	Little Women	작은 아씨들	Louisa May Alcott	마치 집안 네 자매의 성장기.
+B1+	-	2788	소설	Little Men	작은 아씨들 2: 작은 신사들	Louisa May Alcott	조가 연 학교의 소년들.
+B1+	-	2726	소설	Eight Cousins	여덟 사촌	Louisa May Alcott	사촌 일곱 명과 자라는 소녀.
+B1+	-	2787	소설	An Old-Fashioned Girl	옛날식 소녀	Louisa May Alcott	시골 소녀의 도시 생활.
+B1+	-	1450	소설	Pollyanna	폴리애나	Eleanor H. Porter	무엇에서든 기쁨을 찾는 소녀.
+B1+	-	479	어린이 고전	Little Lord Fauntleroy	소공자	Frances Hodgson Burnett	백작의 후계자가 된 소년.
+B1+	-	146	어린이 고전	A Little Princess	소공녀	Frances Hodgson Burnett	하루아침에 가난해진 사라.
+B1+	-	498	소설	Rebecca of Sunnybrook Farm	서니브룩 농장의 레베카	Kate Douglas Wiggin	이모 집에 간 명랑한 소녀.
+B1+	-	1874	어린이 고전	The Railway Children	기찻길 옆 아이들	E. Nesbit	기찻길 옆으로 이사 온 삼 남매.
+B1+	-	778	어린이 고전	Five Children and It	모래 요정과 다섯 아이	E. Nesbit	하루 한 가지 소원을 들어주는 요정.
+B1+	-	836	어린이 고전	The Phoenix and the Carpet	불사조와 마법 양탄자	E. Nesbit	양탄자 속에서 나온 불사조.
+B1+	-	837	어린이 고전	The Story of the Amulet	부적 이야기	E. Nesbit	과거로 떠나는 시간 여행.
+B1+	-	770	어린이 고전	The Story of the Treasure Seekers	보물 찾는 아이들	E. Nesbit	집안을 일으키려는 남매들.
+B1+	-	3536	어린이 고전	The Enchanted Castle	마법의 성	E. Nesbit	투명해지는 반지와 마법의 성.
+B1+	-	708	어린이 고전	The Princess and the Goblin	공주와 고블린	George MacDonald	산속 고블린과 용감한 광부 소년.
+B1+	-	709	어린이 고전	The Princess and Curdie	공주와 커디	George MacDonald	고블린 이야기의 속편.
+B1+	-	2770	소설	Five Little Peppers and How They Grew	페퍼 가의 다섯 아이	Margaret Sidney	가난해도 즐거운 다섯 남매.
+B1+	-	764	소설	Hans Brinker, or The Silver Skates	한스 브링커와 은 스케이트	Mary Mapes Dodge	네덜란드 소년의 스케이트 대회.
+B1+	-	1430	어린이 고전	Beautiful Stories from Shakespeare	셰익스피어 이야기	E. Nesbit	셰익스피어 희곡을 이야기로.
+B1+	-	573	어린이 고전	Tales from Shakespeare	셰익스피어 이야기 (램 판)	Charles & Mary Lamb	가장 유명한 셰익스피어 입문서.
+B1+	-	128	동화	The Arabian Nights Entertainments	아라비안 나이트	Andrew Lang	알리바바, 신드바드.
+B1+	-	157	소설	Daddy-Long-Legs	키다리 아저씨	Jean Webster	고아 소녀가 쓴 편지.
+B1+	-	238	소설	Dear Enemy	친애하는 적에게	Jean Webster	키다리 아저씨의 속편.
+B1+	-	5347	소설	Understood Betsy	이해받은 베시	Dorothy Canfield Fisher	스스로 하는 법을 배운 소녀.
+B1+	-	440	소설	Just David	데이비드	Eleanor H. Porter	바이올린을 켜는 소년.
+B1+	-	12	어린이 고전	Through the Looking-Glass	거울 나라의 앨리스	Lewis Carroll	거울 속 체스 나라로.
+B1+	-	3836	SF·모험	The Swiss Family Robinson	스위스 가족 로빈슨	Johann David Wyss	무인도에 표류한 가족.
+B1+	-	103	SF·모험	Around the World in Eighty Days	80일간의 세계 일주	Jules Verne	80일 안에 세계를 돌 수 있을까?
+B1+	-	120	SF·모험	Treasure Island	보물섬	Robert Louis Stevenson	해적의 보물 지도.
+B1+	-	215	동물 이야기	The Call of the Wild	야성의 부름	Jack London	썰매 개가 된 벅의 이야기.
+B1+	-	38777	동물 이야기	Lad: A Dog	래드: 개 이야기	Albert Payson Terhune	충직한 콜리 래드.
+B1+	-	11197	동화	Bambi	밤비 (쿡)	Marjorie Benton Cooke	꿈 많은 소녀 '밤비'의 이야기.
+B1+	-	5348	소설	Ragged Dick	넝마 딕	Horatio Alger	구두닦이 소년의 성공기.
+B1+	-	14522	단편집	The Canterville Ghost	캔터빌의 유령	Oscar Wilde	아무도 무서워하지 않는 유령.
+B1+	-	41	단편집	The Legend of Sleepy Hollow	슬리피 할로우의 전설	Washington Irving	머리 없는 기사의 전설.
+B1+	-	754	논픽션	The Story of Mankind	인류 이야기	Hendrik Willem van Loon	아이들을 위한 세계사.
+B1+	-	544	소설	Anne's House of Dreams	앤의 꿈의 집	L. M. Montgomery	결혼한 앤의 새 보금자리.
+B1+	-	2786	소설	Jack and Jill	잭과 질	Louisa May Alcott	썰매 사고 뒤 친구들의 겨울.
+B1+	-	794	어린이 고전	The Wouldbegoods	착한 아이가 되고 싶은 아이들	E. Nesbit	착해지려다 생기는 소동.
+B2	christmas-carol	46	소설	A Christmas Carol	크리스마스 캐럴	Charles Dickens	구두쇠 스크루지의 하룻밤.
+B2	sherlock	1661	추리 소설	The Adventures of Sherlock Holmes	셜록 홈즈의 모험	Arthur Conan Doyle	명탐정의 추리 단편집.
+B2	-	244	추리 소설	A Study in Scarlet	주홍색 연구	Arthur Conan Doyle	홈즈와 왓슨의 첫 만남.
+B2	-	2097	추리 소설	The Sign of the Four	네 사람의 서명	Arthur Conan Doyle	보물과 의문의 편지.
+B2	-	2852	추리 소설	The Hound of the Baskervilles	바스커빌 가의 개	Arthur Conan Doyle	황야에 나타난 지옥의 개.
+B2	-	834	추리 소설	The Memoirs of Sherlock Holmes	셜록 홈즈의 회상록	Arthur Conan Doyle	홈즈의 단편 사건들.
+B2	-	108	추리 소설	The Return of Sherlock Holmes	셜록 홈즈의 귀환	Arthur Conan Doyle	돌아온 명탐정.
+B2	-	863	추리 소설	The Mysterious Affair at Styles	스타일스 저택의 괴사건	Agatha Christie	푸아로의 첫 사건.
+B2	-	1155	추리 소설	The Secret Adversary	비밀 결사	Agatha Christie	토미와 터펜스의 첫 모험.
+B2	-	558	추리 소설	The Thirty-Nine Steps	39계단	John Buchan	쫓기는 남자의 스파이 스릴러.
+B2	-	76	소설	Adventures of Huckleberry Finn	허클베리 핀의 모험	Mark Twain	뗏목을 타고 강을 따라 내려가요.
+B2	-	1837	소설	The Prince and the Pauper	왕자와 거지	Mark Twain	옷을 바꿔 입은 두 소년.
+B2	-	421	SF·모험	Kidnapped	납치	Robert Louis Stevenson	스코틀랜드 고원을 가로지른 도주.
+B2	-	848	SF·모험	The Black Arrow	검은 화살	Robert Louis Stevenson	장미 전쟁 시대의 모험.
+B2	-	43	소설	The Strange Case of Dr. Jekyll and Mr. Hyde	지킬 박사와 하이드	Robert Louis Stevenson	한 사람 안의 두 얼굴.
+B2	-	35	SF·모험	The Time Machine	타임머신	H. G. Wells	80만 년 뒤의 미래로.
+B2	-	36	SF·모험	The War of the Worlds	우주 전쟁	H. G. Wells	화성인의 지구 침공.
+B2	-	5230	SF·모험	The Invisible Man	투명 인간	H. G. Wells	보이지 않게 된 과학자.
+B2	-	159	SF·모험	The Island of Doctor Moreau	모로 박사의 섬	H. G. Wells	동물을 사람으로 만드는 섬.
+B2	-	1013	SF·모험	The First Men in the Moon	달의 첫 방문자	H. G. Wells	달 속에 사는 생물들.
+B2	-	164	SF·모험	Twenty Thousand Leagues under the Sea	해저 2만 리	Jules Verne	노틸러스호와 네모 선장.
+B2	-	18857	SF·모험	A Journey to the Centre of the Earth	지구 속 여행	Jules Verne	화산을 통해 지구 속으로.
+B2	-	1268	SF·모험	The Mysterious Island	신비의 섬	Jules Verne	기구를 타고 표류한 사람들.
+B2	-	521	SF·모험	Robinson Crusoe	로빈슨 크루소	Daniel Defoe	28년 동안 무인도에서.
+B2	-	78	SF·모험	Tarzan of the Apes	유인원 타잔	Edgar Rice Burroughs	정글에서 자란 귀족의 아들.
+B2	-	62	SF·모험	A Princess of Mars	화성의 공주	Edgar Rice Burroughs	화성에 간 남북전쟁 군인.
+B2	-	139	SF·모험	The Lost World	잃어버린 세계	Arthur Conan Doyle	공룡이 사는 고원.
+B2	-	2166	SF·모험	King Solomon's Mines	솔로몬 왕의 보물	H. Rider Haggard	아프리카 오지의 보물 찾기.
+B2	-	95	SF·모험	The Prisoner of Zenda	젠다 성의 포로	Anthony Hope	왕과 똑같이 생긴 영국 신사.
+B2	-	60	SF·모험	The Scarlet Pimpernel	스칼렛 핌퍼넬	Baroness Orczy	프랑스 혁명 속 비밀 영웅.
+B2	-	910	동물 이야기	White Fang	흰 송곳니	Jack London	늑대개가 사람을 믿기까지.
+B2	-	2186	SF·모험	Captains Courageous	용감한 선장들	Rudyard Kipling	고깃배에서 철이 드는 부잣집 소년.
+B2	-	175	추리 소설	The Phantom of the Opera	오페라의 유령	Gaston Leroux	파리 오페라 극장의 유령.
+B2	-	4017	추리 소설	The Hollow Needle	기암성	Maurice Leblanc	괴도 뤼팽의 대결.
+B2	-	2776	단편집	The Four Million	사백만 (크리스마스 선물 외)	O. Henry	'크리스마스 선물' 등 뉴욕 단편.
+B2	-	8164	단편집	My Man Jeeves	나의 집사 지브스	P. G. Wodehouse	철없는 주인과 똑똑한 집사.
+B2	-	10554	소설	Right Ho, Jeeves	알았어요, 지브스	P. G. Wodehouse	지브스가 수습하는 연애 소동.
+B2	-	67979	소설	The Blue Castle	푸른 성	L. M. Montgomery	스물아홉 살 밸런시의 새 인생.
+B2	-	125	소설	A Girl of the Limberlost	림버로스트의 소녀	Gene Stratton-Porter	나방을 모아 학비를 버는 소녀.
+B2	-	1250	소설	Anthem	성가	Ayn Rand	'나'라는 말이 사라진 세상.
+B2	-	1952	단편집	The Yellow Wallpaper	누런 벽지	Charlotte Perkins Gilman	방에 갇힌 여인의 기록.
+B2	-	2500	소설	Siddhartha	싯다르타	Hermann Hesse	깨달음을 찾는 젊은이.
+B2	-	58585	논픽션	The Prophet	예언자	Kahlil Gibran	사랑, 일, 자유에 대한 짧은 글.
+B2	-	63849	동물 이야기	Bambi: A Life in the Woods	밤비 (원작)	Felix Salten	숲에서 자라는 아기 사슴.
+B2	-	23	논픽션	Narrative of the Life of Frederick Douglass	프레더릭 더글러스 자서전	Frederick Douglass	노예에서 연설가가 되기까지.
+B2	-	2376	논픽션	Up from Slavery	노예의 굴레를 벗고	Booker T. Washington	교육으로 일어선 삶.
+B2	-	20203	논픽션	Autobiography of Benjamin Franklin	프랭클린 자서전	Benjamin Franklin	자수성가의 교과서.
+B2	-	132	논픽션	The Art of War	손자병법	Sunzi	싸우지 않고 이기는 법.
+B2	-	67138	소설	The Sun Also Rises	해는 또다시 떠오른다	Ernest Hemingway	파리와 스페인의 '잃어버린 세대'.
+B2	-	3176	논픽션	The Innocents Abroad	철부지의 해외여행	Mark Twain	유럽·성지 여행기.
+B2+	gatsby	64317	소설	The Great Gatsby	위대한 개츠비	F. Scott Fitzgerald	재즈 시대의 꿈과 사랑.
+B2+	-	84	소설	Frankenstein	프랑켄슈타인	Mary Shelley	생명을 만든 과학자의 비극.
+B2+	-	345	소설	Dracula	드라큘라	Bram Stoker	트란실바니아의 흡혈귀 백작.
+B2+	-	174	소설	The Picture of Dorian Gray	도리언 그레이의 초상	Oscar Wilde	늙지 않는 남자와 초상화.
+B2+	-	730	소설	Oliver Twist	올리버 트위스트	Charles Dickens	런던 뒷골목의 고아 소년.
+B2+	-	786	소설	Hard Times	어려운 시절	Charles Dickens	사실만 가르치는 학교와 공장 도시.
+B2+	-	1257	SF·모험	The Three Musketeers	삼총사	Alexandre Dumas	하나는 모두를, 모두는 하나를.
+B2+	-	2759	SF·모험	The Man in the Iron Mask	철가면	Alexandre Dumas	철가면을 쓴 수수께끼의 죄수.
+B2+	-	1184	SF·모험	The Count of Monte Cristo	몬테크리스토 백작	Alexandre Dumas	억울한 감옥살이와 복수.
+B2+	-	121	소설	Northanger Abbey	노생거 사원	Jane Austen	소설을 너무 좋아하는 소녀.
+B2+	-	2226	SF·모험	Kim	킴	Rudyard Kipling	인도를 누비는 소년 스파이.
+B2+	-	86	소설	A Connecticut Yankee in King Arthur's Court	아서 왕궁의 양키	Mark Twain	아서 왕 시대로 간 미국인.
+B2+	-	102	추리 소설	The Tragedy of Pudd'nhead Wilson	얼간이 윌슨	Mark Twain	바뀐 두 아기와 지문.
+B2+	-	245	논픽션	Life on the Mississippi	미시시피강의 삶	Mark Twain	증기선 조종사 시절의 회고.
+B2+	-	308	소설	Three Men in a Boat	보트 위의 세 남자	Jerome K. Jerome	템스강 뱃놀이의 유쾌한 소동.
+B2+	-	204	추리 소설	The Innocence of Father Brown	브라운 신부의 결백	G. K. Chesterton	평범한 신부의 날카로운 추리.
+B2+	-	1074	SF·모험	The Sea-Wolf	바다의 늑대	Jack London	잔혹한 선장 울프 라슨.
+B2+	-	1056	소설	Martin Eden	마틴 에덴	Jack London	작가가 되려는 선원의 분투.
+B2+	-	5200	소설	Metamorphosis	변신	Franz Kafka	어느 날 벌레가 된 그레고르.
+B2+	-	829	소설	Gulliver's Travels	걸리버 여행기	Jonathan Swift	소인국과 거인국.
+B2+	-	2148	단편집	The Works of Edgar Allan Poe, Vol. 2	에드거 앨런 포 작품집 2	Edgar Allan Poe	'어셔 가의 몰락' 등 단편.
+B2+	-	209	소설	The Turn of the Screw	나사의 회전	Henry James	가정교사가 본 유령.
+B2+	-	2870	소설	Washington Square	워싱턴 스퀘어	Henry James	상속녀와 구혼자, 그리고 아버지.
+B2+	-	550	소설	Silas Marner	사일러스 마너	George Eliot	금화를 잃고 아이를 얻은 직조공.
+B2+	-	11231	단편집	Bartleby, the Scrivener	필경사 바틀비	Herman Melville	"안 하는 편을 택하겠습니다."
+B2+	-	4517	소설	Ethan Frome	이선 프롬	Edith Wharton	눈 덮인 마을의 비극.
+B2+	-	242	소설	My Ántonia	나의 안토니아	Willa Cather	네브래스카 초원의 이민자 소녀.
+B2+	-	24	소설	O Pioneers!	오 개척자들이여!	Willa Cather	초원을 일군 여성 알렉산드라.
+B2+	-	160	단편집	The Awakening and Selected Short Stories	각성	Kate Chopin	자신을 찾아가는 여성.
+B2+	-	140	소설	The Jungle	정글	Upton Sinclair	시카고 도축장 노동자의 삶.
+B2+	-	73	소설	The Red Badge of Courage	붉은 무공 훈장	Stephen Crane	남북전쟁 속 젊은 병사의 두려움.
+B2+	-	82	SF·모험	Ivanhoe	아이반호	Walter Scott	사자왕 리처드 시대의 기사.
+B2+	-	805	소설	This Side of Paradise	낙원의 이쪽	F. Scott Fitzgerald	프린스턴 청년의 방황.
+B2+	-	4368	단편집	Flappers and Philosophers	말괄량이와 철학자	F. Scott Fitzgerald	재즈 시대 단편집.
+B2+	-	2641	소설	A Room with a View	전망 좋은 방	E. M. Forster	피렌체 여행과 사랑.
+B2+	-	1429	단편집	The Garden Party and Other Stories	가든 파티	Katherine Mansfield	섬세한 일상의 단편.
+B2+	-	269	단편집	Beasts and Super-Beasts	짐승과 초짐승	Saki	짓궂고 재치 있는 단편.
+B2+	-	1858	단편집	Plain Tales from the Hills	산골 이야기	Rudyard Kipling	영국령 인도의 짧은 이야기.
+B2+	-	1156	소설	Babbitt	배빗	Sinclair Lewis	평범한 중산층 사업가의 삶.
+B2+	-	2814	단편집	Dubliners	더블린 사람들	James Joyce	더블린 시민들의 15개 단편.
+B2+	-	1080	논픽션	A Modest Proposal	겸손한 제안	Jonathan Swift	풍자 문학의 대표작.
+B2+	-	147	논픽션	Common Sense	상식	Thomas Paine	미국 독립을 외친 소책자.
+B2+	-	1232	논픽션	The Prince	군주론	Niccolò Machiavelli	권력을 얻고 지키는 법.
+B2+	-	2680	논픽션	Meditations	명상록	Marcus Aurelius	황제가 자신에게 쓴 글.
+B2+	-	71865	소설	Mrs. Dalloway	댈러웨이 부인	Virginia Woolf	파티를 준비하는 하루.
+B2+	-	1727	고전 문학	The Odyssey (prose)	오디세이아	Homer	트로이 전쟁 뒤 10년의 귀향.
+B2+	-	2199	고전 문학	The Iliad (prose)	일리아스	Homer	아킬레우스의 분노.
+C1	pride	1342	소설	Pride and Prejudice	오만과 편견	Jane Austen	엘리자베스와 다아시의 이야기.
+C1	-	158	소설	Emma	엠마	Jane Austen	중매를 좋아하는 아가씨.
+C1	-	161	소설	Sense and Sensibility	이성과 감성	Jane Austen	서로 다른 두 자매의 사랑.
+C1	-	105	소설	Persuasion	설득	Jane Austen	8년 만에 다시 만난 연인.
+C1	-	141	소설	Mansfield Park	맨스필드 파크	Jane Austen	부잣집에 맡겨진 소녀 패니.
+C1	-	1400	소설	Great Expectations	위대한 유산	Charles Dickens	신사가 된 대장장이 소년.
+C1	-	98	소설	A Tale of Two Cities	두 도시 이야기	Charles Dickens	혁명기의 런던과 파리.
+C1	-	766	소설	David Copperfield	데이비드 코퍼필드	Charles Dickens	디킨스의 자전적 소설.
+C1	-	1023	소설	Bleak House	황폐한 집	Charles Dickens	끝나지 않는 소송.
+C1	-	2701	소설	Moby Dick	모비 딕	Herman Melville	흰 고래를 쫓는 에이해브 선장.
+C1	-	1260	소설	Jane Eyre	제인 에어	Charlotte Brontë	가정교사 제인의 사랑과 독립.
+C1	-	768	소설	Wuthering Heights	폭풍의 언덕	Emily Brontë	황야의 격정적인 사랑과 복수.
+C1	-	33	소설	The Scarlet Letter	주홍 글씨	Nathaniel Hawthorne	가슴에 'A'를 단 여인.
+C1	-	110	소설	Tess of the d'Urbervilles	테스	Thomas Hardy	순수한 여인의 비극.
+C1	-	107	소설	Far from the Madding Crowd	광란의 무리를 떠나	Thomas Hardy	농장주 밧셰바와 세 남자.
+C1	-	145	소설	Middlemarch	미들마치	George Eliot	지방 도시 사람들의 삶.
+C1	-	219	소설	Heart of Darkness	어둠의 심연	Joseph Conrad	콩고강 깊은 곳의 커츠.
+C1	-	5658	소설	Lord Jim	로드 짐	Joseph Conrad	한순간의 실수와 속죄.
+C1	-	541	소설	The Age of Innocence	순수의 시대	Edith Wharton	뉴욕 상류 사회의 사랑.
+C1	-	284	소설	The House of Mirth	환락의 집	Edith Wharton	결혼 시장의 릴리 바트.
+C1	-	543	소설	Main Street	메인 스트리트	Sinclair Lewis	작은 마을을 바꾸려는 여인.
+C1	-	2946	소설	Howards End	하워즈 엔드	E. M. Forster	세 가족과 한 채의 집.
+C1	-	9830	소설	The Beautiful and Damned	아름답고 저주받은 사람들	F. Scott Fitzgerald	유산만 기다리는 부부.
+C1	-	4217	소설	A Portrait of the Artist as a Young Man	젊은 예술가의 초상	James Joyce	예술가로 깨어나는 청년.
+C1	-	2833	소설	The Portrait of a Lady, Vol. 1	여인의 초상 1	Henry James	유럽에 간 미국 여성 이사벨.
+C1	-	599	소설	Vanity Fair	허영의 시장	William Makepeace Thackeray	야심 찬 베키 샤프.
+C1	-	203	소설	Uncle Tom's Cabin	톰 아저씨의 오두막	Harriet Beecher Stowe	노예 제도를 고발한 소설.
+C1	-	135	소설	Les Misérables	레 미제라블	Victor Hugo	장 발장의 일생.
+C1	-	996	소설	Don Quixote	돈키호테	Miguel de Cervantes	기사가 되고 싶은 시골 귀족.
+C1	-	2600	소설	War and Peace	전쟁과 평화	Leo Tolstoy	나폴레옹 전쟁 속 러시아 귀족들.
+C1	-	1399	소설	Anna Karenina	안나 카레니나	Leo Tolstoy	모든 불행한 가정은 제각각이다.
+C1	-	2554	소설	Crime and Punishment	죄와 벌	Fyodor Dostoyevsky	살인을 저지른 대학생의 고뇌.
+C1	-	28054	소설	The Brothers Karamazov	카라마조프가의 형제들	Fyodor Dostoyevsky	아버지의 죽음과 세 형제.
+C1	-	600	소설	Notes from the Underground	지하로부터의 수기	Fyodor Dostoyevsky	지하 인간의 독백.
+C1	-	2638	소설	The Idiot	백치	Fyodor Dostoyevsky	순수한 미시킨 공작.
+C1	-	2413	소설	Madame Bovary	보바리 부인	Gustave Flaubert	꿈과 현실 사이의 엠마.
+C1	-	205	논픽션	Walden	월든	Henry David Thoreau	숲속 오두막에서의 2년.
+C1	-	16643	논픽션	Essays by Ralph Waldo Emerson	에머슨 수필집	Ralph Waldo Emerson	'자기 신뢰' 등 대표 수필.
+C1	-	408	논픽션	The Souls of Black Folk	흑인의 영혼	W. E. B. Du Bois	인종 문제를 다룬 고전.
+C1	-	1497	논픽션	The Republic	국가	Plato	정의란 무엇인가.
+C1	-	4363	논픽션	Beyond Good and Evil	선악의 저편	Friedrich Nietzsche	도덕에 대한 도전.
+C1	-	815	논픽션	Democracy in America, Vol. 1	미국의 민주주의 1	Alexis de Tocqueville	프랑스인이 본 미국 민주주의.
+C1	-	1228	논픽션	On the Origin of Species	종의 기원	Charles Darwin	자연 선택에 의한 진화.
+B1+	-	2804	소설	Rose in Bloom	꽃피는 로즈	Louisa May Alcott	'여덟 사촌'의 속편, 어른이 된 로즈.
+B2+	-	1695	추리 소설	The Man Who Was Thursday	목요일이었던 남자	G. K. Chesterton	무정부주의자 모임에 잠입한 시인.
+B2+	-	155	추리 소설	The Moonstone	월장석	Wilkie Collins	사라진 인도 다이아몬드.
+C1	-	583	추리 소설	The Woman in White	흰옷을 입은 여인	Wilkie Collins	한밤중에 만난 흰옷의 여인.
+C1	-	4276	소설	North and South	남과 북	Elizabeth Gaskell	공장 도시로 간 목사의 딸.
+C1	-	432	소설	The Ambassadors	대사들	Henry James	파리로 간 중년 미국인.
+C1	-	3600	논픽션	Essays of Michel de Montaigne	몽테뉴 수상록	Michel de Montaigne	"나는 무엇을 아는가?"
+C1	-	34901	논픽션	On Liberty	자유론	John Stuart Mill	개인의 자유는 어디까지인가.
+C1	-	7370	논픽션	Second Treatise of Government	통치론	John Locke	정부는 왜 존재하는가.
+C1	-	5827	논픽션	The Problems of Philosophy	철학의 문제들	Bertrand Russell	철학 입문의 고전.
+A1	-	14859	동화	Daddy Takes Us to the Garden	아빠랑 텃밭에 가요	Howard R. Garis	아빠와 함께 채소를 키우는 남매.
+A1	-	21901	동화	The Birthday Party	생일 파티	Oliver Optic	꼬마들을 위한 생일 이야기.
+B2+	-	208	단편집	Daisy Miller	데이지 밀러	Henry James	유럽을 여행하는 자유로운 미국 아가씨.

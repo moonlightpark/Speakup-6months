@@ -87,7 +87,7 @@ mod tests {
         let mut files = vec![];
         for dir in ["src", "src/screens"] {
             for e in std::fs::read_dir(dir).unwrap().flatten() {
-                if e.path().extension().is_some_and(|x| x == "rs") {
+                if e.path().extension().is_some_and(|x| x == "rs" || x == "tsv") {
                     files.push(e.path());
                 }
             }
