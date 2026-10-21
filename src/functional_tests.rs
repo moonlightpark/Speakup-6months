@@ -2225,3 +2225,25 @@ fn ft66_days_the_app_was_not_opened_still_have_their_lists() {
     let nos: Vec<u32> = s.idiom_days.values().flatten().copied().collect();
     assert_eq!(nos.len(), nos.iter().collect::<std::collections::HashSet<_>>().len());
 }
+
+#[test]
+fn ft67_print_a_days_words_on_one_a4_page() {
+    let yesterday = today() - chrono::Duration::days(1);
+    let lw = |w: &str, ko: &str| LessonWord { word: w.into(), meaning_ko: ko.into(), example: format!("I said {w}."), example_ko: String::new() };
+    let mut t = launch_at(temp_dir("printwords"), false, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = yesterday;
+        s.word_days.insert(yesterday, WordSet { words: vec![lw("company", "회사"), lw("health", "건강")], ..Default::default() });
+    });
+    t.nav("📚  새 단어");
+    assert!(!t.has("📄 인쇄"), "only once a day is open");
+    t.click("1일차 (0/2)");
+    t.click("📄 인쇄");
+    let html = std::fs::read_to_string(t.dir.join("print").join(format!("words-{yesterday}.html"))).unwrap();
+    assert!(html.contains("새 단어 · 1일차 · ") && html.contains("— 2개"));
+    assert!(html.contains("<td class=w>company</td><td class=k>회사</td>") && html.contains("health") && html.contains("size: A4"));
+    // 문장 읽기 has no print button.
+    t.nav("📖  문장 읽기");
+    t.click_contains("2일차 (0/");
+    assert!(!t.has("📄 인쇄"));
+}

@@ -822,7 +822,7 @@ impl App {
         let start = self.store.profile.start_date;
         let sel_id = egui::Id::new(("day_list", key));
         let mut sel: Option<chrono::NaiveDate> = ui.data(|d| d.get_temp(sel_id)).flatten();
-        let (mut picked, mut finished) = (None, None);
+        let (mut picked, mut finished, mut printed) = (None, None, None);
         ui.add_space(14.0);
         card(ui, |ui| {
             ui.label(RichText::new(heading).size(18.0).strong());
@@ -838,7 +838,14 @@ impl App {
             });
             let Some((d, rows)) = days.iter().find(|(d, _)| Some(*d) == sel) else { return };
             ui.add_space(6.0);
-            ui.label(RichText::new(format!("{}일차 · {} — {}개", (*d - start).num_days() + 1, d.format("%m월 %d일"), rows.len())).strong());
+            let day_title = format!("{}일차 · {} — {}개", (*d - start).num_days() + 1, d.format("%m월 %d일"), rows.len());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(&day_title).strong());
+                // 단어 / 뜻 on one A4 page (the browser's print dialog).
+                if key == "words" && ui.button("📄 인쇄").on_hover_text("A4 한 장에 단어 / 뜻을 인쇄해요").clicked() {
+                    printed = Some((day_title.clone(), *d));
+                }
+            });
             for (i, r) in rows.iter().enumerate() {
                 let target = &r.specs[0].target;
                 let (color, mark) = word_mark(self.store.word_stat(target).passes);
@@ -861,6 +868,19 @@ impl App {
         });
         ui.data_mut(|d| d.insert_temp(sel_id, sel));
         let Some(rows) = days.iter().find(|(d, _)| Some(*d) == sel).map(|x| &x.1) else { return };
+        if let Some((day_title, d)) = printed {
+            let list: Vec<(String, String)> = rows.iter().map(|r| (r.specs[0].target.clone(), r.ko.clone())).collect();
+            match crate::print::print_words(&self.store.dir, &format!("words-{d}"), &format!("새 단어 · {day_title}"), &list) {
+                Ok(path) => {
+                    crate::applog!("print: {}", path.display());
+                    self.toast("📄 브라우저에서 인쇄 창이 열려요 (A4 한 장)".to_string());
+                }
+                Err(e) => {
+                    crate::applog!("print: 실패 · {e:#}");
+                    self.toast(format!("인쇄 파일을 만들지 못했어요: {e}"));
+                }
+            }
+        }
         let category = if key == "words" { "vocab" } else { "reading" };
         let name = |r: &DayRow| format!("{title} · {}", r.specs[0].target.chars().take(30).collect::<String>());
         if let Some(i) = finished {

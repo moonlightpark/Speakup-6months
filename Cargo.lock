@@ -4860,7 +4860,7 @@ dependencies = [
 
 [[package]]
 name = "speakup"
-version = "1.27.1"
+version = "1.28.0"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
