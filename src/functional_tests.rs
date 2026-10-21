@@ -2193,3 +2193,35 @@ fn ft65_settings_lists_open_source_and_sources() {
     }
     assert!(t.has("광고 수익은 각 사이트와 영상 제작자의 것이며, 이 앱과는 아무 관련이 없습니다"));
 }
+
+#[test]
+fn ft66_days_the_app_was_not_opened_still_have_their_lists() {
+    let day = |n: i64| today() - chrono::Duration::days(5 - n);
+    let lw = |w: &str| LessonWord { word: w.into(), meaning_ko: "뜻".into(), example: format!("I said {w}."), example_ko: String::new() };
+    // Opened on days 1 and 3 only; today is day 5.
+    let mut t = launch_at(temp_dir("misseddays"), false, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = day(1);
+        s.word_days.insert(day(1), WordSet { words: vec![lw("company"), lw("health")], ..Default::default() });
+        s.word_days.insert(day(3), WordSet { words: vec![lw("reason")], ..Default::default() });
+        s.idiom_days.insert(day(1), vec![1, 2]);
+    });
+    t.nav("📚  새 단어");
+    for label in ["1일차 (0/2)", "2일차 (0/", "3일차 (0/1)", "4일차 (0/", "5일차 (0/"] {
+        assert!(t.has(label), "{label}");
+    }
+    // No word is on two days.
+    let s = &t.app().store;
+    let all: Vec<String> = s.word_days.values().flat_map(|w| w.words.iter().map(|x| x.word.to_lowercase())).collect();
+    let unique: std::collections::HashSet<&String> = all.iter().collect();
+    assert_eq!(all.len(), unique.len());
+    assert!(s.word_days[&day(2)].words.len() >= 30 && s.word_days[&day(4)].words.len() >= 30);
+    assert!(t.has("📅 지난 날 못 끝낸 새 단어"));
+    t.nav("📖  문장 읽기");
+    for label in ["2일차 (0/", "3일차 (0/", "4일차 (0/"] {
+        assert!(t.has(label), "{label}");
+    }
+    let s = &t.app().store;
+    let nos: Vec<u32> = s.idiom_days.values().flatten().copied().collect();
+    assert_eq!(nos.len(), nos.iter().collect::<std::collections::HashSet<_>>().len());
+}

@@ -90,6 +90,8 @@ pub struct App {
     /// the same day after a failure).
     pub tense_job: Pending<Vec<crate::tenses::TenseSet>>,
     pub tense_tried: Option<chrono::NaiveDate>,
+    /// The day the course days the app wasn't opened on were last given their lists.
+    pub days_filled: Option<chrono::NaiveDate>,
     pub sentence_tense_job: Pending<Vec<crate::tenses::TenseSet>>,
     /// 받아쓰기 picture being looked up (sentence, result), sentences already tried this run,
     /// and the decoded pictures by file name.
@@ -207,6 +209,7 @@ impl App {
             word_mission: None,
             tense_job: Pending::default(),
             tense_tried: None,
+            days_filled: None,
             sentence_tense_job: Pending::default(),
             scene_job: Pending::default(),
             scene_tried: Default::default(),
@@ -445,33 +448,65 @@ impl App {
     /// Today's 새 단어 set: words from the built-in 6,000-word database for the learner's level,
     /// plus the day's chunks and expression. Picked once a day and kept in the profile.
     pub fn word_set(&mut self) -> WordSet {
+        self.fill_missed_days();
         if let Some(ws) = self.store.profile.today.word_set.clone() {
             self.store.record_word_day(today(), &ws);
             return ws;
         }
-        let p = &self.store.profile;
-        let n = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day as usize } else { crate::wordbank::NEW_PER_DAY };
-        let items = &self.store.items;
-        // New words only: learned ones and those on an earlier day's list (left unfinished
-        // there, they are in 지난 날 못 끝낸 새 단어) are skipped.
-        let earlier: std::collections::HashSet<String> = self
-            .store
-            .word_days
-            .range(..today())
-            .flat_map(|(_, s)| s.words.iter().chain(&s.phrases).chain(&s.expressions).map(|w| w.word.to_lowercase()))
-            .collect();
-        let knows = |t: &str| earlier.contains(&t.to_lowercase()) || items.iter().any(|i| i.text.eq_ignore_ascii_case(t));
-        let lw = |e: crate::expressions::Expr| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() };
-        let ws = WordSet {
-            words: crate::wordbank::pick(p.level, n, knows).iter().map(|w| w.lesson_word()).collect(),
-            phrases: crate::expressions::pick_chunks(content::CHUNKS_PER_DAY, knows).into_iter().map(lw).collect(),
-            expressions: crate::expressions::pick_for_today(curriculum::day_number(p), knows).into_iter().map(lw).collect(),
-        };
-        crate::applog!("words: 오늘의 단어 {}개 (레벨 {:.1}) · {:?}", ws.words.len(), p.level, ws.words.iter().map(|w| &w.word).collect::<Vec<_>>());
+        let day_no = curriculum::day_number(&self.store.profile);
+        let ws = self.pick_word_set(day_no, today());
+        crate::applog!("words: 오늘의 단어 {}개 (레벨 {:.1}) · {:?}", ws.words.len(), self.store.profile.level, ws.words.iter().map(|w| &w.word).collect::<Vec<_>>());
         self.store.profile.today.word_set = Some(ws.clone());
         self.store.save_profile();
         self.store.record_word_day(today(), &ws);
         ws
+    }
+
+    /// A day's 새 단어 set for 일차 `day_no`. New words only: learned ones and those on another
+    /// day's list before `until` (left unfinished there, they are in 지난 날 못 끝낸 새 단어) are skipped.
+    fn pick_word_set(&self, day_no: i64, until: chrono::NaiveDate) -> WordSet {
+        let n = if self.store.settings.new_words_per_day > 0 { self.store.settings.new_words_per_day as usize } else { crate::wordbank::NEW_PER_DAY };
+        let items = &self.store.items;
+        let earlier: std::collections::HashSet<String> = self
+            .store
+            .word_days
+            .range(..until)
+            .flat_map(|(_, s)| s.words.iter().chain(&s.phrases).chain(&s.expressions).map(|w| w.word.to_lowercase()))
+            .collect();
+        let knows = |t: &str| earlier.contains(&t.to_lowercase()) || items.iter().any(|i| i.text.eq_ignore_ascii_case(t));
+        let lw = |e: crate::expressions::Expr| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() };
+        WordSet {
+            words: crate::wordbank::pick(self.store.profile.level, n, knows).iter().map(|w| w.lesson_word()).collect(),
+            phrases: crate::expressions::pick_chunks(content::CHUNKS_PER_DAY, knows).into_iter().map(lw).collect(),
+            expressions: crate::expressions::pick_for_today(day_no, knows).into_iter().map(lw).collect(),
+        }
+    }
+
+    /// Days of the course the app wasn't opened on still get their 새 단어 and 숙어 문장, picked
+    /// now, so every 일차 is in 📚 날짜별 전체 and its items in 지난 날 못 끝낸.
+    fn fill_missed_days(&mut self) {
+        let t = today();
+        if !self.store.profile.placement_done || self.days_filled == Some(t) {
+            return;
+        }
+        self.days_filled = Some(t);
+        let start = self.store.profile.start_date;
+        let mut d = start;
+        while d < t && (d - start).num_days() < curriculum::TOTAL_DAYS {
+            let day_no = (d - start).num_days() + 1;
+            if !self.store.word_days.contains_key(&d) {
+                // Skips every listed day's words, today's too, so no word is on two days.
+                let ws = self.pick_word_set(day_no, chrono::NaiveDate::MAX);
+                crate::applog!("words: {day_no}일차({d}) 단어 채움 {}개 · 앱을 열지 않은 날", ws.words.len());
+                self.store.record_word_day(d, &ws);
+            }
+            if !self.store.idiom_days.contains_key(&d) {
+                let nos = self.pick_idioms(chrono::NaiveDate::MAX);
+                crate::applog!("reading: {day_no}일차({d}) 숙어 문장 채움 {}개 · 앱을 열지 않은 날", nos.len());
+                self.store.record_idiom_day(d, &nos);
+            }
+            d += CDuration::days(1);
+        }
     }
 
     /// Asks Claude once a day for 시제 3문장 of today's words that have none yet, and keeps
@@ -596,13 +631,9 @@ impl App {
 
     /// Today's idiom sentences for 문장 읽기: 30 from the built-in 1,300, picked once a day.
     pub fn idiom_set(&mut self) -> Vec<&'static crate::idioms::Idiom> {
+        self.fill_missed_days();
         if self.store.profile.today.idioms.is_none() {
-            let items = &self.store.items;
-            // New ones only: earlier days' sentences left unfinished are in 지난 날 못 끝낸 문장.
-            let earlier: std::collections::HashSet<u32> = self.store.idiom_days.range(..today()).flat_map(|(_, v)| v.iter().copied()).collect();
-            let picked = crate::idioms::pick(crate::idioms::PER_DAY, |t| {
-                items.iter().any(|i| i.text.eq_ignore_ascii_case(t)) || crate::idioms::all().iter().any(|i| i.en == t && earlier.contains(&i.no))
-            });
+            let picked = self.pick_idioms(today());
             crate::applog!("reading: 오늘의 숙어 문장 {}개 · {:?}…", picked.len(), picked.first());
             self.store.profile.today.idioms = Some(picked);
             self.store.save_profile();
@@ -610,6 +641,16 @@ impl App {
         let nos = self.store.profile.today.idioms.clone().unwrap_or_default();
         self.store.record_idiom_day(today(), &nos);
         nos.iter().filter_map(|n| crate::idioms::by_no(*n)).collect()
+    }
+
+    /// A day's 30 idiom sentences: new ones only (another day's before `until`, left unfinished,
+    /// are in 지난 날 못 끝낸 문장).
+    fn pick_idioms(&self, until: chrono::NaiveDate) -> Vec<u32> {
+        let items = &self.store.items;
+        let earlier: std::collections::HashSet<u32> = self.store.idiom_days.range(..until).flat_map(|(_, v)| v.iter().copied()).collect();
+        crate::idioms::pick(crate::idioms::PER_DAY, |t| {
+            items.iter().any(|i| i.text.eq_ignore_ascii_case(t)) || crate::idioms::all().iter().any(|i| i.en == t && earlier.contains(&i.no))
+        })
     }
 
     /// Makes today's lesson (sentences, writing, prefetch) use the same words as the 새 단어 menu.
