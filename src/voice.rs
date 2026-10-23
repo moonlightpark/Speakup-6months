@@ -1,5 +1,6 @@
-//! Text-to-speech through the operating system's voices (macOS AVFoundation, Windows WinRT,
-//! Linux speech-dispatcher), plus the shared voice I/O bundle used by every screen.
+//! Text-to-speech — the natural neural voice (Kokoro, neural_tts.rs) once its model is installed,
+//! otherwise the operating system's voices (macOS AVFoundation, Windows WinRT) — plus the shared
+//! voice I/O bundle used by every screen.
 
 use crate::audio::{Player, Recorder};
 use crate::language::LanguagePack;
@@ -175,6 +176,6 @@ impl Voice {
     pub fn play_last_recording(&mut self) {
         self.speaker.stop();
         let rec = self.last_recording.clone();
-        self.player.play_samples(rec, crate::audio::STT_RATE, false);
+        self.player.play_samples(rec, crate::audio::STT_RATE);
     }
 }

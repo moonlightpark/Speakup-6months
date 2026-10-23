@@ -1,6 +1,6 @@
-//! SpeakUp 6M — a voice-first English speaking & listening trainer (macOS / Windows / Linux).
+//! SpeakUp 6M — a voice-first English speaking & listening trainer (macOS / Windows).
 //! Native Rust GUI (egui); Claude API for all language intelligence; whisper.cpp for offline
-//! speech recognition; OS voices for text-to-speech.
+//! speech recognition; a neural voice (Kokoro, offline) for text-to-speech, OS voices as fallback.
 
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 

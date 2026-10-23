@@ -1,5 +1,5 @@
 //! Dark (default) and light themes in the spirit of Speak, with the Pretendard font built in (SIL Open Font
-//! License, assets/fonts) so Hangul and symbols look the same on macOS, Windows and Linux.
+//! License, assets/fonts) so Hangul and symbols look the same on macOS and Windows.
 
 use egui::{Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 use std::sync::Arc;

@@ -557,7 +557,7 @@ impl App {
         }
         if let Some(f) = play {
             match crate::audio::decode_segment(&self.store.recordings_dir().join(f), 0.0, 75.0) {
-                Ok((samples, rate)) => self.voice.player.play_samples(samples, rate, false),
+                Ok((samples, rate)) => self.voice.player.play_samples(samples, rate),
                 Err(e) => self.coach.weekly_error = Some(format!("{e:#}")),
             }
         }

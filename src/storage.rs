@@ -87,7 +87,7 @@ impl Store {
     }
 
     pub fn open_at(dir: PathBuf) -> Result<Self> {
-        for sub in ["", "lessons", "models", "youtube", "bin", "library", "recordings"] {
+        for sub in ["", "lessons", "models", "library", "recordings"] {
             fs::create_dir_all(dir.join(sub))?;
         }
         Ok(Self {

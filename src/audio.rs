@@ -507,7 +507,7 @@ pub fn wpm(words: usize, voiced_secs: f32) -> f32 {
 // ---------------------------------------------------------------- playback
 
 enum PlayCmd {
-    Play(Vec<f32>, u32, bool),
+    Play(Vec<f32>, u32),
     /// Queue after whatever is playing (sentence-by-sentence speech).
     Append(Vec<f32>, u32),
     Stop,
@@ -550,7 +550,7 @@ fn open_output(preferred: &str) -> Option<Output> {
 }
 
 /// Audio output on a dedicated thread (rodio's OutputStream must stay on the thread that
-/// created it, and opening the device can be slow). Looping clips restart with a short pause.
+/// created it, and opening the device can be slow).
 /// Before each clip the output is reopened if the speaker was changed or unplugged, so sound
 /// keeps working after switching to headphones.
 pub struct Player {
@@ -585,10 +585,9 @@ impl Player {
             fl.store(out.is_none(), Ordering::Relaxed);
             *os.lock().unwrap() = None;
             let mut sink: Option<Sink> = None;
-            let mut looping: Option<(Vec<f32>, u32)> = None;
             loop {
                 match rx.recv_timeout(Duration::from_millis(40)) {
-                    Ok(PlayCmd::Play(samples, rate, looped)) => {
+                    Ok(PlayCmd::Play(samples, rate)) => {
                         if let Some(s) = sink.take() {
                             s.stop();
                         }
@@ -605,11 +604,10 @@ impl Player {
                         fl.store(out.is_none(), Ordering::Relaxed);
                         if let Some(o) = &out {
                             if let Ok(s) = Sink::try_new(&o.handle) {
-                                s.append(o.clip(samples.clone(), rate));
+                                s.append(o.clip(samples, rate));
                                 sink = Some(s);
                             }
                         }
-                        looping = looped.then_some((samples, rate));
                     }
                     Ok(PlayCmd::Append(samples, rate)) => {
                         match (&sink, &out) {
@@ -627,19 +625,16 @@ impl Player {
                                 }
                             }
                         }
-                        looping = None;
                     }
                     Ok(PlayCmd::Stop) => {
                         if let Some(s) = sink.take() {
                             s.stop();
                         }
-                        looping = None;
                     }
                     Ok(PlayCmd::Device(name)) => {
                         if let Some(s) = sink.take() {
                             s.stop();
                         }
-                        looping = None;
                         preferred = name;
                         drop(out.take());
                         out = open_output(&preferred);
@@ -647,13 +642,6 @@ impl Player {
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                }
-                if let (Some(s), Some((samples, rate)), Some(o)) = (&sink, &looping, &out) {
-                    if s.empty() {
-                        let mut clip = vec![0.0; (*rate as f32 * 0.6) as usize];
-                        clip.extend_from_slice(samples);
-                        s.append(o.clip(clip, *rate));
-                    }
                 }
                 pl.store(sink.as_ref().map(|s| !s.empty()).unwrap_or(false), Ordering::Relaxed);
             }
@@ -692,11 +680,11 @@ impl Player {
     }
 
 
-    pub fn play_samples(&mut self, samples: Vec<f32>, rate: u32, looped: bool) {
+    pub fn play_samples(&mut self, samples: Vec<f32>, rate: u32) {
         self.clip_len = samples.len() as f32 / rate.max(1) as f32;
         // Report "playing" right away; the audio thread confirms within a frame or two.
         self.playing.store(true, Ordering::Relaxed);
-        let _ = self.tx.send(PlayCmd::Play(samples, rate, looped));
+        let _ = self.tx.send(PlayCmd::Play(samples, rate));
     }
 
     /// A short two-note chime for checking the speakers.
@@ -711,7 +699,7 @@ impl Player {
             })
         };
         let samples: Vec<f32> = note(660.0, 0.25).chain(note(880.0, 0.35)).collect();
-        self.play_samples(samples, rate, false);
+        self.play_samples(samples, rate);
     }
 }
 
@@ -724,7 +712,7 @@ pub struct PlayerHandle {
 impl PlayerHandle {
     pub fn play(&self, samples: Vec<f32>, rate: u32) {
         self.playing.store(true, Ordering::Relaxed);
-        let _ = self.tx.send(PlayCmd::Play(samples, rate, false));
+        let _ = self.tx.send(PlayCmd::Play(samples, rate));
     }
     pub fn append(&self, samples: Vec<f32>, rate: u32) {
         self.playing.store(true, Ordering::Relaxed);

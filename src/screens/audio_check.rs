@@ -244,7 +244,7 @@ impl App {
                         None => {
                             let dev = self.voice.recorder.active_device();
                             self.voice.last_recording = samples.clone();
-                            self.voice.player.play_samples(samples, audio::STT_RATE, false);
+                            self.voice.player.play_samples(samples, audio::STT_RATE);
                             Ok(format!("✅ 마이크 정상 ({dev}, 최대 음량 {:.0}%) — 녹음된 목소리를 재생합니다.", (st.peak * 100.0).min(100.0)))
                         }
                     });
