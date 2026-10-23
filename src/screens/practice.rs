@@ -1142,7 +1142,7 @@ impl App {
         if self.run_queue_ui(ui) {
             return;
         }
-        page_title(ui, "🔁 복습", "한국어 뜻을 보고 영어로 먼저 말해 본 뒤(기억해 내기), 정답을 여러 번 소리 내어 따라 합니다. 첫 시도 점수로 다음 복습일이 정해져요.");
+        page_title(ui, "🔁 복습", "한국어 뜻을 보고 영어로 먼저 말해 본 뒤(기억해 내기), 정답을 한 번 소리 내어 따라 합니다. 첫 시도 점수로 다음 복습일이 정해져요.");
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.wordle.tab, 0, RichText::new("🔁 복습 카드").size(16.0));
@@ -1167,7 +1167,6 @@ impl App {
         }
         ui.add_space(8.0);
         if ui.add(egui::Button::new(RichText::new(format!("▶ 복습 시작 ({}개)", ids.len())).size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked() {
-            let s = self.store.settings.clone();
             let specs = ids
                 .iter()
                 .filter_map(|id| self.store.items.iter().find(|i| &i.id == id))
@@ -1183,7 +1182,7 @@ impl App {
                         target: i.text.clone(),
                         ko: i.meaning_ko.clone(),
                         tip: blanked,
-                        reps: srs::required_reps(Some(i), &s, false),
+                        reps: 1,
                         recall: true,
                         is_word: i.kind == ItemKind::Word,
                         chunks: self.store.gloss_for(&i.text),

@@ -577,8 +577,7 @@ fn ft07_review_recall_with_hint_then_repeat() {
     t.click_contains("복습 시작");
     // Sentences and chunks come before single words.
     assert!(t.has("영어로 말해 보세요") && t.has("만나서 반가워요."));
-    t.say("Nice to meet you.", 1.0);
-    t.say("Nice to meet you.", 1.0);
+    t.say("Nice to meet you.", 1.0); // said once → done (복습 menu: 1 time)
     t.click("다음 ▶");
     // Recall: Korean shown, English hidden.
     assert!(t.has("영어로 말해 보세요") && t.has("일정"));
@@ -587,7 +586,6 @@ fn ft07_review_recall_with_hint_then_repeat() {
     assert!(t.has("s_______"));
     t.say("I think it's schedule", 1.0); // said the word → recall success
     assert!(t.has("100점"));
-    t.say("schedule", 0.8);
     t.click("다음 ▶");
     assert!(t.app().step_done("review"));
     let s = t.app().store.items.iter().find(|i| i.text == "schedule").unwrap();

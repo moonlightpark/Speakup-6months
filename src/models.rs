@@ -19,7 +19,6 @@ pub struct Settings {
     pub whisper_model: String,
     pub pass_score: f32,
     pub reps_new: u32,
-    pub reps_review: u32,
     pub reps_weak: u32,
     pub new_words_per_day: u32,
     pub daily_goal_minutes: u32,
@@ -71,7 +70,6 @@ impl Default for Settings {
             whisper_model: "base.en".into(),
             pass_score: 80.0,
             reps_new: 3,
-            reps_review: 2,
             reps_weak: 5,
             new_words_per_day: 0, // 0 = 35 a day (wordbank::NEW_PER_DAY)
             // 60 min in the app (+30 min of podcasts/YouTube) ≈ 200-300 h in 6 months.

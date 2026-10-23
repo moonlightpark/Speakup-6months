@@ -1559,7 +1559,6 @@ impl App {
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.daily_goal_minutes, 10..=120).text("일일 목표 학습 시간(분)")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.pass_score, 60.0..=95.0).text("통과 점수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_new, 1..=6).text("새 항목 반복 횟수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_review, 1..=5).text("복습 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10).text("약점 항목 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=50).text("하루 새 단어 (0 = 35개)")).changed();
             changed |= ui.checkbox(&mut self.store.settings.ko_role_colors, "한글 지문에 문장 성분 색상 표시 (주어·동사·목적어…)").changed();

@@ -78,14 +78,6 @@ pub fn due_count(items: &[StudyItem]) -> usize {
     items.iter().filter(|i| i.due <= t).count()
 }
 
-pub fn required_reps(item: Option<&StudyItem>, s: &Settings, is_new: bool) -> u32 {
-    match item {
-        Some(i) if i.weak => s.reps_weak,
-        _ if is_new => s.reps_new,
-        _ => s.reps_review,
-    }
-}
-
 pub fn make_id(kind: ItemKind, text: &str) -> String {
     let k = match kind {
         ItemKind::Word => "w",
