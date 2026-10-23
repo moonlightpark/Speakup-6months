@@ -1,5 +1,6 @@
-//! Microphone capture (cpal) and playback (rodio): learner recordings, YouTube segments with
-//! A-B looping and pitch-preserving slow-down.
+//! Microphone capture (cpal) and playback (rodio), each on its own thread: device lists and
+//! mic diagnostics, learner recordings (resampled to 16 kHz for speech recognition), and
+//! playback of recordings and the neural voice.
 
 use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
