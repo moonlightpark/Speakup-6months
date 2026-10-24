@@ -1624,6 +1624,16 @@ impl App {
     }
 }
 
+impl App {
+    fn save_all(&mut self) {
+        self.update_history();
+        self.store.save_profile();
+        self.store.save_items();
+        self.store.save_homework();
+        self.store.save_settings();
+    }
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.web_req = None;
@@ -1713,12 +1723,15 @@ impl eframe::App for App {
         }
     }
 
+    #[cfg(not(target_os = "ios"))]
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        self.update_history();
-        self.store.save_profile();
-        self.store.save_items();
-        self.store.save_homework();
-        self.store.save_settings();
+        self.save_all();
+    }
+
+    /// iOS draws with wgpu, where eframe's exit hook has no OpenGL context.
+    #[cfg(target_os = "ios")]
+    fn on_exit(&mut self) {
+        self.save_all();
     }
 }
 

@@ -7,7 +7,7 @@ description = "6개월 영어 듣기·말하기 완성 – 음성 지원 영어 
 license = "MIT"
 
 [dependencies]
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+eframe = { version = "0.31", default-features = false, features = ["default_fonts"] }
 egui = "0.31"
 cpal = "0.15"
 rodio = { version = "0.20", default-features = false, features = ["symphonia-all"] }
@@ -25,11 +25,27 @@ tar = "0.4"
 # 받아쓰기 pictures (Wikimedia Commons photos).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
-# Desktop only. On Android the OS voice (tts) needs a Java bridge class and the web view (wry)
-# a Kotlin activity, neither of which the trial build has yet.
+# Drawn with OpenGL (glow) everywhere but iOS, which has no OpenGL to speak of: there it is
+# wgpu over Metal.
+[target.'cfg(not(target_os = "ios"))'.dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "wgpu"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+objc2-foundation = "0.3"
+block2 = "0.6"
+objc2 = "0.6"
+sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
+
+# The OS voice: tts (macOS, Windows, iOS). On Android it needs a Java bridge class, so the app
+# calls Android's TextToSpeech itself.
 [target.'cfg(not(target_os = "android"))'.dependencies]
 tts = "0.26"
-# YouGlish videos inside the window (macOS WKWebView / Windows WebView2).
+
+# YouGlish videos inside the window (macOS WKWebView / Windows WebView2). The trial mobile
+# builds have no web view yet: Android needs a Kotlin activity, iOS a child view wry can't make.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 wry = { version = "0.53", default-features = false, features = ["os-webview"] }
 
 # Android (tablet trial): the app runs in a NativeActivity (no Java code); android.rs is its entry.
@@ -45,8 +61,8 @@ hound = "3.5"
 
 # Neural TTS (sherpa-onnx). Statically linked on macOS; the prebuilt static Windows/Linux
 # libraries have no TTS, so there the shared libraries are shipped next to the executable
-# (Android: sherpa-onnx's Android release, packed into the APK).
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+# (Android: sherpa-onnx's Android release, packed into the APK). iOS: static, like macOS.
+[target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
 sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

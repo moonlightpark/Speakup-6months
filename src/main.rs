@@ -1,9 +1,17 @@
 //! Desktop entry point (macOS / Windows): opens the window at the size the layout needs.
+//! On iOS the same binary starts the iPad app (ios.rs).
 
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
+#[cfg(target_os = "ios")]
+fn main() -> eframe::Result<()> {
+    speakup::ios::run()
+}
+
+#[cfg(not(target_os = "ios"))]
 use speakup::{app, applog, storage};
 
+#[cfg(not(target_os = "ios"))]
 fn main() -> eframe::Result<()> {
     applog::init(&storage::data_dir());
     // Exactly sidebar + content column + margins (32 + 24) + scrollbar, so nothing is wasted.
