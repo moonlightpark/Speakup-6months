@@ -2,7 +2,23 @@
 //! `android_main`. The app's data lives in the activity's internal storage, and the screen is
 //! the same desktop layout (a tablet in landscape is about as wide as the desktop window).
 
+use jni::objects::JObject;
 use winit::platform::android::activity::AndroidApp;
+
+/// Runs `f` with this thread attached to the Java VM and the activity at hand. A Java exception
+/// is cleared (and the call reports `None`) so it never stays pending on the thread.
+pub(crate) fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &JObject) -> jni::errors::Result<R>) -> Option<R> {
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+    let mut env = vm.attach_current_thread().ok()?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let r = f(&mut env, &activity);
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+        return None;
+    }
+    r.ok()
+}
 
 #[unsafe(no_mangle)]
 fn android_main(app: AndroidApp) {

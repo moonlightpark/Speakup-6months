@@ -9,18 +9,35 @@ use crate::neural_tts::{NeuralStatus, NeuralTts};
 #[cfg(not(target_os = "android"))]
 use tts::Tts;
 #[cfg(target_os = "android")]
-use no_os_voice::Tts;
+use android_voice::Tts;
 
-/// Android trial build: no OS voice yet (the tts crate needs a Java bridge class there), so
-/// only the neural voice speaks. Same calls as `tts::Tts`; creating one always fails.
+/// Android's own speech engine (android.speech.tts.TextToSpeech) called through JNI, with the
+/// same calls as `tts::Tts` (the tts crate needs a Java bridge class there). The engine connects
+/// in the background, so a sentence asked for in its first moment is not spoken. One voice:
+/// the engine's US English.
 #[cfg(target_os = "android")]
-mod no_os_voice {
-    pub struct Tts;
+mod android_voice {
+    use crate::android::with_activity;
+    use jni::objects::{GlobalRef, JObject, JValue};
+
+    pub struct Tts {
+        engine: GlobalRef,
+        rate: f32,
+    }
     pub struct Voice;
     type R<T> = Result<T, String>;
+
     impl Tts {
         pub fn default() -> R<Self> {
-            Err("안드로이드 시험 빌드에는 OS 음성이 없습니다 (AI 음성만 사용)".into())
+            let engine = with_activity(|env, activity| {
+                let tts = env.new_object(
+                    "android/speech/tts/TextToSpeech",
+                    "(Landroid/content/Context;Landroid/speech/tts/TextToSpeech$OnInitListener;)V",
+                    &[JValue::Object(activity), JValue::Object(&JObject::null())],
+                )?;
+                env.new_global_ref(tts)
+            });
+            engine.map(|engine| Self { engine, rate: 1.0 }).ok_or_else(|| "안드로이드 음성 엔진을 열 수 없습니다".to_string())
         }
         pub fn voices(&self) -> R<Vec<Voice>> {
             Ok(Vec::new())
@@ -28,7 +45,8 @@ mod no_os_voice {
         pub fn set_voice(&mut self, _: &Voice) -> R<()> {
             Ok(())
         }
-        pub fn set_rate(&mut self, _: f32) -> R<()> {
+        pub fn set_rate(&mut self, rate: f32) -> R<()> {
+            self.rate = rate;
             Ok(())
         }
         pub fn min_rate(&self) -> f32 {
@@ -40,13 +58,35 @@ mod no_os_voice {
         pub fn max_rate(&self) -> f32 {
             2.0
         }
-        pub fn speak(&mut self, _: &str, _: bool) -> R<()> {
-            Ok(())
+        pub fn speak(&mut self, text: &str, interrupt: bool) -> R<()> {
+            let (engine, rate) = (self.engine.as_obj(), self.rate);
+            let result = with_activity(|env, _| {
+                let us = env.get_static_field("java/util/Locale", "US", "Ljava/util/Locale;")?.l()?;
+                env.call_method(engine, "setLanguage", "(Ljava/util/Locale;)I", &[JValue::Object(&us)])?;
+                env.call_method(engine, "setSpeechRate", "(F)I", &[JValue::Float(rate)])?;
+                let text = env.new_string(text)?;
+                let id = env.new_string("speakup")?;
+                let mode = if interrupt { 0 } else { 1 }; // QUEUE_FLUSH / QUEUE_ADD
+                env.call_method(
+                    engine,
+                    "speak",
+                    "(Ljava/lang/CharSequence;ILandroid/os/Bundle;Ljava/lang/String;)I",
+                    &[JValue::Object(&text), JValue::Int(mode), JValue::Object(&JObject::null()), JValue::Object(&id)],
+                )?
+                .i()
+            });
+            match result {
+                Some(0) => Ok(()),
+                _ => Err("안드로이드 음성 엔진이 아직 준비되지 않았습니다".into()),
+            }
         }
         pub fn stop(&mut self) -> R<()> {
+            let engine = self.engine.as_obj();
+            with_activity(|env, _| env.call_method(engine, "stop", "()I", &[]).map(|_| ()));
             Ok(())
         }
     }
+
     impl Voice {
         pub fn id(&self) -> String {
             String::new()

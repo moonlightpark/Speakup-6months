@@ -83,21 +83,10 @@ mod imp {
 #[cfg(target_os = "android")]
 mod imp {
     use super::MicPermission;
-    use jni::objects::{JObject, JValue};
+    use crate::android::with_activity;
+    use jni::objects::JValue;
 
     const PERMISSION: &str = "android.permission.RECORD_AUDIO";
-
-    fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &JObject) -> jni::errors::Result<R>) -> Option<R> {
-        let ctx = ndk_context::android_context();
-        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
-        let mut env = vm.attach_current_thread().ok()?;
-        let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
-        let r = f(&mut env, &activity);
-        if env.exception_check().unwrap_or(false) {
-            let _ = env.exception_clear();
-        }
-        r.ok()
-    }
 
     fn granted() -> bool {
         with_activity(|env, activity| {
