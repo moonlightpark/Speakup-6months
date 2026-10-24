@@ -36,19 +36,18 @@ objc2-av-foundation = { version = "0.3", default-features = false, features = ["
 objc2-foundation = "0.3"
 block2 = "0.6"
 objc2 = "0.6"
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
 sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
 
-# The OS voice: tts (macOS, Windows, iOS). On Android it needs a Java bridge class, so the app
-# calls Android's TextToSpeech itself.
+# Not on Android, which has its own ways (android.rs, voice.rs, web.rs):
 [target.'cfg(not(target_os = "android"))'.dependencies]
+# The OS voice (macOS, Windows, iOS). On Android it needs a Java bridge class.
 tts = "0.26"
-
-# YouGlish videos inside the window (macOS WKWebView / Windows WebView2). The trial mobile
-# builds have no web view yet: Android needs a Kotlin activity, iOS a child view wry can't make.
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# YouGlish videos inside the window (WKWebView on macOS / iOS, WebView2 on Windows). On Android
+# it needs a Kotlin activity; there android/java/…/WebPane.java shows the system WebView.
 wry = { version = "0.53", default-features = false, features = ["os-webview"] }
 
-# Android (tablet trial): the app runs in a NativeActivity (no Java code); android.rs is its entry.
+# Android (tablet trial): the app runs in a NativeActivity; android.rs is its entry.
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "android-native-activity"] }
 winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }

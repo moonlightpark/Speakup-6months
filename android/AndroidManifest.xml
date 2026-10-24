@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- SpeakUp 6M, Android tablet trial: a NativeActivity (no Java code) that loads libspeakup.so. -->
+<!-- SpeakUp 6M, Android tablet trial: a NativeActivity that loads libspeakup.so, plus one small
+     Java class (java/…/WebPane.java) for the listening lab's web view. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.speakup.sixmonths">
 
@@ -13,7 +14,7 @@
     <application
         android:label="SpeakUp 6M"
         android:icon="@mipmap/ic_launcher"
-        android:hasCode="false"
+        android:hasCode="true"
         android:extractNativeLibs="true"
         android:debuggable="true">
         <activity

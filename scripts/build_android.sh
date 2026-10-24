@@ -31,12 +31,17 @@ for f in libsherpa-onnx-c-api.so libonnxruntime.so; do
   cp "$(find "$SHERPA" -path "*jniLibs/arm64-v8a/$f" | head -1)" "$OUT/stage/lib/arm64-v8a/"
 done
 
+# WebPane.java (the listening lab's web view) → classes.dex.
+rm -rf "$OUT/classes" && mkdir -p "$OUT/classes"
+javac -source 8 -target 8 -bootclasspath "$PLATFORM" -nowarn -Xlint:-options -d "$OUT/classes" $(find android/java -name '*.java')
+"$BT/d8" --release --min-api 28 --lib "$PLATFORM" --output "$OUT/stage" $(find "$OUT/classes" -name '*.class')
+
 cp assets/icon/icon_256.png "$OUT/res/mipmap/ic_launcher.png"
 "$BT/aapt2" compile --dir "$OUT/res" -o "$OUT/res.zip"
 "$BT/aapt2" link -o "$OUT/base.apk" --manifest android/AndroidManifest.xml -I "$PLATFORM" \
   --min-sdk-version 28 --target-sdk-version 34 --version-name "$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)" \
   "$OUT/res.zip"
-(cd "$OUT/stage" && zip -qr ../base.apk lib)
+(cd "$OUT/stage" && zip -qr ../base.apk lib classes.dex)
 "$BT/zipalign" -f -p 4 "$OUT/base.apk" "$OUT/aligned.apk"
 "$BT/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-pass pass:android --key-pass pass:android \
   --out "$APK" "$OUT/aligned.apk"

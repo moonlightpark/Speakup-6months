@@ -1707,7 +1707,7 @@ impl eframe::App for App {
         });
         self.notifications_ui(ctx);
         // The web page is a native view over the window: shown only while a screen asks for it.
-        self.web.sync(frame, self.web_req.as_ref(), ctx.zoom_factor(), self.store.dir.join("webview"));
+        self.web.sync(frame, self.web_req.as_ref(), ctx, self.store.dir.join("webview"));
         if let Some((msg, at)) = &self.toast {
             if at.elapsed() < Duration::from_secs(3) {
                 // Every alert in the app: bottom right, wrapped so a long one stays on screen.
