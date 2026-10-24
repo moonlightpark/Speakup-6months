@@ -15,6 +15,7 @@ pub struct WebRequest {
 /// Runs in every page: on YouGlish, shows only the video, its control bar and the caption box
 /// below it, as wide as the frame (everything else hidden). If the page isn't laid out as
 /// expected (the site changed), it is left as is, scrolled to the "How to pronounce" title.
+#[cfg(not(target_os = "android"))]
 const PAGE_SCRIPT: &str = r#"
 if (location.host.endsWith('youglish.com')) {
   const KEEP = ['videowrapper', 'controlIdParent', 'captioncont', 'overlay', 'captcha_container'];
@@ -56,6 +57,7 @@ if (location.host.endsWith('youglish.com')) {
 }
 "#;
 
+#[cfg(not(target_os = "android"))]
 #[derive(Default)]
 pub struct WebPane {
     view: Option<wry::WebView>,
@@ -67,6 +69,7 @@ pub struct WebPane {
     pub failed: Option<String>,
 }
 
+#[cfg(not(target_os = "android"))]
 impl WebPane {
     /// Creates, moves, loads or hides the web view to match `req`. `zoom` is egui's zoom factor
     /// (points × zoom = logical pixels of the window).
@@ -125,4 +128,23 @@ impl WebPane {
             None => {}
         }
     }
+}
+
+/// Android trial build: no web view yet (wry needs its Kotlin activity there); the listening
+/// lab shows the reason instead of the videos.
+#[cfg(target_os = "android")]
+pub struct WebPane {
+    pub failed: Option<String>,
+}
+
+#[cfg(target_os = "android")]
+impl Default for WebPane {
+    fn default() -> Self {
+        Self { failed: Some("안드로이드 시험 빌드에서는 아직 영상을 볼 수 없습니다".into()) }
+    }
+}
+
+#[cfg(target_os = "android")]
+impl WebPane {
+    pub fn sync(&mut self, _: &eframe::Frame, _: Option<&WebRequest>, _: f32, _: PathBuf) {}
 }

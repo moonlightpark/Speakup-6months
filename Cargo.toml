@@ -11,7 +11,6 @@ eframe = { version = "0.31", default-features = false, features = ["default_font
 egui = "0.31"
 cpal = "0.15"
 rodio = { version = "0.20", default-features = false, features = ["symphonia-all"] }
-tts = "0.26"
 whisper-rs = "0.14"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
@@ -23,18 +22,30 @@ rand = "0.9"
 open = "5"
 bzip2 = "0.5"
 tar = "0.4"
-# YouGlish videos inside the window (macOS WKWebView / Windows WebView2).
-wry = { version = "0.53", default-features = false, features = ["os-webview"] }
 # 받아쓰기 pictures (Wikimedia Commons photos).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+# Desktop only. On Android the OS voice (tts) needs a Java bridge class and the web view (wry)
+# a Kotlin activity, neither of which the trial build has yet.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+tts = "0.26"
+# YouGlish videos inside the window (macOS WKWebView / Windows WebView2).
+wry = { version = "0.53", default-features = false, features = ["os-webview"] }
+
+# Android (tablet trial): the app runs in a NativeActivity (no Java code); android.rs is its entry.
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "android-native-activity"] }
+winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }
+jni = "0.21"
+ndk-context = "0.1"
 
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["eframe"] }
 hound = "3.5"
 
 # Neural TTS (sherpa-onnx). Statically linked on macOS; the prebuilt static Windows/Linux
-# libraries have no TTS, so there the shared libraries are shipped next to the executable.
-
+# libraries have no TTS, so there the shared libraries are shipped next to the executable
+# (Android: sherpa-onnx's Android release, packed into the APK).
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries"] }
 
@@ -55,6 +66,10 @@ lto = "thin"
 
 [profile.dev.package."*"]
 opt-level = 2
+
+[lib]
+name = "speakup"
+path = "src/lib.rs"
 
 [package.metadata.bundle]
 name = "SpeakUp 6M"

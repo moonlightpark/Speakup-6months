@@ -1,46 +1,8 @@
-//! SpeakUp 6M — a voice-first English speaking & listening trainer (macOS / Windows).
-//! Native Rust GUI (egui); Claude API for all language intelligence; whisper.cpp for offline
-//! speech recognition; a neural voice (Kokoro, offline) for text-to-speech, OS voices as fallback.
+//! Desktop entry point (macOS / Windows): opens the window at the size the layout needs.
 
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
-mod app;
-mod applog;
-mod art;
-mod audio;
-mod claude;
-mod content;
-mod curriculum;
-mod dictionary;
-mod expressions;
-mod freetalk;
-mod grammar;
-mod idioms;
-mod language;
-mod library;
-mod mic_permission;
-mod neural_tts;
-mod passages;
-mod print;
-mod models;
-mod offline_talk;
-mod scoring;
-mod screens;
-mod srs;
-mod storage;
-mod speed_scripts;
-mod web;
-mod scenes;
-mod credits;
-mod tenses;
-mod stt;
-mod theme;
-mod voice;
-mod widgets;
-mod wordbank;
-
-#[cfg(test)]
-mod functional_tests;
+use speakup::{app, applog, storage};
 
 fn main() -> eframe::Result<()> {
     applog::init(&storage::data_dir());

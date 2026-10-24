@@ -78,7 +78,67 @@ mod imp {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+/// Android: RECORD_AUDIO is a runtime permission, asked through the activity (JNI). A
+/// NativeActivity never hears the answer, so `request` watches the permission for a minute.
+#[cfg(target_os = "android")]
+mod imp {
+    use super::MicPermission;
+    use jni::objects::{JObject, JValue};
+
+    const PERMISSION: &str = "android.permission.RECORD_AUDIO";
+
+    fn with_activity<R>(f: impl FnOnce(&mut jni::JNIEnv, &JObject) -> jni::errors::Result<R>) -> Option<R> {
+        let ctx = ndk_context::android_context();
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+        let mut env = vm.attach_current_thread().ok()?;
+        let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+        let r = f(&mut env, &activity);
+        if env.exception_check().unwrap_or(false) {
+            let _ = env.exception_clear();
+        }
+        r.ok()
+    }
+
+    fn granted() -> bool {
+        with_activity(|env, activity| {
+            let p = env.new_string(PERMISSION)?;
+            env.call_method(activity, "checkSelfPermission", "(Ljava/lang/String;)I", &[JValue::Object(&p)])?.i()
+        }) == Some(0)
+    }
+
+    pub fn status() -> MicPermission {
+        if granted() { MicPermission::Granted } else { MicPermission::NotDetermined }
+    }
+
+    pub fn request(done: impl Fn(bool) + Send + Sync + 'static) {
+        if granted() {
+            done(true);
+            return;
+        }
+        let asked = with_activity(|env, activity| {
+            let p = env.new_string(PERMISSION)?;
+            let list = env.new_object_array(1, "java/lang/String", &p)?;
+            env.call_method(activity, "requestPermissions", "([Ljava/lang/String;I)V", &[JValue::Object(&list), JValue::Int(1)])?;
+            Ok(())
+        });
+        crate::applog!("mic: 안드로이드 권한 요청 · {}", if asked.is_some() { "창 띄움" } else { "실패" });
+        std::thread::spawn(move || {
+            for _ in 0..200 {
+                if granted() {
+                    return done(true);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+            done(false)
+        });
+    }
+    pub fn open_settings() {}
+    pub fn lid_closed() -> bool {
+        false
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 mod imp {
     use super::MicPermission;
     pub fn status() -> MicPermission {
@@ -99,6 +159,8 @@ pub use imp::{lid_closed, open_settings, request, status};
 pub fn how_to_fix() -> &'static str {
     if cfg!(target_os = "macos") {
         "시스템 설정 > 개인정보 보호 및 보안 > 마이크 에서 SpeakUp 6M(터미널에서 실행했다면 그 터미널 앱)을 켜고 앱을 다시 실행하세요."
+    } else if cfg!(target_os = "android") {
+        "설정 > 애플리케이션 > SpeakUp 6M > 권한 > 마이크 를 허용하세요."
     } else if cfg!(target_os = "windows") {
         "설정 > 개인 정보 > 마이크 에서 '데스크톱 앱이 마이크에 액세스하도록 허용'을 켜세요."
     } else {

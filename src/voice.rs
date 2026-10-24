@@ -6,7 +6,59 @@ use crate::audio::{Player, Recorder};
 use crate::language::LanguagePack;
 use crate::stt::Stt;
 use crate::neural_tts::{NeuralStatus, NeuralTts};
+#[cfg(not(target_os = "android"))]
 use tts::Tts;
+#[cfg(target_os = "android")]
+use no_os_voice::Tts;
+
+/// Android trial build: no OS voice yet (the tts crate needs a Java bridge class there), so
+/// only the neural voice speaks. Same calls as `tts::Tts`; creating one always fails.
+#[cfg(target_os = "android")]
+mod no_os_voice {
+    pub struct Tts;
+    pub struct Voice;
+    type R<T> = Result<T, String>;
+    impl Tts {
+        pub fn default() -> R<Self> {
+            Err("안드로이드 시험 빌드에는 OS 음성이 없습니다 (AI 음성만 사용)".into())
+        }
+        pub fn voices(&self) -> R<Vec<Voice>> {
+            Ok(Vec::new())
+        }
+        pub fn set_voice(&mut self, _: &Voice) -> R<()> {
+            Ok(())
+        }
+        pub fn set_rate(&mut self, _: f32) -> R<()> {
+            Ok(())
+        }
+        pub fn min_rate(&self) -> f32 {
+            0.5
+        }
+        pub fn normal_rate(&self) -> f32 {
+            1.0
+        }
+        pub fn max_rate(&self) -> f32 {
+            2.0
+        }
+        pub fn speak(&mut self, _: &str, _: bool) -> R<()> {
+            Ok(())
+        }
+        pub fn stop(&mut self) -> R<()> {
+            Ok(())
+        }
+    }
+    impl Voice {
+        pub fn id(&self) -> String {
+            String::new()
+        }
+        pub fn name(&self) -> String {
+            String::new()
+        }
+        pub fn language(&self) -> String {
+            String::new()
+        }
+    }
+}
 
 pub struct Speaker {
     tts: Option<Tts>,

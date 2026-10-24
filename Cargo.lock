@@ -4873,6 +4873,8 @@ dependencies = [
  "egui_kittest",
  "hound",
  "image",
+ "jni 0.21.1",
+ "ndk-context",
  "objc2 0.6.5",
  "objc2-av-foundation",
  "objc2-foundation 0.3.2",
@@ -4886,6 +4888,7 @@ dependencies = [
  "tar",
  "tts",
  "whisper-rs",
+ "winit",
  "winresource",
  "wry",
 ]
