@@ -170,7 +170,7 @@ impl App {
                         ui.label(RichText::new(b.blurb_ko).color(muted()).small());
                         if prog.pages > 0 {
                             let frac = if prog.finished { 1.0 } else { prog.page as f32 / prog.pages as f32 };
-                            ui.add(egui::ProgressBar::new(frac).desired_width(260.0).desired_height(8.0).fill(GOOD).text(if prog.finished {
+                            ui.add(egui::ProgressBar::new(frac).desired_width(ui.available_width().min(260.0)).desired_height(8.0).fill(GOOD).text(if prog.finished {
                                 "다 읽었어요 ✓".to_string()
                             } else {
                                 format!("{}/{} 페이지", prog.page + 1, prog.pages)

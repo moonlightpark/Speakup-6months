@@ -1100,9 +1100,12 @@ impl App {
             .inner_margin(24.0)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.horizontal_wrapped(|ui| {
+                // A phone: the text the whole width, the ring under it.
+                let narrow = ui.available_width() < 420.0;
+                let layout = if narrow { egui::Layout::top_down(egui::Align::Min) } else { egui::Layout::left_to_right(egui::Align::Min).with_main_wrap(true) };
+                ui.with_layout(layout, |ui| {
                     ui.vertical(|ui| {
-                        ui.set_width((ui.available_width() - 150.0).max(140.0));
+                        ui.set_width(if narrow { ui.available_width() } else { (ui.available_width() - 150.0).max(140.0) });
                         let hello = if p.name.is_empty() { "오늘도 일본어로 말해 볼까요?".to_string() } else { format!("{}님, 오늘도 일본어로 말해 볼까요?", p.name) };
                         ui.label(RichText::new(hello).size(26.0).strong().color(Color32::WHITE));
                         ui.label(RichText::new(format!("Day {day} / {TOTAL_DAYS}  ·  {week}주차  ·  {}", phase.name_ko)).size(15.0).color(Color32::from_rgb(200, 214, 255)));
@@ -1125,18 +1128,26 @@ impl App {
                             }
                         });
                     });
-                    ui.vertical(|ui| {
+                    let ring_and_mascot = |ui: &mut egui::Ui| {
                         let all_done = done == steps.len();
                         crate::art::mascot_widget(ui, 54.0, if all_done { crate::art::Mood::Cheer } else { crate::art::Mood::Talking });
                         ring(ui, done as f32 / steps.len().max(1) as f32, &format!("{done}/{}", steps.len()), 120.0);
-                    });
+                    };
+                    if narrow {
+                        ui.add_space(8.0);
+                        ui.horizontal(ring_and_mascot);
+                    } else {
+                        ui.vertical(ring_and_mascot);
+                    }
                 });
             });
         {
             let r = hero.response.rect;
             let art = egui::Rect::from_min_max(egui::pos2(r.left() + r.width() * 0.40, r.top() + r.height() * 0.42), egui::pos2(r.right() - 190.0, r.bottom()));
             let bg = crate::art::gradient_rect_shape(r, 22.0, Color32::from_rgb(40, 70, 190), Color32::from_rgb(98, 52, 170));
-            ui.painter().set(hero_bg, egui::Shape::Vec(vec![bg, crate::art::journey(art, day as f32 / TOTAL_DAYS as f32)]));
+            // The journey drawing needs the room beside the ring (not on a phone).
+            let shapes = if r.width() < 470.0 { vec![bg] } else { vec![bg, crate::art::journey(art, day as f32 / TOTAL_DAYS as f32)] };
+            ui.painter().set(hero_bg, egui::Shape::Vec(shapes));
         }
         if curriculum::program_finished(&p) {
             ui.add_space(8.0);
@@ -1161,7 +1172,7 @@ impl App {
             let gap = ui.spacing().item_spacing.x;
             // Five cards across the content column (each adds 32 px of margin + 2 px of border);
             // two per row on a phone.
-            let per_row = if ui.available_width() < 600.0 { 2.0 } else { 5.0 };
+            let per_row = if ui.available_width() < 380.0 { 1.0 } else if ui.available_width() < 600.0 { 2.0 } else { 5.0 };
             let w = ((ui.available_width().min(CONTENT_WIDTH) - gap * (per_row - 1.0)) / per_row - 34.0).max(100.0);
             stat_card_centered(ui, w, &format!("🔥 {}일", p.streak), "연속 학습", warn());
             stat_card(ui, w, &fmt_minutes(total_mins), &format!("6개월 목표 {}분", thousands(program_mins)), themed(Color32::from_rgb(110, 220, 200), Color32::from_rgb(15, 140, 125)), |ui| {
@@ -1428,7 +1439,7 @@ impl App {
         let voices = self.voice.speaker.voices.clone();
         let current = voices.iter().find(|v| v.0 == self.store.settings.tts_voice_id).map(|v| v.1.clone()).unwrap_or("기본".into());
         ui.horizontal_wrapped(|ui| {
-            egui::ComboBox::from_id_salt("tts_voice").width(ui.available_width().clamp(160.0, 280.0)).selected_text(current).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("tts_voice").width(ui.available_width().min(280.0)).selected_text(current).show_ui(ui, |ui| {
                 for (id, label) in &voices {
                     if ui.selectable_label(self.store.settings.tts_voice_id == *id, label).clicked() {
                         self.store.settings.tts_voice_id = id.clone();
@@ -1522,7 +1533,7 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("🔔 알림").strong());
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.notify_minutes, 0..=30).text("분마다 알림 (0 = 끄기)")).changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.notify_minutes, 0..=30), "분마다 알림 (0 = 끄기)").changed();
             ui.label(RichText::new("화면 오른쪽 위에 못 끝낸 단어·문장, 진행 중인 주차와 진척, 배운 내용, 다음 레벨을 앞당기는 방법을 번갈아 알려 줘요. 말하는 중에는 뜨지 않아요.").color(muted()).small());
         });
         // Japanese in the 새 단어 / 문장 읽기 lists, big enough to copy into a notebook.
@@ -1555,7 +1566,7 @@ impl App {
         card(ui, |ui| {
             ui.label(RichText::new("Claude API").strong());
             ui.horizontal_wrapped(|ui| {
-                changed |= ui.add(egui::TextEdit::singleline(&mut self.store.settings.api_key).password(!self.show_key).desired_width(360.0).hint_text("sk-ant-...")).changed();
+                changed |= ui.add(egui::TextEdit::singleline(&mut self.store.settings.api_key).password(!self.show_key).desired_width(ui.available_width().min(360.0)).hint_text("sk-ant-...")).changed();
                 ui.checkbox(&mut self.show_key, "표시");
             });
             ui.label(RichText::new("키는 이 컴퓨터의 settings.json 에만 저장됩니다. 비워두면 ANTHROPIC_API_KEY 환경변수를 사용합니다.").color(muted()).small());
@@ -1571,7 +1582,7 @@ impl App {
             ui.label(RichText::new("음성").strong());
             ui.label(RichText::new("일본어 음성 (시스템 음성)").color(text_strong()));
             changed |= self.voice_setup_ui(ui);
-            if ui.add(egui::Slider::new(&mut self.store.settings.tts_rate, 0.6..=1.4).text("말하기 속도")).changed() {
+            if named_slider(ui, egui::Slider::new(&mut self.store.settings.tts_rate, 0.6..=1.4), "말하기 속도").changed() {
                 self.voice.base_rate = self.store.settings.tts_rate;
                 changed = true;
             }
@@ -1602,11 +1613,11 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("학습").strong());
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.daily_goal_minutes, 10..=120).text("일일 목표 학습 시간(분)")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.pass_score, 60.0..=95.0).text("통과 점수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_new, 1..=6).text("새 항목 반복 횟수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10).text("약점 항목 반복 횟수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=50).text("하루 새 단어 (0 = 35개)")).changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.daily_goal_minutes, 10..=120), "일일 목표 학습 시간(분)").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.pass_score, 60.0..=95.0), "통과 점수").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.reps_new, 1..=6), "새 항목 반복 횟수").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10), "약점 항목 반복 횟수").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=50), "하루 새 단어 (0 = 35개)").changed();
             changed |= ui.checkbox(&mut self.store.settings.furigana, "한자 위에 후리가나(읽는 법) 표시").changed();
             changed |= ui.checkbox(&mut self.store.settings.ko_role_colors, "한글 지문에 문장 성분 색상 표시 (주어·동사·목적어…)").changed();
             ui.label(RichText::new("눈이 피로하면 끄세요. 직독직해 색상은 📖 직독직해 버튼으로 따로 켜고 끕니다.").color(muted()).small());

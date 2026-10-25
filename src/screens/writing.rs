@@ -519,8 +519,12 @@ impl App {
                 ui.label(RichText::new(format!("지금까지 쓴 일기 {total}편 · 📝 표시된 날을 클릭하면 그날 일기를 다시 봐요")).color(muted()).small());
             });
             ui.add_space(6.0);
-            let cell = Vec2::new(64.0, 44.0);
-            egui::Grid::new("diary_calendar").spacing(Vec2::splat(4.0)).show(ui, |ui| {
+            // Seven columns: narrower days on a phone.
+            let cell = Vec2::new(((ui.available_width() - 6.0 * 4.0) / 7.0).min(64.0), 44.0);
+            egui::Grid::new("diary_calendar").spacing(Vec2::splat(4.0)).min_col_width(cell.x).max_col_width(cell.x).show(ui, |ui| {
+                // Buttons no wider than a day cell (they're at least 40 wide by default).
+                ui.spacing_mut().interact_size.x = cell.x;
+                ui.spacing_mut().button_padding.x = 2.0;
                 for (i, d) in ["일", "월", "화", "수", "목", "금", "토"].iter().enumerate() {
                     let c = match i {
                         0 => BAD,

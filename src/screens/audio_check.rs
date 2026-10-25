@@ -224,7 +224,7 @@ impl App {
                 let rec = &self.voice.recorder;
                 st.peak = st.peak.max(rec.level());
                 let t = rec.elapsed();
-                ui.add(egui::ProgressBar::new((rec.level() * 3.0).min(1.0)).desired_width(220.0).desired_height(14.0).fill(GOOD).text(format!("녹음 중 {:.1}초", t)));
+                ui.add(egui::ProgressBar::new((rec.level() * 3.0).min(1.0)).desired_width(ui.available_width().min(220.0)).desired_height(14.0).fill(GOOD).text(format!("녹음 중 {:.1}초", t)));
                 ui.ctx().request_repaint();
                 let failed = match rec.state() {
                     audio::RecState::Failed(e) => Some(e),

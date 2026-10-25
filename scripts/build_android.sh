@@ -27,6 +27,13 @@ cp target/aarch64-linux-android/release/libspeakup.so "$OUT/stage/lib/arm64-v8a/
 # cpal's Android backend (oboe) is C++ and links the shared C++ runtime.
 cp "$(find "$NDK/toolchains/llvm/prebuilt" -path '*aarch64-linux-android/libc++_shared.so' | head -1)" "$OUT/stage/lib/arm64-v8a/"
 
+# VOICEVOX's ONNX Runtime (the natural Japanese voice): packed into the APK, because Android
+# won't load a library downloaded into app data. The dictionary and voice model are downloaded
+# by the app (voicevox.rs).
+ORT_TGZ="$OUT/voicevox_onnxruntime-android-arm64-1.17.3.tgz"
+[ -f "$ORT_TGZ" ] || curl -sfL -o "$ORT_TGZ" https://github.com/VOICEVOX/onnxruntime-builder/releases/download/voicevox_onnxruntime-1.17.3/voicevox_onnxruntime-android-arm64-1.17.3.tgz
+tar xzf "$ORT_TGZ" -C "$OUT/stage/lib/arm64-v8a" --strip-components 2 voicevox_onnxruntime-android-arm64-1.17.3/lib/libvoicevox_onnxruntime.so
+
 # WebPane.java (the listening lab's web view) → classes.dex.
 rm -rf "$OUT/classes" && mkdir -p "$OUT/classes"
 javac -source 8 -target 8 -bootclasspath "$PLATFORM" -nowarn -Xlint:-options -d "$OUT/classes" $(find android/java -name '*.java')

@@ -492,7 +492,7 @@ impl App {
                 if self.speed.result.is_none() {
                     let el = shown.elapsed().as_secs_f32();
                     let frac = (1.0 - el / limit).max(0.0);
-                    ui.add(egui::ProgressBar::new(frac).desired_width(320.0).fill(if frac > 0.3 { ACCENT } else { BAD }).text(format!("{:.1}초", (limit - el).max(0.0))));
+                    ui.add(egui::ProgressBar::new(frac).desired_width(ui.available_width().min(320.0)).fill(if frac > 0.3 { ACCENT } else { BAD }).text(format!("{:.1}초", (limit - el).max(0.0))));
                     ui.ctx().request_repaint();
                 }
                 if let Some(t) = self.speed.rcap.ui(ui, &mut self.voice, limit + 6.0) {

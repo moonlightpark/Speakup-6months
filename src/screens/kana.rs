@@ -232,7 +232,7 @@ impl App {
                 });
             }
             ui.add_space(4.0);
-            egui::CollapsingHeader::new("50음도 표 보기 (글자를 누르면 소리가 나요)").id_salt("kana_chart").show(ui, |ui| {
+            egui::CollapsingHeader::new("50음도 표 (누르면 소리)").id_salt("kana_chart").show(ui, |ui| {
                 for deck in [Deck::Hiragana, Deck::Katakana] {
                     ui.label(RichText::new(deck.name()).strong());
                     self.kana_chart(ui, deck);
@@ -279,7 +279,7 @@ impl App {
                 }
             });
             ui.add_space(4.0);
-            egui::CollapsingHeader::new(format!("{jlpt}까지 한자 표 보기 (누르면 훈음·읽기)")).id_salt("kanji_chart").show(ui, |ui| {
+            egui::CollapsingHeader::new(format!("{jlpt}까지 한자 표 (누르면 소리)")).id_salt("kanji_chart").show(ui, |ui| {
                 self.kanji_chart(ui, deck);
             });
         });
@@ -297,25 +297,28 @@ impl App {
 
     /// 50음도 chart coloured like 새 단어 (red → green as right answers add up); click to hear.
     fn kana_chart(&mut self, ui: &mut Ui, deck: Deck) {
-        egui::Grid::new(("kana_grid", deck.name())).spacing([6.0, 6.0]).show(ui, |ui| {
-            for (i, k) in KANA.iter().enumerate() {
-                if i == BASIC_ROWS * 5 {
-                    ui.end_row();
+        // Five cells across, smaller on a phone.
+        // Rows of five cells of exactly this size (smaller on a phone).
+        let cell = ((ui.available_width() - 4.0 * 6.0) / 5.0).min(52.0);
+        let size = if cell < 52.0 { 16.0 } else { 20.0 };
+        for row in 0..KANA.len() / 5 {
+            if row == BASIC_ROWS {
+                ui.add_space(8.0);
+            }
+            // The row's room is taken first and each cell put in place, so a cell can't widen it.
+            let (row_rect, _) = ui.allocate_exact_size(egui::vec2(cell * 5.0 + 24.0, cell), egui::Sense::hover());
+            for (col, i) in (row * 5..row * 5 + 5).enumerate() {
+                if KANA[i].0.is_empty() {
+                    continue;
                 }
-                if k.0.is_empty() {
-                    ui.label("");
-                } else {
-                    let g = deck.front(i);
-                    let text = RichText::new(format!("{g}\n{}", k.2)).size(20.0).color(self.card_color(deck, i));
-                    if ui.add(egui::Button::new(text).min_size(egui::vec2(52.0, 52.0))).on_hover_text(KANA[i].3).clicked() {
-                        self.voice.say(g);
-                    }
-                }
-                if i % 5 == 4 {
-                    ui.end_row();
+                let g = deck.front(i);
+                let r = egui::Rect::from_min_size(row_rect.min + egui::vec2(col as f32 * (cell + 6.0), 0.0), egui::vec2(cell, cell));
+                let text = RichText::new(format!("{g}\n{}", KANA[i].2)).size(size).color(self.card_color(deck, i));
+                if ui.put(r, egui::Button::new(text)).on_hover_text(KANA[i].3).clicked() {
+                    self.voice.say(g);
                 }
             }
-        });
+        }
     }
 
     /// The level's kanji by grade, coloured by progress; hover for 훈음, click to hear.
@@ -399,9 +402,9 @@ impl App {
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
                 for &c in &q.choices {
-                    let label = if let Deck::Kanji(_) = deck { kanji_choice(&crate::kanji::all()[c]) } else { RichText::new(deck.answer(c)).size(20.0).into() };
                     // Kanji choices are three lines: the whole width on a phone, two across otherwise.
                     let w = if let Deck::Kanji(_) = deck { (ui.available_width().min(860.0) / 2.0 - 8.0).max(220.0).min(ui.available_width()) } else { 140.0 };
+                    let label = if let Deck::Kanji(_) = deck { kanji_choice(&crate::kanji::all()[c], w - 2.0 * ui.spacing().button_padding.x) } else { RichText::new(deck.answer(c)).size(20.0).into() };
                     let mut b = egui::Button::new(label).min_size(egui::vec2(w, 52.0));
                     if let Some(p) = q.picked {
                         if c == answer {
@@ -477,8 +480,9 @@ impl App {
 }
 
 /// A kanji choice: 훈음 big, then 読み方 and the Japanese meaning smaller.
-fn kanji_choice(k: &crate::kanji::Kanji) -> egui::WidgetText {
+fn kanji_choice(k: &crate::kanji::Kanji, width: f32) -> egui::WidgetText {
     let mut job = egui::text::LayoutJob::default();
+    job.wrap.max_width = width;
     let font = |size: f32| egui::FontId::proportional(size);
     let fmt = |size: f32, color| egui::TextFormat { font_id: font(size), color, ..Default::default() };
     job.append(&k.hun_eum(), 0.0, fmt(20.0, text_strong()));

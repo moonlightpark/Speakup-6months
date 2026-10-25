@@ -172,7 +172,7 @@ impl App {
     /// YouGlish, showing only the video (16:9, as wide as the page), its control bar and the
     /// caption box under it.
     fn youglish_frame(&mut self, ui: &mut Ui, url: &str) {
-        let video_w = ui.available_width().max(320.0);
+        let video_w = ui.available_width();
         self.web_frame(ui, url, video_w, video_w * 9.0 / 16.0 + 190.0, 1.0, "YouGlish");
     }
 

@@ -32,6 +32,9 @@ const ONNXRUNTIME_URL: Option<&str> = if cfg!(all(target_os = "macos", target_ar
 } else {
     None
 };
+/// Android: the runtime library is packed into the APK (scripts/build_android.sh) and opened by
+/// name from the app's native library folder — a library downloaded into app data can't be loaded.
+const BUNDLED_RUNTIME: Option<&str> = if cfg!(target_os = "android") { Some("libvoicevox_onnxruntime.so") } else { None };
 const DICT_URL: &str = "https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz";
 const VVM_URL: &str = "https://github.com/VOICEVOX/voicevox_vvm/releases/download/0.17.0/n0.vvm";
 
@@ -52,9 +55,10 @@ pub fn voice_label(id: u32) -> &'static str {
     VOICES.iter().find(|v| v.0 == id).map(|v| v.2).unwrap_or(VOICES[0].2)
 }
 
-/// This computer can run the engine (VOICEVOX ships its runtime for macOS arm64 / Windows x64).
+/// This device can run the engine (VOICEVOX ships its runtime for macOS arm64 / Windows x64 /
+/// Android arm64).
 pub fn supported() -> bool {
-    ONNXRUNTIME_URL.is_some()
+    ONNXRUNTIME_URL.is_some() || BUNDLED_RUNTIME.is_some()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -169,7 +173,8 @@ impl Cache {
 }
 
 /// The voice model is released after this long without speech.
-const IDLE_UNLOAD: std::time::Duration = std::time::Duration::from_secs(300);
+/// (Phones: longer, since loading it again is slow there.)
+const IDLE_UNLOAD: std::time::Duration = std::time::Duration::from_secs(if cfg!(target_os = "android") { 1800 } else { 300 });
 
 /// The runtime library in the engine folder (its file name carries the version).
 fn runtime_lib(dir: &Path) -> Option<PathBuf> {
@@ -180,8 +185,11 @@ fn runtime_lib(dir: &Path) -> Option<PathBuf> {
 }
 
 fn open_engine(dir: &Path) -> Result<Synthesizer<OpenJtalk>> {
-    let lib = runtime_lib(dir).ok_or_else(|| anyhow!("ONNX Runtime 파일이 없습니다"))?;
-    let ort = Onnxruntime::load_once().filename(lib.into_os_string()).perform().context("ONNX Runtime을 열 수 없습니다")?;
+    let lib = match BUNDLED_RUNTIME {
+        Some(name) => std::ffi::OsString::from(name),
+        None => runtime_lib(dir).ok_or_else(|| anyhow!("ONNX Runtime 파일이 없습니다"))?.into_os_string(),
+    };
+    let ort = Onnxruntime::load_once().filename(lib).perform().context("ONNX Runtime을 열 수 없습니다")?;
     let dict = dir.join(DICT);
     let ojt = OpenJtalk::new(dict.to_string_lossy().as_ref()).context("일본어 사전을 열 수 없습니다")?;
     let threads = std::thread::available_parallelism().map(|n| n.get().clamp(2, 8) as u16).unwrap_or(4);
@@ -216,10 +224,14 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<Status>>, generation: Arc<AtomicU
             },
         };
         match job {
-            // The engine itself is opened on the first sentence, not at startup.
+            // The engine itself is opened on the first sentence, not at startup — except on a
+            // phone, where opening it takes long enough that the first sentence would wait.
             Job::Load(d) => {
                 engine = None;
-                if d.join(DONE_MARK).exists() && runtime_lib(&d).is_some() {
+                if d.join(DONE_MARK).exists() && (BUNDLED_RUNTIME.is_some() || runtime_lib(&d).is_some()) {
+                    if cfg!(target_os = "android") && !ensure_open(&mut engine, &d, &status) {
+                        continue; // the status says why
+                    }
                     dir = Some(d);
                     *status.lock().unwrap() = Status::Ready;
                 } else {
@@ -270,21 +282,30 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<Status>>, generation: Arc<AtomicU
 
 pub const SAMPLE_RATE: u32 = 24_000;
 
-fn synth(engine: &mut Option<Synthesizer<OpenJtalk>>, dir: &Path, text: &str, voice: u32, speed: f32, status: &Mutex<Status>) -> Option<Arc<Vec<f32>>> {
-    if engine.is_none() {
-        let t0 = std::time::Instant::now();
-        let _guard = crate::stt::MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
-        match open_engine(dir) {
-            Ok(e) => {
-                crate::applog!("voicevox: 음성 엔진 로드 {:.1}초", t0.elapsed().as_secs_f32());
-                *engine = Some(e);
-            }
-            Err(e) => {
-                crate::applog!("voicevox: {e:#}");
-                *status.lock().unwrap() = Status::Error(format!("{e:#}"));
-                return None;
-            }
+/// Opens the engine if it isn't open. False (and the status says why) when it can't be.
+fn ensure_open(engine: &mut Option<Synthesizer<OpenJtalk>>, dir: &Path, status: &Mutex<Status>) -> bool {
+    if engine.is_some() {
+        return true;
+    }
+    let t0 = std::time::Instant::now();
+    let _guard = crate::stt::MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
+    match open_engine(dir) {
+        Ok(e) => {
+            crate::applog!("voicevox: 음성 엔진 로드 {:.1}초", t0.elapsed().as_secs_f32());
+            *engine = Some(e);
+            true
         }
+        Err(e) => {
+            crate::applog!("voicevox: {e:#}");
+            *status.lock().unwrap() = Status::Error(format!("{e:#}"));
+            false
+        }
+    }
+}
+
+fn synth(engine: &mut Option<Synthesizer<OpenJtalk>>, dir: &Path, text: &str, voice: u32, speed: f32, status: &Mutex<Status>) -> Option<Arc<Vec<f32>>> {
+    if !ensure_open(engine, dir, status) {
+        return None;
     }
     let e = engine.as_ref()?;
     let style = StyleId(voice);
@@ -360,7 +381,9 @@ fn download_all(models_dir: &Path, done: &AtomicU64, total: &AtomicU64) -> Resul
     if dest.join(DONE_MARK).exists() {
         return Ok(dest);
     }
-    let ort_url = ONNXRUNTIME_URL.ok_or_else(|| anyhow!("이 컴퓨터에서는 쓸 수 없습니다 (macOS Apple Silicon · Windows 64비트 전용)"))?;
+    if !supported() {
+        return Err(anyhow!("이 기기에서는 쓸 수 없습니다 (macOS Apple Silicon · Windows 64비트 · Android 전용)"));
+    }
     let tmp = models_dir.join(format!("{DIR}.part"));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp)?;
@@ -368,11 +391,13 @@ fn download_all(models_dir: &Path, done: &AtomicU64, total: &AtomicU64) -> Resul
     // For the progress bar: GitHub's redirects don't say the sizes up front (about 104 MB together).
     total.store(104_000_000, Ordering::Relaxed);
     done.store(0, Ordering::Relaxed);
-    let ort = fetch(&client, ort_url, done).context("ONNX Runtime")?;
-    untar(&ort, |p| {
-        let name = p.file_name()?.to_string_lossy().to_string();
-        (name.contains("voicevox_onnxruntime") && (name.ends_with(".dylib") || name.ends_with(".dll") || name.contains(".so")) || name == "TERMS.txt").then(|| tmp.join(if name == "TERMS.txt" { "ONNXRUNTIME_TERMS.txt".to_string() } else { name }))
-    })?;
+    if let Some(ort_url) = ONNXRUNTIME_URL {
+        let ort = fetch(&client, ort_url, done).context("ONNX Runtime")?;
+        untar(&ort, |p| {
+            let name = p.file_name()?.to_string_lossy().to_string();
+            (name.contains("voicevox_onnxruntime") && (name.ends_with(".dylib") || name.ends_with(".dll") || name.contains(".so")) || name == "TERMS.txt").then(|| tmp.join(if name == "TERMS.txt" { "ONNXRUNTIME_TERMS.txt".to_string() } else { name }))
+        })?;
+    }
     let dict = fetch(&client, DICT_URL, done).context("일본어 사전")?;
     untar(&dict, |p| {
         let rel = p.strip_prefix(DICT).ok()?;
@@ -380,7 +405,7 @@ fn download_all(models_dir: &Path, done: &AtomicU64, total: &AtomicU64) -> Resul
     })?;
     let vvm = fetch(&client, VVM_URL, done).context("음성 모델")?;
     std::fs::write(tmp.join(VVM), vvm)?;
-    if runtime_lib(&tmp).is_none() || !tmp.join(DICT).join("sys.dic").exists() {
+    if (BUNDLED_RUNTIME.is_none() && runtime_lib(&tmp).is_none()) || !tmp.join(DICT).join("sys.dic").exists() {
         return Err(anyhow!("받은 파일이 올바르지 않습니다"));
     }
     let _ = std::fs::remove_dir_all(&dest);

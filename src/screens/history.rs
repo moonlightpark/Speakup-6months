@@ -32,7 +32,8 @@ fn stat_card_with(ui: &mut Ui, width: f32, value: &str, label: &str, color: Colo
     if ui.layout().main_wrap && ui.available_size_before_wrap().x < width + 34.0 && ui.cursor().left() > ui.max_rect().left() + 1.0 {
         ui.end_row();
     }
-    let row_id = ui.id();
+    // Tiles of one row share a height; rows (on a phone, tiles one under another) don't.
+    let row_id = ui.id().with(ui.cursor().top().round() as i32);
     let card_id = row_id.with(("stat_card", label));
     egui::Frame::new().fill(card_bg()).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0_f32, border())).show(ui, |ui| {
         // Stack value, label and extras even when the tiles sit in a horizontal row.

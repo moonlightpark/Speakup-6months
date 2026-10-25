@@ -209,9 +209,11 @@ pub fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
             ui.add_space(4.0);
         }
         ui.vertical(|ui| {
-            ui.label(RichText::new(text).size(28.0).strong().color(text_strong()));
+            // Wrap within the page (a phone), not past it.
+            ui.set_max_width(ui.available_width());
+            ui.add(egui::Label::new(RichText::new(text).size(28.0).strong().color(text_strong())).wrap());
             if !subtitle.is_empty() {
-                ui.label(RichText::new(subtitle).size(15.0).color(muted()));
+                ui.add(egui::Label::new(RichText::new(subtitle).size(15.0).color(muted())).wrap());
             }
         });
     });
@@ -220,12 +222,22 @@ pub fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
 
 /// Small rounded status pill.
 pub fn chip(ui: &mut Ui, text: &str, color: Color32) {
+    // In a wrapping row a frame doesn't wrap by itself: next line when it won't fit (phones),
+    // and a chip longer than the whole line wraps its text.
+    if ui.layout().main_wrap {
+        let w = ui.fonts(|f| f.layout_no_wrap(text.to_string(), egui::FontId::proportional(13.0), color).size().x) + 22.0;
+        if ui.available_size_before_wrap().x < w && ui.cursor().left() > ui.max_rect().left() + 1.0 {
+            ui.end_row();
+        }
+    }
+    let max = ui.available_size_before_wrap().x.max(60.0);
     egui::Frame::new()
         .fill(color.gamma_multiply(0.18))
         .corner_radius(20.0)
         .inner_margin(egui::Margin::symmetric(10, 3))
         .show(ui, |ui| {
-            ui.label(RichText::new(text).size(13.0).color(color));
+            ui.set_max_width(max - 22.0);
+            ui.add(egui::Label::new(RichText::new(text).size(13.0).color(color)).wrap());
         });
 }
 
@@ -646,6 +658,14 @@ pub fn chunk_view(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, siz
         ui.spacing_mut().item_spacing = Vec2::new(4.0, 10.0);
         let mut pos = 0;
         for (i, c) in chunks.iter().enumerate() {
+            // A chunk (Japanese over Korean) is a group, which doesn't wrap by itself: next line
+            // when it and its " / " won't fit (phones).
+            let w = ui.fonts(|f| {
+                let ja = f.layout_no_wrap(c.ja.clone(), FontId::proportional(size), Color32::WHITE).size().x;
+                let ko = f.layout_no_wrap(c.ko.clone(), FontId::proportional(size * 0.62), Color32::WHITE).size().x;
+                ja.max(ko)
+            });
+            wrap_before(ui, w + if i > 0 { size * 0.6 } else { 0.0 });
             if i > 0 {
                 ui.vertical(|ui| {
                     if furigana_on(ui.ctx()) {
@@ -1031,6 +1051,10 @@ pub fn dbgw(ui: &Ui, tag: &str) {
 pub fn at_right<R>(ui: &mut Ui, room: f32, add: impl FnOnce(&mut Ui) -> R) -> R {
     if ui.layout().main_wrap && ui.available_size_before_wrap().x < room {
         ui.end_row();
+        // A phone: on its own line, left-aligned like the rest.
+        if ui.max_rect().width() < 420.0 {
+            return add(ui);
+        }
     }
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), add).inner
 }
@@ -1039,4 +1063,23 @@ pub fn at_right<R>(ui: &mut Ui, room: f32, add: impl FnOnce(&mut Ui) -> R) -> R 
 /// (phones), instead of pushing the page wider.
 pub fn wide<R>(ui: &mut Ui, id: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
     egui::ScrollArea::horizontal().id_salt(id).auto_shrink([true, true]).show(ui, add).inner
+}
+
+/// A slider with its name: beside it on a wide screen, above it on a phone (a slider's own text
+/// doesn't wrap).
+pub fn named_slider(ui: &mut Ui, slider: egui::Slider<'_>, name: &str) -> egui::Response {
+    if ui.available_width() < 420.0 {
+        ui.label(name);
+        ui.add(slider)
+    } else {
+        ui.add(slider.text(name))
+    }
+}
+
+/// In a wrapping row, starts the next line when something `width` wide won't fit in what's
+/// left of this one (groups and frames don't wrap by themselves).
+pub fn wrap_before(ui: &mut Ui, width: f32) {
+    if ui.layout().main_wrap && ui.available_size_before_wrap().x < width && ui.cursor().left() > ui.max_rect().left() + 1.0 {
+        ui.end_row();
+    }
 }
