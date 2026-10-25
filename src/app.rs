@@ -101,6 +101,8 @@ pub struct App {
     pub sentence_tense_tried: Option<chrono::NaiveDate>,
     /// 오늘의 문장 만들기 in progress: (word, mission).
     pub word_mission: Option<(String, crate::screens::mission::Mission)>,
+    /// A round of 히라가나·가타카나 cards (N5, top of 새 단어).
+    pub kana_quiz: Option<crate::screens::kana::KanaQuiz>,
     pub selfx: SelfExprState,
     pub roleplay: RoleplayState,
     pub listening: ListeningState,
@@ -220,6 +222,7 @@ impl App {
             queue: None,
             homework: HomeworkState::default(),
             word_mission: None,
+            kana_quiz: None,
             tense_job: Pending::default(),
             tense_tried: None,
             days_filled: None,

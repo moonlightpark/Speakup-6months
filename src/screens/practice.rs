@@ -329,8 +329,11 @@ impl App {
     }
 
     pub fn words_ui(&mut self, ui: &mut Ui) {
-        if self.run_queue_ui(ui) || self.word_mission_ui(ui) {
+        if self.run_queue_ui(ui) || self.word_mission_ui(ui) || self.kana_quiz_ui(ui) {
             return;
+        }
+        if self.kana_cards_shown() {
+            self.kana_card(ui);
         }
         self.ensure_tenses();
         // Built-in word database + chunk list: no waiting for Claude. The rest of today's

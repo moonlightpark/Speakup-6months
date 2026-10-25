@@ -186,6 +186,8 @@ pub struct Profile {
     pub tutor_sessions: Vec<NaiveDate>,
     /// Mock JLPT / JPT / OPIc 일본어 results, logged by the learner every two weeks.
     pub external_tests: Vec<ExternalTest>,
+    /// 히라가나·가타카나 카드: right answers in a row by kana (あ, ア …).
+    pub kana: std::collections::HashMap<String, u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -229,6 +231,7 @@ impl Default for Profile {
             tutor_sessions: Vec::new(),
             speed_book_pages: Default::default(),
             external_tests: Vec::new(),
+            kana: Default::default(),
         }
     }
 }

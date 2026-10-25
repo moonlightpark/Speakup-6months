@@ -1,6 +1,6 @@
 [package]
 name = "speakup"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2024"
 rust-version = "1.88"
 description = "6개월 일본어 듣기·말하기 완성 – 음성 지원 일본어 학습 데스크톱 앱 (Claude API)"

@@ -2279,3 +2279,43 @@ fn ft67_print_a_days_words_on_one_a4_page() {
     t.click_contains("2일차 (0/");
     assert!(!t.has("📄 인쇄"));
 }
+
+#[test]
+fn ft_kana_cards_first_for_n5() {
+    use crate::screens::kana::{sound, KANA, KANA_DONE};
+    let mut t = launch("kana");
+    t.nav("📚  새 단어");
+    assert!(!t.has("🔤 히라가나·가타카나 카드"), "N4 and up: no kana cards");
+    t.app_mut().store.profile.level = 1.5;
+    t.steps(2);
+    assert!(t.has("🔤 히라가나·가타카나 카드") && t.has("히라가나 0/71") && t.has("가타카나 0/71"));
+    t.click("▶ 히라가나 카드 10장");
+    assert!(t.has("🔤 히라가나 카드") && t.has("1 / 10"));
+    // The first round is the あ and か rows; answer each card right.
+    for n in 0..10 {
+        let q = t.app().kana_quiz.as_ref().unwrap();
+        let a = q.cards[q.idx];
+        assert!(a < 10, "あ・か rows first");
+        if n == 0 {
+            // A wrong answer shows the right one and resets that kana.
+            let wrong = q.choices.iter().copied().find(|&c| c != a).unwrap();
+            t.click(&sound(wrong));
+            assert!(t.has(&format!("✗ 정답은 {}", sound(a))));
+        } else {
+            t.click(&sound(a));
+            assert!(t.has("✓ 정답!"));
+        }
+        t.click("다음 ▶");
+    }
+    assert!(t.has("히라가나 카드 완료") && t.has("10장 중 9장 정답"));
+    let kana = &t.app().store.profile.kana;
+    assert_eq!(kana.values().filter(|&&v| v == 1).count(), 9);
+    assert_eq!(kana.values().filter(|&&v| v == 0).count(), 1);
+    // Three right in a row = 기억 완료, shown in the progress line.
+    for i in 0..5 {
+        t.app_mut().store.profile.kana.insert(KANA[i].0.to_string(), KANA_DONE);
+    }
+    t.click("◀ 새 단어 목록");
+    assert!(t.has("히라가나 5/71"));
+    assert!(t.has("오늘의 덩어리 표현 · 새 단어") && t.has("▶ 시작하기"), "the word list follows the kana card");
+}
