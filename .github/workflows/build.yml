@@ -90,7 +90,7 @@ jobs:
           ls -la dist
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
-            gh release create "$TAG" dist/* --repo "$REPO" --title "SpeakUp 6M JP $TAG" --generate-notes
+            gh release create "$TAG" dist/* --repo "$REPO" --title "SpeakUp 6M JP $TAG" --generate-notes --latest=false
           else
             # Rolling release that always holds the newest build of the japanese branch (not
             # marked "latest": that stays the English app's).
