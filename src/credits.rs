@@ -14,7 +14,10 @@ pub const LIBRARIES: &[Credit] = &[
     ("whisper-rs", "Unlicense", "whisper.cpp 연결", "https://codeberg.org/tazz4843/whisper-rs"),
     ("lindera", "MIT", "일본어 형태소 분석 (후리가나 · 발음 채점 · 단어 찾기)", "https://github.com/lindera/lindera"),
     ("IPADIC (mecab-ipadic)", "IPADIC 라이선스 (BSD 계열)", "lindera에 들어 있는 일본어 사전", "https://github.com/lindera/lindera"),
-    ("tts", "MIT", "일본어 음성 (운영체제 음성)", "https://github.com/ndarilek/tts-rs"),
+    ("VOICEVOX CORE", "MIT", "자연스러운 AI 일본어 음성 엔진", "https://github.com/VOICEVOX/voicevox_core"),
+    ("VOICEVOX ONNX Runtime", "VOICEVOX ONNX Runtime 이용약관 (재배포 가능, 출처 표기)", "AI 음성 실행", "https://github.com/VOICEVOX/onnxruntime-builder"),
+    ("Open JTalk 사전", "Modified BSD", "AI 음성의 일본어 읽기·억양 분석", "https://github.com/r9y9/open_jtalk"),
+    ("tts", "MIT", "일본어 음성 (운영체제 음성, AI 음성이 없을 때)", "https://github.com/ndarilek/tts-rs"),
     ("cpal", "Apache-2.0", "마이크 · 스피커", "https://github.com/rustaudio/cpal"),
     ("rodio", "MIT OR Apache-2.0", "소리 재생", "https://github.com/RustAudio/rodio"),
     ("reqwest", "MIT OR Apache-2.0", "인터넷 연결 (Claude, 사진, 모델 받기)", "https://github.com/seanmonstar/reqwest"),
@@ -30,6 +33,7 @@ pub const LIBRARIES: &[Credit] = &[
 
 pub const MODELS_FONTS: &[Credit] = &[
     ("Whisper 음성 인식 모델 (OpenAI)", "MIT", "내 말을 글자로 (ggml 형식, Hugging Face에서 받기)", "https://huggingface.co/ggerganov/whisper.cpp"),
+    ("VOICEVOX Nemo", "VOICEVOX 음성 모델 이용약관 · Nemo 이용약관 (출처 표기)", "AI 일본어 목소리 (여성 1~6 · 남성 1~3)", "https://voicevox.hiroshiba.jp/nemo/"),
     ("Pretendard 글꼴 (길형진)", "SIL OFL 1.1", "한글 · 라틴 글꼴", "https://github.com/orioncactus/pretendard"),
     ("Noto Sans JP 글꼴 (Google · Adobe)", "SIL OFL 1.1", "일본어 (가나 · 한자) 글꼴", "https://github.com/notofonts/noto-cjk"),
     ("Ubuntu · Hack · Noto Emoji 글꼴", "Ubuntu Font Licence · MIT · SIL OFL 1.1", "egui 기본 글꼴 · 이모지", "https://github.com/emilk/egui/tree/master/crates/epaint_default_fonts"),

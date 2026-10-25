@@ -31,6 +31,12 @@ lindera = { version = "6.2", default-features = false, features = ["embed-ipadic
 # 青空文庫 books: ZIP archives of Shift_JIS text.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 encoding_rs = "0.8"
+# Natural Japanese speech (VOICEVOX, offline neural TTS). Its ONNX Runtime, dictionary and voice
+# model are downloaded at first run (voicevox.rs); the runtime library is opened dynamically.
+voicevox_core = { git = "https://github.com/VOICEVOX/voicevox_core.git", tag = "0.17.1", features = ["load-onnxruntime"] }
+typed_floats = "1"
+flate2 = "1"
+tar = "0.4"
 
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["eframe"] }

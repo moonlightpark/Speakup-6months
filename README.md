@@ -25,9 +25,7 @@
 
 1. **이름**과 **Claude API 키**를 입력합니다. 한 번 입력하면 다시 묻지 않아요.
 2. **음성 인식 모델**(다국어 Whisper small, 466MB)을 받습니다. 내 일본어 발음을 알아듣는 데 쓰고, 번역기의 한국어 인식에도 같은 모델을 씁니다. 영어판 앱에서 이미 받았다면 다시 받지 않아요.
-3. **일본어 음성**: 운영체제의 일본어 음성으로 읽어 줍니다. 더 자연스러운 고품질 음성을 설치하면 좋아요.
-   - macOS: 시스템 설정 › 손쉬운 사용 › 읽기 및 말하기 › 시스템 음성 › 음성 관리… › 일본어 **Kyoko (향상됨/프리미엄)** 또는 **Otoya (향상됨/프리미엄)** (무료, 설치하면 앱이 자동으로 먼저 고릅니다)
-   - Windows: 설정 › 시간 및 언어 › 음성 › 음성 추가 › **일본어(일본)** (Haruka · Ayumi · Ichiro)
+3. **자연스러운 AI 음성(VOICEVOX Nemo)** 을 받습니다(약 100MB, 첫 실행 때 자동으로 시작). 사람처럼 매끄러운 신경망 일본어 음성으로, 받은 뒤에는 인터넷 없이 씁니다. 받기 전이나 지원하지 않는 컴퓨터에서는 운영체제의 일본어 음성으로 읽어 줍니다.
 4. **마이크·스피커 점검**: 3초 말하고 다시 들어 보세요.
 5. **레벨 테스트**를 보면 내 수준에 맞는 6개월(182일) 과정이 시작됩니다. 일본어가 처음이면 "테스트 없이 처음부터(N5) 시작"을 누르세요.
 
@@ -83,8 +81,10 @@
 ### 📖 내장 일본어 사전 (약 6,000단어)
 JLPT N5~N1 단어마다 **읽기 · 품사 · 한국어 뜻 · 예문 · 예문 해석**이 들어 있습니다(`assets/ja/words.json`). 문장 아래 단어를 누르면 인터넷이나 Claude 없이 바로 뜻이 나오고, 「行きました」→「行く」처럼 활용형도 기본형으로 찾아 줍니다.
 
-### 🔊 일본어 음성
-운영체제의 일본어 음성으로 읽어 줍니다. **🐢 천천히 / 🐇 빠르게**도 됩니다. (영어판의 Kokoro 신경망 음성은 일본어 한자를 읽지 못해 이 버전에서는 쓰지 않습니다. macOS의 Kyoko 고품질 음성을 권합니다.)
+### 🔊 자연스러운 AI 일본어 음성 — VOICEVOX Nemo
+오프라인 신경망 음성 엔진 **VOICEVOX**의 **Nemo** 목소리(여성 6 · 남성 3, 설정 › 음성에서 선택)로 사람처럼 자연스럽게 읽어 줍니다. 일본어 사전(Open JTalk)으로 한자 읽기와 억양을 분석해서, 시험한 문장들을 음성 인식이 한 글자도 틀리지 않고 받아 적었습니다. **🐢 천천히 / 🐇 빠르게**도 자연스럽고, 한 번 들은 문장은 바로 다시 재생됩니다. 음성 엔진은 처음 읽을 때 메모리에 올리고(약 4초, 약 600MB) 5분 동안 쓰지 않으면 내려놓습니다. 음성: VOICEVOX Nemo.
+
+(영어판의 Kokoro 음성은 일본어 한자를 읽지 못해 쓰지 않습니다. AI 음성을 끄면 운영체제 일본어 음성을 씁니다.)
 
 ### 🌐 자동 번역기 — 한국어로 말하면 일본어 3단계로
 하고 싶은 말을 **한국어로 마이크에 말하거나** 입력하면, 같은 뜻을 **쉽게(です・ます) · 중간(일상 표현) · 고급(경어 등)** 세 가지 일본어로 보여 주고 읽어 줍니다.
@@ -129,14 +129,14 @@ Claude API를 쓸 수 없을 때(키 없음·크레딧 부족·네트워크 오�
 **Claude API 키가 꼭 필요한가요?**
 레슨 생성, 말하기·쓰기 피드백, AI 회화, 쉬운 일본어로 다시 쓰기에 사용합니다. 키가 없어도 내장 단어장·문장·옛날이야기·대본·받아쓰기 등은 쓸 수 있어요. 키는 [Anthropic Console](https://console.anthropic.com/)에서 만들고, 내 컴퓨터에만 저장됩니다.
 
-**일본어 음성이 안 나와요 / 기계 같아요.**
-위의 "처음 시작하기 › 일본어 음성"대로 일본어 음성을 설치하고 앱을 다시 켜세요. 설정 › 음성에서 목소리를 고를 수 있어요.
+**일본어 음성이 기계 같아요.**
+설정 › 음성에서 **자연스러운 AI 음성(VOICEVOX Nemo)** 이 "준비 완료"인지 확인하세요. 받는 중이면 끝날 때까지 운영체제 음성으로 읽습니다.
 
 **마이크가 안 돼요.**
 설정 → **오디오 장치 · 마이크 점검**에서 "마이크 테스트"를 눌러 보세요. macOS는 시스템 설정 → 개인정보 보호 및 보안 → 마이크에서 SpeakUp 6M JP를 허용하세요.
 
 **메모리를 얼마나 쓰나요?**
-음성 인식 모델(small)이 가장 큽니다(약 0.5~1GB). 마이크를 처음 누를 때 올리고, 3분 동안 쓰지 않으면 내려놓습니다. 일본어 음성과 한국어 음성(번역기)은 한 모델을 함께 써서 메모리에 한 번만 올라갑니다. 일본어 사전(IPADIC)은 앱에 들어 있지만 쓸 때만 읽어서 약 5MB만 씁니다.
+음성 인식 모델(small, 약 0.5~1GB)과 AI 음성 엔진(약 600MB)이 큽니다. 둘 다 쓸 때만 올리고, 쉬면(음성 인식 3분, AI 음성 5분) 내려놓습니다. 일본어 음성과 한국어 음성(번역기)은 한 모델을 함께 써서 메모리에 한 번만 올라갑니다. 일본어 사전(IPADIC)은 앱에 들어 있지만 쓸 때만 읽어서 약 5MB만 씁니다.
 
 **내 학습 기록은 어디에 저장되나요?**
 
@@ -162,4 +162,4 @@ cargo test --release             # 테스트
 
 ## 🙏 사용한 오픈소스
 
-[egui](https://github.com/emilk/egui) (화면) · [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (음성 인식) · [lindera](https://github.com/lindera/lindera) + IPADIC (일본어 형태소 분석) · [Pretendard](https://github.com/orioncactus/pretendard) · [Noto Sans JP](https://github.com/notofonts/noto-cjk) (글꼴, SIL OFL) · [青空文庫](https://www.aozora.gr.jp/) (퍼블릭 도메인 도서) · [YouGlish](https://youglish.com/) (영상 검색) · [Claude API](https://www.anthropic.com/) (AI)
+[egui](https://github.com/emilk/egui) (화면) · [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (음성 인식) · [lindera](https://github.com/lindera/lindera) + IPADIC (일본어 형태소 분석) · [VOICEVOX](https://voicevox.hiroshiba.jp/) (음성 합성, 음성: VOICEVOX Nemo) · [Pretendard](https://github.com/orioncactus/pretendard) · [Noto Sans JP](https://github.com/notofonts/noto-cjk) (글꼴, SIL OFL) · [青空文庫](https://www.aozora.gr.jp/) (퍼블릭 도메인 도서) · [YouGlish](https://youglish.com/) (영상 검색) · [Claude API](https://www.anthropic.com/) (AI)

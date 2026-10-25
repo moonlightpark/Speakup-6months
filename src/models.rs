@@ -32,6 +32,10 @@ pub struct Settings {
     pub ko_role_colors: bool,
     /// Readings (furigana) above kanji (설정 > 후리가나).
     pub furigana: bool,
+    /// Speak with the natural neural voice (VOICEVOX Nemo) once it is installed.
+    pub neural_tts: bool,
+    /// VOICEVOX style id of the chosen Nemo voice (voicevox::VOICES).
+    pub voicevox_voice: u32,
     /// The 30 → 60 minute default change has been applied (missing in older settings files).
     #[serde(default)]
     pub goal_60_applied: bool,
@@ -79,6 +83,8 @@ impl Default for Settings {
             korean_model: "small".into(),
             ko_role_colors: true,
             furigana: true,
+            neural_tts: true,
+            voicevox_voice: 10005,
             goal_60_applied: true,
             light_theme: false,
             goal_cefr: "N3".into(),

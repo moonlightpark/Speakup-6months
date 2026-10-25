@@ -123,6 +123,7 @@ pub struct App {
     pub show_key: bool,
     edit_name: bool,
     edit_key: bool,
+    prefetched: Option<chrono::NaiveDate>,
     pub api_url: String,
     /// The Claude API answered "can't be used" (no credit / key / network): speaking screens
     /// use the built-in offline scripts until an answer comes back.
@@ -161,6 +162,19 @@ impl App {
             stt.load(model_file);
         }
         let player = crate::audio::Player::new(store.settings.output_device.clone());
+        let mut speaker = speaker;
+        if crate::voicevox::supported() {
+            let vv = crate::voicevox::VoiceVox::new(player.handle());
+            if crate::voicevox::is_installed(&store.models_dir()) {
+                vv.load(&store.models_dir());
+            } else if store.settings.neural_tts && !cfg!(test) {
+                // The natural voice matters most: fetch it once in the background on first run.
+                vv.download(store.models_dir());
+            }
+            speaker.neural = Some(vv);
+        }
+        speaker.use_neural = store.settings.neural_tts;
+        speaker.neural_voice = store.settings.voicevox_voice;
         // Korean speech (translator): the same multilingual model as Japanese when the files are
         // the same, so it's in memory once.
         let stt_ko = if store.settings.korean_model == store.settings.whisper_model { stt.with_language("ko") } else { Stt::new("ko") };
@@ -235,6 +249,7 @@ impl App {
             show_key: false,
             edit_name: false,
             edit_key: false,
+            prefetched: None,
             api_url: crate::claude::API_URL.to_string(),
             api_down: Default::default(),
             last_activity: Instant::now(),
@@ -1019,7 +1034,12 @@ impl App {
             };
             ui.label(RichText::new(txt).color(col).size(12.5));
             // Which Japanese voice is speaking (or that none is installed).
-            let (vt, vc) = if self.voice.speaker.voices.is_empty() {
+            let neural = self.voice.speaker.neural.as_ref().map(|n| n.status());
+            let (vt, vc) = if self.voice.speaker.neural_active() {
+                ("● AI 음성 (VOICEVOX Nemo)", GOOD)
+            } else if neural == Some(crate::voicevox::Status::Downloading) {
+                ("● AI 음성 받는 중", warn())
+            } else if self.voice.speaker.voices.is_empty() {
                 ("● 일본어 음성 없음 — 설치 방법 ›", BAD)
             } else if self.voice.speaker.natural {
                 ("● 일본어 음성 (고품질)", GOOD)
@@ -1317,9 +1337,58 @@ impl App {
         });
     }
 
-    /// The OS's Japanese voice: pick one, hear it, and how to install a better one.
+    /// Japanese voices: the natural neural one (VOICEVOX Nemo — download once, choose a voice,
+    /// test), then the OS voice it falls back to.
     pub fn voice_setup_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        use crate::voicevox::{Status, VOICES};
         let mut changed = false;
+        if let Some(n) = self.voice.speaker.neural.as_ref() {
+            ui.label(RichText::new("🎤 자연스러운 AI 음성 (VOICEVOX Nemo, 오프라인)").strong().color(text_strong()));
+            match n.status() {
+                Status::Ready => {
+                    ui.label(RichText::new("✅ 준비 완료 — 사람처럼 자연스러운 신경망 음성으로 읽어 줘요.").color(GOOD).small());
+                }
+                Status::Downloading => {
+                    let d = n.downloaded.load(std::sync::atomic::Ordering::Relaxed) as f32;
+                    let t = n.total.load(std::sync::atomic::Ordering::Relaxed).max(1) as f32;
+                    ui.add(egui::ProgressBar::new(d / t).text(format!("AI 음성 받는 중 {:.0} / {:.0} MB", d / 1e6, t / 1e6)));
+                    ui.ctx().request_repaint_after(Duration::from_millis(200));
+                }
+                status => {
+                    if let Status::Error(e) = status {
+                        error_label(ui, &e);
+                    }
+                    ui.label(RichText::new("한 번만 받으면(약 100MB) 인터넷 없이 계속 사용합니다.").color(muted()).small());
+                    if ui.add(egui::Button::new(RichText::new("⬇ 자연스러운 AI 음성 받기 (권장)").strong()).fill(ACCENT)).clicked() {
+                        n.download(self.store.models_dir());
+                    }
+                }
+            }
+            if n.is_ready() {
+                ui.horizontal(|ui| {
+                    changed |= ui.checkbox(&mut self.store.settings.neural_tts, "AI 음성 사용").changed();
+                    let current = crate::voicevox::voice_label(self.store.settings.voicevox_voice);
+                    egui::ComboBox::from_id_salt("voicevox_voice").width(140.0).selected_text(current).show_ui(ui, |ui| {
+                        for (id, _, label) in VOICES {
+                            if ui.selectable_label(self.store.settings.voicevox_voice == *id, *label).clicked() {
+                                self.store.settings.voicevox_voice = *id;
+                                changed = true;
+                            }
+                        }
+                    });
+                    if ui.button("🔊 들어보기").clicked() {
+                        self.voice.speaker.use_neural = true;
+                        self.voice.speaker.neural_voice = self.store.settings.voicevox_voice;
+                        self.voice.say("こんにちは。一緒に日本語を話す練習をしましょう。");
+                    }
+                });
+                ui.label(RichText::new("음성: VOICEVOX Nemo").color(muted()).small());
+            }
+            ui.add_space(6.0);
+        }
+        self.voice.speaker.use_neural = self.store.settings.neural_tts;
+        self.voice.speaker.neural_voice = self.store.settings.voicevox_voice;
+        ui.label(RichText::new(if self.voice.speaker.neural.is_some() { "시스템 음성 (AI 음성을 쓰지 않을 때)" } else { "시스템 음성" }).color(muted()));
         if let Some(e) = &self.voice.speaker.error {
             error_label(ui, e);
         }
@@ -1335,21 +1404,30 @@ impl App {
                     }
                 }
             });
-            if ui.button("🔊 들어보기").clicked() {
-                self.voice.say("こんにちは。一緒に日本語を話す練習をしましょう。");
-            }
         });
-        if self.voice.speaker.natural {
-            ui.label(RichText::new("✅ 자연스러운 고품질 일본어 음성을 쓰고 있어요.").color(GOOD).small());
-        } else {
-            // The standard voices sound mechanical; the free high-quality ones are a big step up.
-            ui.label(RichText::new(format!("⚠ 지금은 기본 품질 음성이라 조금 어색하게 들려요. {}", crate::voice::INSTALL_VOICE_HELP)).color(warn()).small());
-            if ui.button("⚙ 음성 설정 열기").clicked() {
-                let url = if cfg!(target_os = "macos") { "x-apple.systempreferences:com.apple.Accessibility-Settings.extension?SpokenContent" } else { "ms-settings:speech" };
-                let _ = open::that(url);
-            }
+        if !self.voice.speaker.natural && !self.voice.speaker.neural_active() {
+            ui.label(RichText::new(format!("💡 {}", crate::voice::INSTALL_VOICE_HELP)).color(muted()).small());
         }
         changed
+    }
+
+    /// Synthesizes today's lesson in the background so every 🔊 plays instantly.
+    pub fn prefetch_lesson(&mut self) {
+        let Some(lesson) = &self.lesson else { return };
+        if !self.voice.speaker.neural_active() || self.prefetched == lesson.date {
+            return;
+        }
+        self.prefetched = lesson.date;
+        let r = self.voice.base_rate;
+        for w in lesson.phrases.iter().chain(&lesson.words).chain(&lesson.expressions) {
+            self.voice.speaker.prefetch(&w.word, r);
+        }
+        for s in &lesson.sentences {
+            self.voice.speaker.prefetch(&s.text, r);
+        }
+        for w in lesson.phrases.iter().chain(&lesson.words) {
+            self.voice.speaker.prefetch(&w.example, r);
+        }
     }
 
     pub fn stt_setup_ui(&mut self, ui: &mut egui::Ui) {
@@ -1568,6 +1646,7 @@ impl eframe::App for App {
         self.apply_support_stage(ctx);
         crate::grammar::pump(ctx, self.claude(), self.store.settings.ko_role_colors);
         self.sync_lesson_words();
+        self.prefetch_lesson();
         self.track_time(ctx);
         if self.lesson_job.running() || self.voice.player.is_playing() {
             ctx.request_repaint_after(Duration::from_millis(100));

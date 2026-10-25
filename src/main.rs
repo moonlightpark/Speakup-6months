@@ -36,6 +36,7 @@ mod tenses;
 mod stt;
 mod theme;
 mod voice;
+mod voicevox;
 mod widgets;
 mod wordbank;
 
