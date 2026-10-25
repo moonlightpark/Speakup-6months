@@ -156,6 +156,9 @@ pub struct DayProgress {
     pub focus_words: Vec<String>,
     pub sentences_made: Vec<String>,
     pub words_used: Vec<String>,
+    /// 한자 cards answered today.
+    #[serde(default)]
+    pub kanji_cards: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -191,6 +194,8 @@ pub struct Profile {
     pub external_tests: Vec<ExternalTest>,
     /// 히라가나·가타카나 카드: right answers in a row by kana (あ, ア …).
     pub kana: std::collections::HashMap<String, u32>,
+    /// 한자 카드: right answers in a row by kanji.
+    pub kanji: std::collections::HashMap<String, u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -235,6 +240,7 @@ impl Default for Profile {
             speed_book_pages: Default::default(),
             external_tests: Vec::new(),
             kana: Default::default(),
+            kanji: Default::default(),
         }
     }
 }

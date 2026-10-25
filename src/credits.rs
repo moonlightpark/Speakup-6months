@@ -43,6 +43,8 @@ pub const SITES: &[Credit] = &[
     ("YouGlish", "서비스 이용약관", "리스닝 랩 🎬 오늘 문장 영상 · 🔤 오늘 단어 발음 (영상 검색 · 플레이어)", "https://youglish.com"),
     ("YouTube", "각 영상 제작자 소유", "YouGlish가 보여 주는 원본 영상", "https://www.youtube.com"),
     ("Wikimedia Commons", "사진마다 CC BY · CC BY-SA · CC0 등", "받아쓰기 상황 사진 (작가 · 라이선스는 사진 아래 표시)", "https://commons.wikimedia.org"),
+    ("kanji-data (David Gouveia)", "MIT", "한자 카드의 JLPT 급수·음독·훈독", "https://github.com/davidluzgouveia/kanji-data"),
+    ("Unicode Unihan Database", "Unicode License v3", "한자 카드의 한국어 음 확인", "https://www.unicode.org/charts/unihan.html"),
     ("青空文庫 (아오조라 문고)", "퍼블릭 도메인 (저작권 만료 작품)", "리딩 라이브러리의 책", "https://www.aozora.gr.jp"),
     ("Anthropic Claude API", "유료 서비스 (오픈소스 아님)", "레슨 · 문장 · 피드백 · 사진 검색어 만들기", "https://www.anthropic.com"),
 ];

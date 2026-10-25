@@ -335,6 +335,7 @@ impl App {
         if self.kana_cards_shown() {
             self.kana_card(ui);
         }
+        self.kanji_card(ui);
         self.ensure_tenses();
         // Built-in word database + chunk list: no waiting for Claude. The rest of today's
         // lesson (sentences, speaking…) is still prepared in the background meanwhile.

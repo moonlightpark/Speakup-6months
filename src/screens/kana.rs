@@ -1,11 +1,12 @@
-//! 히라가나·가타카나 카드: N5 learners memorise the kana (50음 + 탁음·반탁음) first, at the top
-//! of 새 단어. A card shows one kana; the learner picks its sound from four. Three right answers
-//! in a row = 기억 완료 (counts in `Profile::kana`, by the kana itself).
+//! 글자 카드 at the top of 새 단어: 히라가나·가타카나 (N5 learners, 50음 + 탁음·반탁음) and the
+//! 한자 every level must know (JLPT N5 79 → N1 2,211 in all). A card shows one character; the
+//! learner picks its sound (kana) or 훈음 (kanji) from four. Three right answers in a row = 기억 완료
+//! (counts in `Profile::kana` / `Profile::kanji`, by the character itself).
 
 use crate::app::App;
 use crate::widgets::*;
 use egui::{RichText, Ui};
-use rand::seq::{IndexedRandom, SliceRandom};
+use rand::seq::SliceRandom;
 
 /// (hiragana, katakana, romaji, 한글 발음) in 50음도 order, five columns (あ い う え お) per
 /// row; "" = an empty cell of the chart (や行, わ行).
@@ -27,17 +28,65 @@ pub const KANA: &[(&str, &str, &str, &str)] = &[
     ("ぱ", "パ", "pa", "파"), ("ぴ", "ピ", "pi", "피"), ("ぷ", "プ", "pu", "푸"), ("ぺ", "ペ", "pe", "페"), ("ぽ", "ポ", "po", "포"),
 ];
 
-/// Right answers in a row that make a kana 기억 완료.
+/// Right answers in a row that make a card 기억 완료.
 pub const KANA_DONE: u32 = 3;
 /// Cards per round.
 pub const ROUND: usize = 10;
+/// 한자 cards to answer every day (required, shown in the card and on the home checklist).
+pub const KANJI_PER_DAY: u32 = 20;
 
 /// Rows of KANA that are 탁음·반탁음 (shown under the 50음 in the chart).
 const BASIC_ROWS: usize = 11;
 
-/// The kana shown on a card (hiragana or katakana).
-fn glyph(i: usize, kata: bool) -> &'static str {
-    if kata { KANA[i].1 } else { KANA[i].0 }
+/// The three decks of cards.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Deck {
+    Hiragana,
+    Katakana,
+    /// 한자 up to this JLPT grade (5 = N5 … 1 = N1).
+    Kanji(u8),
+}
+
+impl Deck {
+    fn name(self) -> &'static str {
+        match self {
+            Deck::Hiragana => "히라가나",
+            Deck::Katakana => "가타카나",
+            Deck::Kanji(_) => "한자",
+        }
+    }
+    fn icon(self) -> &'static str {
+        if let Deck::Kanji(_) = self { "🈶" } else { "🔤" }
+    }
+    /// Cards of the deck in learning order (chart order / easiest grade, most frequent first).
+    fn pool(self) -> Vec<usize> {
+        match self {
+            Deck::Kanji(g) => crate::kanji::required(g),
+            _ => all(),
+        }
+    }
+    /// The character shown on card `i`.
+    pub fn front(self, i: usize) -> &'static str {
+        match self {
+            Deck::Hiragana => KANA[i].0,
+            Deck::Katakana => KANA[i].1,
+            Deck::Kanji(_) => &crate::kanji::all()[i].k,
+        }
+    }
+    /// The right answer: "아 · a" / "날 일".
+    pub fn answer(self, i: usize) -> String {
+        match self {
+            Deck::Kanji(_) => crate::kanji::all()[i].hun_eum(),
+            _ => sound(i),
+        }
+    }
+    /// What the speaker reads after an answer.
+    fn speak(self, i: usize) -> String {
+        match self {
+            Deck::Kanji(_) => crate::kanji::all()[i].speak(),
+            _ => self.front(i).to_string(),
+        }
+    }
 }
 
 /// Answer label: "아 · a".
@@ -50,30 +99,56 @@ fn all() -> Vec<usize> {
     (0..KANA.len()).filter(|&i| !KANA[i].0.is_empty()).collect()
 }
 
-/// The next round: kana not memorised yet in chart order (so learning goes row by row), filled
-/// up with memorised ones for review, shuffled.
-pub fn round(known: &std::collections::HashMap<String, u32>, kata: bool) -> Vec<usize> {
-    let passes = |i: usize| known.get(glyph(i, kata)).copied().unwrap_or(0);
-    let mut pick: Vec<usize> = all().into_iter().filter(|&i| passes(i) < KANA_DONE).take(ROUND).collect();
-    let mut done: Vec<usize> = all().into_iter().filter(|&i| passes(i) >= KANA_DONE).collect();
+/// The next round: cards not memorised yet in learning order (so learning goes row by row /
+/// N5 → the learner's grade), then the next grade's kanji once those are all known, filled up
+/// with memorised ones for review, shuffled.
+pub fn round(known: &std::collections::HashMap<String, u32>, deck: Deck) -> Vec<usize> {
+    let passes = |i: usize| known.get(deck.front(i)).copied().unwrap_or(0);
+    let mut pool = deck.pool();
+    if let Deck::Kanji(g) = deck {
+        if g > 1 && pool.iter().all(|&i| passes(i) >= KANA_DONE) {
+            pool = crate::kanji::required(g - 1);
+        }
+    }
+    let mut pick: Vec<usize> = pool.iter().copied().filter(|&i| passes(i) < KANA_DONE).take(ROUND).collect();
+    let mut done: Vec<usize> = pool.into_iter().filter(|&i| passes(i) >= KANA_DONE).collect();
     done.shuffle(&mut rand::rng());
     pick.extend(done.into_iter().take(ROUND - pick.len()));
     pick.shuffle(&mut rand::rng());
     pick
 }
 
-/// Four choices with the answer among them; never two with the same sound label.
-fn choices(answer: usize) -> Vec<usize> {
-    let others: Vec<usize> = all().into_iter().filter(|&i| i != answer && KANA[i].3 != KANA[answer].3).collect();
-    let mut c: Vec<usize> = others.choose_multiple(&mut rand::rng(), 3).copied().collect();
+/// Four choices with the answer among them; never two with the same label. Kanji choices come
+/// from the same grade, so they are about as familiar.
+fn choices(deck: Deck, answer: usize) -> Vec<usize> {
+    let label = deck.answer(answer);
+    let pool: Vec<usize> = match deck {
+        Deck::Kanji(_) => {
+            let n = crate::kanji::all()[answer].n;
+            (0..crate::kanji::all().len()).filter(|&i| crate::kanji::all()[i].n == n).collect()
+        }
+        _ => all(),
+    };
+    let mut c: Vec<usize> = Vec::new();
+    let mut others: Vec<usize> = pool.into_iter().filter(|&i| i != answer).collect();
+    others.shuffle(&mut rand::rng());
+    for i in others {
+        let l = deck.answer(i);
+        if l != label && c.iter().all(|&j| deck.answer(j) != l) {
+            c.push(i);
+        }
+        if c.len() == 3 {
+            break;
+        }
+    }
     c.push(answer);
     c.shuffle(&mut rand::rng());
     c
 }
 
-/// One round of kana cards.
+/// One round of cards.
 pub struct KanaQuiz {
-    pub kata: bool,
+    pub deck: Deck,
     pub cards: Vec<usize>,
     pub idx: usize,
     pub choices: Vec<usize>,
@@ -82,18 +157,21 @@ pub struct KanaQuiz {
 }
 
 impl KanaQuiz {
-    pub fn new(cards: Vec<usize>, kata: bool) -> Self {
-        let choices = cards.first().map(|&a| choices(a)).unwrap_or_default();
-        Self { kata, cards, idx: 0, choices, picked: None, right: 0 }
-    }
-    fn name(&self) -> &'static str {
-        if self.kata { "가타카나" } else { "히라가나" }
+    pub fn new(cards: Vec<usize>, deck: Deck) -> Self {
+        let choices = cards.first().map(|&a| choices(deck, a)).unwrap_or_default();
+        Self { deck, cards, idx: 0, choices, picked: None, right: 0 }
     }
 }
 
 impl App {
-    fn kana_known(&self, kata: bool) -> usize {
-        all().into_iter().filter(|&i| self.store.profile.kana.get(glyph(i, kata)).copied().unwrap_or(0) >= KANA_DONE).count()
+    fn known_map(&self, deck: Deck) -> &std::collections::HashMap<String, u32> {
+        if let Deck::Kanji(_) = deck { &self.store.profile.kanji } else { &self.store.profile.kana }
+    }
+
+    /// Memorised cards of the deck.
+    fn deck_known(&self, deck: Deck) -> usize {
+        let m = self.known_map(deck);
+        deck.pool().into_iter().filter(|&i| m.get(deck.front(i)).copied().unwrap_or(0) >= KANA_DONE).count()
     }
 
     /// N5 (초급) learners get the kana cards first in 새 단어.
@@ -101,10 +179,26 @@ impl App {
         self.store.profile.level < crate::models::LEVEL_BANDS[0].0
     }
 
+    /// The 한자 deck for the learner's level.
+    pub fn kanji_deck(&self) -> Deck {
+        Deck::Kanji(crate::kanji::grade_of(crate::models::cefr_of(self.store.profile.level)))
+    }
+
+    /// 한자 cards answered today (KANJI_PER_DAY a day is required).
+    pub fn kanji_today(&self) -> u32 {
+        self.store.profile.today.kanji_cards
+    }
+
+    fn start_round(&mut self, deck: Deck) {
+        crate::applog!("words: {} 카드 시작", deck.name());
+        let cards = round(self.known_map(deck), deck);
+        self.kana_quiz = Some(KanaQuiz::new(cards, deck));
+    }
+
     /// 🔤 card at the top of 새 단어: progress per script, start buttons and the 50음도 chart.
     pub fn kana_card(&mut self, ui: &mut Ui) {
         let total = all().len();
-        let (hira, kata) = (self.kana_known(false), self.kana_known(true));
+        let (hira, kata) = (self.deck_known(Deck::Hiragana), self.deck_known(Deck::Katakana));
         let mut start = None;
         card(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -113,37 +207,85 @@ impl App {
             });
             ui.label(RichText::new(format!("단어보다 먼저 글자를 외워요. 카드의 글자를 보고 소리를 4개 중에서 고르세요. {KANA_DONE}번 연속 맞히면 기억 완료!")).color(muted()));
             ui.add_space(6.0);
-            for (kata, known) in [(false, hira), (true, kata)] {
-                let name = if kata { "가타카나" } else { "히라가나" };
+            for (deck, known) in [(Deck::Hiragana, hira), (Deck::Katakana, kata)] {
+                let name = deck.name();
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{name} {known}/{total}")).strong().color(if known >= total { GOOD } else { text_strong() }));
                     ui.add(egui::ProgressBar::new(known as f32 / total as f32).desired_width(160.0).desired_height(8.0).fill(if known >= total { GOOD } else { ACCENT }));
                     let label = if known >= total { format!("↻ {name} 복습") } else { format!("▶ {name} 카드 {ROUND}장") };
-                    let fill = if known >= total || (kata && hira < total) { subtle_fill() } else { ACCENT };
+                    let fill = if known >= total || (deck == Deck::Katakana && hira < total) { subtle_fill() } else { ACCENT };
                     if ui.add(egui::Button::new(RichText::new(label).size(15.0)).fill(fill).min_size(ACTION_BUTTON)).clicked() {
-                        start = Some(kata);
+                        start = Some(deck);
                     }
                 });
             }
             ui.add_space(4.0);
             egui::CollapsingHeader::new("50음도 표 보기 (글자를 누르면 소리가 나요)").id_salt("kana_chart").show(ui, |ui| {
-                for kata in [false, true] {
-                    ui.label(RichText::new(if kata { "가타카나" } else { "히라가나" }).strong());
-                    self.kana_chart(ui, kata);
+                for deck in [Deck::Hiragana, Deck::Katakana] {
+                    ui.label(RichText::new(deck.name()).strong());
+                    self.kana_chart(ui, deck);
                     ui.add_space(8.0);
                 }
             });
         });
-        if let Some(kata) = start {
-            crate::applog!("words: {} 카드 시작", if kata { "가타카나" } else { "히라가나" });
-            self.kana_quiz = Some(KanaQuiz::new(round(&self.store.profile.kana, kata), kata));
+        if let Some(deck) = start {
+            self.start_round(deck);
         }
         ui.add_space(14.0);
     }
 
+    /// 🈶 한자 카드 (every level): the level's required kanji, today's required cards, the chart.
+    pub fn kanji_card(&mut self, ui: &mut Ui) {
+        let deck = self.kanji_deck();
+        let Deck::Kanji(g) = deck else { return };
+        let total = deck.pool().len();
+        let known = self.deck_known(deck);
+        let today = self.kanji_today();
+        let jlpt = crate::models::cefr_of(self.store.profile.level);
+        let mut start = false;
+        card(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("🈶 한자 카드").size(18.0).strong());
+                chip(ui, &format!("{jlpt} 필수 한자 {total}자"), crate::art::VIOLET);
+                let (c, t) = if today >= KANJI_PER_DAY { (GOOD, format!("✓ 오늘 {today}/{KANJI_PER_DAY}장")) } else { (warn(), format!("오늘 {today}/{KANJI_PER_DAY}장 (필수)")) };
+                chip(ui, &t, c);
+            });
+            ui.label(RichText::new(format!("{jlpt}까지 꼭 알아야 하는 한자 {total}자(N5부터 차례로)를 모두 외워요. 한자를 보고 훈음(뜻·소리)을 4개 중에서 고르면 음독·훈독과 예시 단어를 알려 줘요. 하루 {KANJI_PER_DAY}장은 꼭!")).color(muted()));
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("기억 완료 {known}/{total}")).strong().color(if known >= total { GOOD } else { text_strong() }));
+                ui.add(egui::ProgressBar::new(known as f32 / total.max(1) as f32).desired_width(160.0).desired_height(8.0).fill(if known >= total { GOOD } else { ACCENT }));
+                let label = if known >= total && g > 1 { format!("▶ 다음 레벨 한자 {ROUND}장") } else { format!("▶ 한자 카드 {ROUND}장") };
+                let fill = if today >= KANJI_PER_DAY { subtle_fill() } else { ACCENT };
+                start = ui.add(egui::Button::new(RichText::new(label).size(15.0)).fill(fill).min_size(ACTION_BUTTON)).clicked();
+            });
+            ui.horizontal_wrapped(|ui| {
+                for n in (g..=5).rev() {
+                    let ids: Vec<usize> = deck.pool().into_iter().filter(|&i| crate::kanji::all()[i].n == n).collect();
+                    let k = ids.iter().filter(|&&i| self.store.profile.kanji.get(deck.front(i)).copied().unwrap_or(0) >= KANA_DONE).count();
+                    chip(ui, &format!("N{n} {k}/{}", ids.len()), if k >= ids.len() { GOOD } else { muted() });
+                }
+            });
+            ui.add_space(4.0);
+            egui::CollapsingHeader::new(format!("{jlpt}까지 한자 표 보기 (누르면 훈음·읽기)")).id_salt("kanji_chart").show(ui, |ui| {
+                self.kanji_chart(ui, deck);
+            });
+        });
+        if start {
+            self.start_round(deck);
+        }
+        ui.add_space(14.0);
+    }
+
+    /// Colour of a card by right answers in a row, like 새 단어 (red → green).
+    fn card_color(&self, deck: Deck, i: usize) -> egui::Color32 {
+        let passes = self.known_map(deck).get(deck.front(i)).copied().unwrap_or(0);
+        crate::screens::practice::word_color(passes.min(KANA_DONE) * crate::models::WORD_DONE_PASSES / KANA_DONE)
+    }
+
     /// 50음도 chart coloured like 새 단어 (red → green as right answers add up); click to hear.
-    fn kana_chart(&mut self, ui: &mut Ui, kata: bool) {
-        egui::Grid::new(("kana_grid", kata)).spacing([6.0, 6.0]).show(ui, |ui| {
+    fn kana_chart(&mut self, ui: &mut Ui, deck: Deck) {
+        egui::Grid::new(("kana_grid", deck.name())).spacing([6.0, 6.0]).show(ui, |ui| {
             for (i, k) in KANA.iter().enumerate() {
                 if i == BASIC_ROWS * 5 {
                     ui.end_row();
@@ -151,10 +293,8 @@ impl App {
                 if k.0.is_empty() {
                     ui.label("");
                 } else {
-                    let g = glyph(i, kata);
-                    let passes = self.store.profile.kana.get(g).copied().unwrap_or(0);
-                    let color = crate::screens::practice::word_color(passes * crate::models::WORD_DONE_PASSES / KANA_DONE);
-                    let text = RichText::new(format!("{g}\n{}", k.2)).size(20.0).color(color);
+                    let g = deck.front(i);
+                    let text = RichText::new(format!("{g}\n{}", k.2)).size(20.0).color(self.card_color(deck, i));
                     if ui.add(egui::Button::new(text).min_size(egui::vec2(52.0, 52.0))).on_hover_text(KANA[i].3).clicked() {
                         self.voice.say(g);
                     }
@@ -166,21 +306,46 @@ impl App {
         });
     }
 
-    /// Runs a round of kana cards when one is open. Returns true while it is shown.
+    /// The level's kanji by grade, coloured by progress; hover for 훈음, click to hear.
+    fn kanji_chart(&mut self, ui: &mut Ui, deck: Deck) {
+        let Deck::Kanji(g) = deck else { return };
+        for n in (g..=5).rev() {
+            ui.label(RichText::new(format!("N{n}")).strong());
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+                for i in deck.pool().into_iter().filter(|&i| crate::kanji::all()[i].n == n) {
+                    let k = &crate::kanji::all()[i];
+                    let text = RichText::new(&k.k).size(22.0).color(self.card_color(deck, i));
+                    if ui.add(egui::Button::new(text).min_size(egui::vec2(38.0, 38.0))).on_hover_text(kanji_info(k)).clicked() {
+                        self.voice.say(&k.speak());
+                    }
+                }
+            });
+            ui.add_space(6.0);
+        }
+    }
+
+    /// Runs a round of cards when one is open. Returns true while it is shown.
     pub fn kana_quiz_ui(&mut self, ui: &mut Ui) -> bool {
         let Some(mut q) = self.kana_quiz.take() else { return false };
+        let deck = q.deck;
         let mut close = false;
         if q.idx >= q.cards.len() {
             let n = q.cards.len();
-            page_title(ui, &format!("🔤 {} 카드 완료", q.name()), "");
+            page_title(ui, &format!("{} {} 카드 완료", deck.icon(), deck.name()), "");
             card(ui, |ui| {
                 ui.label(RichText::new(format!("{n}장 중 {}장 정답", q.right)).size(24.0).strong().color(if q.right == n { GOOD } else { text_strong() }));
-                ui.label(RichText::new(format!("{} 기억 완료 {}/{}", q.name(), self.kana_known(q.kata), all().len())).color(muted()));
+                ui.label(RichText::new(format!("{} 기억 완료 {}/{}", deck.name(), self.deck_known(deck), deck.pool().len())).color(muted()));
+                if let Deck::Kanji(_) = deck {
+                    let today = self.kanji_today();
+                    let (c, t) = if today >= KANJI_PER_DAY { (GOOD, format!("✅ 오늘의 필수 한자 카드 {KANJI_PER_DAY}장 완료!")) } else { (warn(), format!("오늘 {today}/{KANJI_PER_DAY}장 — {}장 더 해야 해요", KANJI_PER_DAY - today)) };
+                    ui.label(RichText::new(t).color(c));
+                }
             });
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 if ui.add(egui::Button::new(RichText::new(format!("↻ {ROUND}장 더")).size(16.0)).fill(ACCENT).min_size(ACTION_BUTTON)).clicked() {
-                    q = KanaQuiz::new(round(&self.store.profile.kana, q.kata), q.kata);
+                    q = KanaQuiz::new(round(self.known_map(deck), deck), deck);
                 }
                 close = ui.button("◀ 새 단어 목록").clicked();
             });
@@ -190,9 +355,9 @@ impl App {
             return true;
         }
         let answer = q.cards[q.idx];
-        let g = glyph(answer, q.kata);
+        let g = deck.front(answer);
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("🔤 {} 카드", q.name())).size(20.0).strong());
+            ui.label(RichText::new(format!("{} {} 카드", deck.icon(), deck.name())).size(20.0).strong());
             ui.label(RichText::new(format!("{} / {}", q.idx + 1, q.cards.len())).color(muted()));
         });
         ui.add(egui::ProgressBar::new(q.idx as f32 / q.cards.len() as f32).desired_height(6.0).fill(ACCENT));
@@ -201,12 +366,13 @@ impl App {
         card(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label(RichText::new(g).size(120.0).strong().color(text_strong()));
-                ui.label(RichText::new("이 글자는 어떻게 읽을까요?").color(muted()));
+                let ask = if let Deck::Kanji(_) = deck { "이 한자의 훈음(뜻·소리)은?" } else { "이 글자는 어떻게 읽을까요?" };
+                ui.label(RichText::new(ask).color(muted()));
             });
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
                 for &c in &q.choices {
-                    let mut b = egui::Button::new(RichText::new(sound(c)).size(20.0)).min_size(egui::vec2(140.0, 52.0));
+                    let mut b = egui::Button::new(RichText::new(deck.answer(c)).size(20.0)).min_size(egui::vec2(140.0, 52.0));
                     if let Some(p) = q.picked {
                         if c == answer {
                             b = b.fill(GOOD.gamma_multiply(0.45));
@@ -217,25 +383,34 @@ impl App {
                     if ui.add_enabled(q.picked.is_none() || c == answer || Some(c) == q.picked, b).clicked() && q.picked.is_none() {
                         q.picked = Some(c);
                         let ok = c == answer;
-                        let st = self.store.profile.kana.entry(g.to_string()).or_insert(0);
+                        let map = if let Deck::Kanji(_) = deck { &mut self.store.profile.kanji } else { &mut self.store.profile.kana };
+                        let st = map.entry(g.to_string()).or_insert(0);
                         *st = if ok { (*st + 1).min(KANA_DONE + 2) } else { 0 };
                         if ok {
                             q.right += 1;
                         }
+                        if let Deck::Kanji(_) = deck {
+                            self.store.profile.today.kanji_cards += 1;
+                        }
                         self.store.save_profile();
-                        self.voice.say(g);
+                        self.voice.say(&deck.speak(answer));
                     }
                 }
             });
             if let Some(p) = q.picked {
                 ui.add_space(8.0);
                 if p == answer {
-                    ui.label(RichText::new(format!("✓ 정답! {g} = {}", sound(answer))).size(18.0).color(GOOD));
+                    ui.label(RichText::new(format!("✓ 정답! {g} = {}", deck.answer(answer))).size(18.0).color(GOOD));
                 } else {
-                    ui.label(RichText::new(format!("✗ 정답은 {} — 다음 판에 다시 나와요", sound(answer))).size(18.0).color(BAD));
+                    ui.label(RichText::new(format!("✗ 정답은 {} — 다음 판에 다시 나와요", deck.answer(answer))).size(18.0).color(BAD));
+                }
+                if let Deck::Kanji(_) = deck {
+                    ui.label(RichText::new(kanji_info(&crate::kanji::all()[answer])).size(16.0).color(text_strong()));
                 }
                 ui.horizontal(|ui| {
-                    speaker_button(ui, &mut self.voice, g);
+                    if ui.button("🔊").on_hover_text("듣기").clicked() {
+                        self.voice.say(&deck.speak(answer));
+                    }
                     next = ui.add(egui::Button::new(RichText::new("다음 ▶").size(16.0)).fill(ACCENT).min_size(ACTION_BUTTON)).clicked();
                 });
             }
@@ -247,7 +422,7 @@ impl App {
             q.idx += 1;
             q.picked = None;
             if let Some(&a) = q.cards.get(q.idx) {
-                q.choices = choices(a);
+                q.choices = choices(deck, a);
             }
         }
         if !close {
@@ -255,6 +430,21 @@ impl App {
         }
         true
     }
+}
+
+/// "날 일 · 음독 ニチ, ジツ · 훈독 ひ, か\n예: 日曜日(にちようび) 일요일".
+fn kanji_info(k: &crate::kanji::Kanji) -> String {
+    let mut s = k.hun_eum();
+    if !k.on.is_empty() {
+        s += &format!(" · 음독 {}", k.on.join(", "));
+    }
+    if !k.kun.is_empty() {
+        s += &format!(" · 훈독 {}", k.kun.join(", "));
+    }
+    if let [w, r, ko, ..] = k.ex.as_slice() {
+        s += &format!("\n예: {w}({r}) {ko}");
+    }
+    s
 }
 
 #[cfg(test)]
@@ -274,14 +464,14 @@ mod tests {
     #[test]
     fn round_learns_in_chart_order_then_reviews() {
         let mut known = std::collections::HashMap::new();
-        let mut r = round(&known, false);
+        let mut r = round(&known, Deck::Hiragana);
         r.sort();
         assert_eq!(r, (0..10).collect::<Vec<_>>(), "あ row and か row first");
         for i in all() {
-            known.insert(glyph(i, false).to_string(), KANA_DONE);
+            known.insert(Deck::Hiragana.front(i).to_string(), KANA_DONE);
         }
         known.remove("ぽ");
-        let r = round(&known, false);
+        let r = round(&known, Deck::Hiragana);
         assert_eq!(r.len(), ROUND);
         assert!(r.contains(&(KANA.len() - 1)), "the one left is in the round");
     }
@@ -289,11 +479,29 @@ mod tests {
     #[test]
     fn choices_hold_the_answer_once_and_no_same_sound() {
         for a in all() {
-            let c = choices(a);
+            let c = choices(Deck::Hiragana, a);
             assert_eq!(c.len(), 4);
             assert_eq!(c.iter().filter(|&&x| x == a).count(), 1);
             let labels: std::collections::HashSet<_> = c.iter().map(|&x| KANA[x].3).collect();
             assert_eq!(labels.len(), 4);
+        }
+    }
+
+    #[test]
+    fn kanji_rounds_go_from_n5_and_choices_differ() {
+        let all = crate::kanji::all();
+        let mut known = std::collections::HashMap::new();
+        let deck = Deck::Kanji(4);
+        assert!(round(&known, deck).iter().all(|&i| all[i].n == 5), "N5 kanji first");
+        for i in crate::kanji::required(4) {
+            known.insert(all[i].k.clone(), KANA_DONE);
+        }
+        assert!(round(&known, deck).iter().all(|&i| all[i].n == 3), "all N4 known: on to N3");
+        for i in crate::kanji::required(1) {
+            let c = choices(deck, i);
+            assert_eq!(c.len(), 4);
+            let labels: std::collections::HashSet<_> = c.iter().map(|&x| deck.answer(x)).collect();
+            assert_eq!(labels.len(), 4, "{}", all[i].k);
         }
     }
 }

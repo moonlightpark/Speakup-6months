@@ -17,6 +17,7 @@ mod freetalk;
 mod grammar;
 mod idioms;
 mod ja;
+mod kanji;
 mod language;
 mod library;
 mod mic_permission;
