@@ -135,8 +135,10 @@ impl App {
             }
             ui.add_space(8.0);
             let (mut close, mut go_next) = (false, false);
+            // The three buttons on one line, smaller on a phone.
+            let (size, min) = if ui.available_width() < 420.0 { (15.0, egui::vec2(0.0, 38.0)) } else { (16.0, crate::widgets::ACTION_BUTTON) };
             ui.horizontal_wrapped(|ui| {
-                if ui.add(egui::Button::new(RichText::new("🏠 홈으로").size(16.0)).fill(ACCENT).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
+                if ui.add(egui::Button::new(RichText::new("🏠 홈으로").size(size)).fill(ACCENT).min_size(min)).clicked() {
                     close = true;
                     self.screen = crate::app::Screen::Home;
                 }
@@ -144,7 +146,7 @@ impl App {
                     close = true;
                 }
                 let next_label = if q_category == "vocab" { "다음 단어 ▶" } else { "다음 문장 ▶" };
-                if has_next && ui.add(egui::Button::new(RichText::new(next_label).size(16.0)).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
+                if has_next && ui.add(egui::Button::new(RichText::new(next_label).size(size)).min_size(min)).clicked() {
                     go_next = true;
                 }
             });

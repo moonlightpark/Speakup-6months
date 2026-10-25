@@ -2304,6 +2304,20 @@ fn ft_phone_layout_fits_every_screen() {
     t.nav("📚  새 단어");
     t.h.get_all_by_label("▶ 시작하기").next().unwrap().click();
     check(&mut t, "word drill");
+    // The 완료 screen: the cheer's two lines don't overlap, the three buttons share one line.
+    {
+        let q = t.app_mut().queue.as_mut().unwrap();
+        q.idx = q.specs.len();
+        q.then = vec![("다음".into(), Vec::new())];
+    }
+    t.steps(90);
+    check(&mut t, "done screen");
+    let bounds = |t: &T, part: &str| t.h.query_all(By::new().label_contains(part).include_labels()).next().and_then(|n| n.raw_bounds()).unwrap();
+    let (head, sub) = (bounds(&t, "잘했어요"), bounds(&t, "첫 시도 평균"));
+    assert!(head.y1 <= sub.y0 + 0.5, "headline above the line under it: {head:?} {sub:?}");
+    let (home, close, next) = (bounds(&t, "🏠 홈으로"), bounds(&t, "닫기"), bounds(&t, "다음 단어 ▶"));
+    assert!((home.y0 - close.y0).abs() < 1.0 && (home.y0 - next.y0).abs() < 1.0, "one line: {home:?} {close:?} {next:?}");
+    t.app_mut().queue = None;
     t.click("☰ 메뉴");
     t.nav("🔁  복습");
     t.h.get_by_label_contains("낱말 맞추기").click();

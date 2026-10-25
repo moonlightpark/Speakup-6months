@@ -292,10 +292,14 @@ pub fn since_event(ui: &Ui, id: egui::Id, key: u64) -> f32 {
 pub fn cheer(ui: &mut Ui, t: f32, score: f32, headline: &str, sub: &str) {
     let rect = celebration(ui, t, score);
     let pop = 1.0 + 0.2 * (1.0 - (t / 0.5).min(1.0)) + 0.05 * (t * 6.0).sin() * (1.0 - (t / CELEBRATION_SECS).min(1.0));
-    let top = Rect::from_center_size(rect.center_top() + vec2(0.0, 52.0), vec2(rect.width() - 200.0, 64.0));
-    ui.put(top, egui::Label::new(egui::RichText::new(headline).size(34.0 * pop).strong().color(Color32::WHITE)));
-    let below = Rect::from_center_size(rect.center_top() + vec2(0.0, 108.0), vec2(rect.width() - 200.0, 30.0));
-    ui.put(below, egui::Label::new(egui::RichText::new(sub).size(18.0).color(Color32::from_rgb(230, 230, 255))));
+    // A phone: smaller text across the whole width, each line given the room it wraps into.
+    let narrow = rect.width() < 520.0;
+    let w = if narrow { rect.width() - 24.0 } else { rect.width() - 200.0 };
+    let (head_size, sub_size) = if narrow { (24.0, 15.0) } else { (34.0, 18.0) };
+    let top = Rect::from_center_size(rect.center_top() + vec2(0.0, if narrow { 40.0 } else { 52.0 }), vec2(w, if narrow { 44.0 } else { 64.0 }));
+    ui.put(top, egui::Label::new(egui::RichText::new(headline).size(head_size * pop).strong().color(Color32::WHITE)));
+    let below = Rect::from_center_size(rect.center_top() + vec2(0.0, if narrow { 92.0 } else { 108.0 }), vec2(w, if narrow { 44.0 } else { 30.0 }));
+    ui.put(below, egui::Label::new(egui::RichText::new(sub).size(sub_size).color(Color32::from_rgb(230, 230, 255))));
     // `put` moves the layout cursor to the labels; continue below the whole animation.
     ui.advance_cursor_after_rect(rect);
 }
