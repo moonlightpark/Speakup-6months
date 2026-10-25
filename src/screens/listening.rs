@@ -220,7 +220,7 @@ impl App {
 
     pub fn listening_ui(&mut self, ui: &mut Ui) {
         page_title(ui, "🎧 리스닝 랩", "오늘 배운 문장과 단어를 실제 원어민이 말하는 영상으로 보고 듣고, 따라 말하세요.");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let before = self.listening.tab;
             ui.selectable_value(&mut self.listening.tab, 0, "🎬 오늘 문장 영상");
             ui.selectable_value(&mut self.listening.tab, 2, "🔤 오늘 단어 발음");

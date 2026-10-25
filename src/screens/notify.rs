@@ -183,8 +183,10 @@ impl App {
         if t < 1.0 {
             ctx.request_repaint();
         }
-        let resp = egui::Area::new(egui::Id::new("notification")).order(egui::Order::Foreground).anchor(egui::Align2::RIGHT_TOP, Vec2::new(-20.0 + slide, 16.0)).show(ctx, |ui| {
-            ui.set_max_width(380.0);
+        let resp = egui::Area::new(egui::Id::new("notification")).order(egui::Order::Foreground).anchor(egui::Align2::RIGHT_TOP, Vec2::new(-20.0 + slide, if cfg!(target_os = "android") { 64.0 } else { 16.0 })).show(ctx, |ui| {
+            // Phones: no wider than the screen.
+            let w = (ctx.screen_rect().width() - 40.0).min(380.0);
+            ui.set_max_width(w);
             egui::Frame::new()
                 .fill(subtle_fill())
                 .stroke(egui::Stroke::new(1.5, ACCENT))
@@ -192,7 +194,7 @@ impl App {
                 .inner_margin(14.0)
                 .shadow(egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: Color32::from_black_alpha(80) })
                 .show(ui, |ui| {
-                    ui.set_width(352.0);
+                    ui.set_width(w - 28.0);
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(format!("🔔 {} {}", n.icon, n.title)).size(16.0).strong().color(text_strong()));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

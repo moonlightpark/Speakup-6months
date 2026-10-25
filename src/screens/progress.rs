@@ -38,7 +38,7 @@ impl App {
         let today_scores = &p.today.scores;
         let avg = if today_scores.is_empty() { 0.0 } else { today_scores.iter().sum::<f32>() / today_scores.len() as f32 };
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 for (label, v) in [
                     ("단어", words.to_string()),
                     ("문장", sents.to_string()),
@@ -46,6 +46,10 @@ impl App {
                     ("약점", weak.to_string()),
                     ("오늘 평균", format!("{avg:.0}점")),
                 ] {
+                    // A group doesn't wrap by itself: next line when it won't fit (phones).
+                    if ui.available_size_before_wrap().x < 110.0 {
+                        ui.end_row();
+                    }
                     ui.vertical(|ui| {
                         ui.label(RichText::new(v).size(24.0).strong());
                         ui.label(RichText::new(label).color(muted()));
@@ -63,7 +67,7 @@ impl App {
                     ui.label(RichText::new(format!("{}{w}주차", if done { "✅ " } else { "⬜ " })).color(if done { GOOD } else { muted() }));
                 }
             });
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let due = curriculum::checkpoint_due(&p);
                 let label = match due {
                     Some(w) => format!("📋 {w}주차 평가 보기"),
@@ -89,20 +93,22 @@ impl App {
         card(ui, |ui| {
             ui.label(RichText::new("6개월 커리큘럼").strong());
             let cur = curriculum::week_number(&p);
-            egui::Grid::new("curr").striped(true).show(ui, |ui| {
+            wide(ui, "curr", |ui| {
+egui::Grid::new("curr").striped(true).show(ui, |ui| {
                 for (i, w) in curriculum::WEEKS.iter().enumerate() {
                     let n = i as u32 + 1;
                     let txt = format!("{n}주 · {} — {}", w.theme_ko, w.business);
                     ui.label(if n == cur { RichText::new(format!("▶ {txt}")).color(ACCENT).strong() } else if n < cur { RichText::new(txt).color(muted()) } else { RichText::new(txt) });
                     ui.end_row();
                 }
-            });
+            })
+});
         });
     }
 
     pub fn vocabulary_ui(&mut self, ui: &mut Ui) {
         page_title(ui, "📒 내 단어장", "");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             for (i, label) in ["전체", "약점", "오늘 복습", "단어", "문장"].iter().enumerate() {
                 ui.selectable_value(&mut self.vocab_mode, i, *label);
             }
@@ -129,7 +135,8 @@ impl App {
         ui.label(RichText::new(format!("{}개 · 오늘 복습 {}개", items.len(), srs::due_count(&self.store.items))).color(muted()));
         ui.add_space(6.0);
         let mut delete: Option<String> = None;
-        egui::Grid::new("vocab").striped(true).num_columns(5).show(ui, |ui| {
+        wide(ui, "vocab", |ui| {
+egui::Grid::new("vocab").striped(true).num_columns(5).show(ui, |ui| {
             ui.label(RichText::new("").strong());
             ui.label(RichText::new("표현").strong());
             ui.label(RichText::new("뜻").strong());
@@ -147,7 +154,8 @@ impl App {
                 }
                 ui.end_row();
             }
-        });
+        })
+});
         if let Some(id) = delete {
             self.store.items.retain(|i| i.id != id);
             self.store.save_items();
@@ -161,7 +169,8 @@ fn level_bands_table(ui: &mut Ui, level: f32, goal: usize) {
     ui.label(RichText::new("레벨 점수(1~10)로 단계가 정해지고, 레벨 테스트·주차 평가 결과로 올라가요. 단계에 맞춰 단어·지문·대화 난이도가 바뀝니다.").color(muted()).small());
     ui.add_space(4.0);
     let current = LEVEL_BANDS.iter().position(|b| level < b.0).unwrap_or(LEVEL_BANDS.len() - 1);
-    egui::Grid::new("level_bands").num_columns(6).spacing([22.0, 6.0]).striped(true).show(ui, |ui| {
+    wide(ui, "level_bands", |ui| {
+egui::Grid::new("level_bands").num_columns(6).spacing([22.0, 6.0]).striped(true).show(ui, |ui| {
         for h in ["단계", "이름", "JLPT", "레벨 점수", "목표 어휘", ""] {
             ui.label(RichText::new(h).strong().color(muted()));
         }
@@ -184,7 +193,7 @@ fn level_bands_table(ui: &mut Ui, level: f32, goal: usize) {
             cell(ui, cefr.to_string());
             cell(ui, range);
             cell(ui, format!("{}단어", crate::app::thousands(*words as u64)));
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if here {
                     chip(ui, "◀ 지금 내 레벨", ACCENT);
                 }
@@ -194,7 +203,8 @@ fn level_bands_table(ui: &mut Ui, level: f32, goal: usize) {
             });
             ui.end_row();
         }
-    });
+    })
+});
 }
 
 /// 🎯 목표 레벨 컨설팅: study hours still needed from the learner's level to their goal, what
@@ -243,7 +253,8 @@ fn goal_consulting(ui: &mut Ui, p: &Profile, goal: usize, words: usize) -> Optio
 
         // 1. Hours to each level (reference).
         ui.label(RichText::new("레벨별 누적 학습 시간 (한국인 등 한자권 학습자의 JLPT 대비 추정치 · 수업+연습 합계, 개인차가 큰 참고값)").strong());
-        egui::Grid::new("cum_hours").num_columns(3).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
+        wide(ui, "cum_hours", |ui| {
+egui::Grid::new("cum_hours").num_columns(3).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
             for (i, (lo, hi)) in CUM_HOURS.iter().enumerate().skip(1) {
                 let mark = if i == cur { "◀ 지금" } else if i == goal { "🎯 목표" } else { "" };
                 let color = if i == cur { ACCENT } else if i == goal { GOOD } else { text_strong() };
@@ -252,7 +263,8 @@ fn goal_consulting(ui: &mut Ui, p: &Profile, goal: usize, words: usize) -> Optio
                 ui.label(RichText::new(mark).color(color).small());
                 ui.end_row();
             }
-        });
+        })
+});
         ui.add_space(6.0);
 
         // 2. What is still needed.
@@ -275,7 +287,8 @@ fn goal_consulting(ui: &mut Ui, p: &Profile, goal: usize, words: usize) -> Optio
 
         // 3. Where each daily amount leads by the end of the 6 months.
         ui.label(RichText::new(format!("남은 {:.0}일 동안 하루 학습량에 따라 쌓이는 시간", left_days)).strong());
-        egui::Grid::new("pace_table").num_columns(4).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
+        wide(ui, "pace_table", |ui| {
+egui::Grid::new("pace_table").num_columns(4).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
             for h in ["하루 학습량", "6개월 끝 누적(추정)", "도달 예상", ""] {
                 ui.label(RichText::new(h).color(muted()));
             }
@@ -296,7 +309,8 @@ fn goal_consulting(ui: &mut Ui, p: &Profile, goal: usize, words: usize) -> Optio
                 ui.label(RichText::new(v).color(c).strong());
                 ui.end_row();
             }
-        });
+        })
+});
         if goal > cur {
             let mid = (glo + ghi) as f32 / 2.0;
             let need_daily = ((mid - base_h - studied_h) * 60.0 / left_days).max(0.0);

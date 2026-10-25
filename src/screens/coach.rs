@@ -221,7 +221,7 @@ impl App {
             error_label(ui, &e);
         }
         if self.coach.listen.job.running() {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.spinner();
                 ui.label("Claude가 내 레벨에 맞는 질문을 만들고 있어요…");
             });
@@ -264,7 +264,7 @@ impl App {
             } else {
                 ui.label(RichText::new("🙈 질문 글은 대답한 뒤에 보여요").size(18.0).color(muted()));
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("🔊 다시 듣기").clicked() {
                     self.voice.say(&q.question);
                 }
@@ -292,7 +292,7 @@ impl App {
                 });
             }
             if st.judge.running() {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.spinner();
                     ui.label("Claude가 대답을 확인하고 있어요…");
                 });
@@ -345,7 +345,7 @@ impl App {
         let mut jump: Option<usize> = None;
         // ① Listen to the whole script.
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("① 듣기").size(18.0).strong().color(ACCENT));
                 ui.label(RichText::new(format!("{}문장 · {}단어", sentences.len(), word_count(&script))).color(muted()));
             });
@@ -378,7 +378,7 @@ impl App {
             return;
         }
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let mut rounds = self.coach.ftt.rounds;
             ui.selectable_value(&mut rounds, false, RichText::new("② 문장별 따라 읽기").size(16.0));
             ui.label(RichText::new("→").color(muted()));
@@ -439,7 +439,7 @@ impl App {
         let limits = round_limits(words, crate::screens::speed::target_wpm(self.store.profile.level));
         let round = self.coach.ftt.results.len();
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("③ 4/3/2 읽기").size(18.0).strong().color(ACCENT));
                 ui.label(RichText::new(format!("{} → {} → {}", mmss(limits[0]), mmss(limits[1]), mmss(limits[2]))).color(muted()));
             });
@@ -530,7 +530,7 @@ impl App {
             let recs = self.store.profile.weekly_recordings.clone();
             if recs.len() >= 2 {
                 let (first, last) = (&recs[0], &recs[recs.len() - 1]);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button(format!("▶ 처음 ({}주차)", first.week)).clicked() {
                         play = Some(first.file.clone());
                     }
@@ -593,7 +593,7 @@ impl App {
                 let color = if this_week >= 1 { GOOD } else { warn() };
                 ui.label(RichText::new(format!("이번 주 수업 {this_week}회 / 목표 1~2회 · 지금까지 {total}회")).strong().color(color));
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("🌐 italki 열기").clicked() {
                     let _ = open::that("https://www.italki.com");
                 }
@@ -619,7 +619,7 @@ impl App {
             } else {
                 ui.label(format!("다음 모의고사까지 {due_in}일"));
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("🌐 JLPT 문제 예시").clicked() {
                     let _ = open::that("https://www.jlpt.jp/samples/forlearners.html");
                 }
@@ -630,7 +630,7 @@ impl App {
                     let _ = open::that("https://www.opic.or.kr");
                 }
             });
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 for (i, k) in KINDS.iter().enumerate() {
                     ui.radio_value(&mut self.coach.test_kind, i, *k);
                 }

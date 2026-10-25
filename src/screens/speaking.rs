@@ -127,7 +127,7 @@ impl App {
         }
         // The question, asked by the mascot in a speech bubble.
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(56.0), egui::Sense::hover());
                 crate::art::mascot(ui.painter(), r.center(), 46.0, crate::art::Mood::Talking, ui.input(|i| i.time) as f32);
                 egui::Frame::new().fill(ACCENT.gamma_multiply(0.14)).corner_radius(14.0).inner_margin(12.0).show(ui, |ui| {
@@ -185,7 +185,7 @@ impl App {
             });
             ui.add_space(8.0);
             // ✏ 작문 노트: write first (optional), then say it looking at it.
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("✏ 작문 노트 (선택)").strong());
                 let n = crate::ja::char_count(&self.selfx.draft);
                 ui.label(RichText::new(format!("{n} / {target}자")).color(if n >= target { GOOD } else { muted() }));
@@ -197,7 +197,7 @@ impl App {
                     .font(egui::FontId::proportional(17.0))
                     .hint_text("말하기 전에 키워드나 문장을 일본어로 적어 보세요. 말할 때 보면서 말해도 좋아요."),
             );
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if !self.selfx.draft.trim().is_empty() && ui.button("🔊 내 작문 들어보기").clicked() {
                     self.voice.say(&self.selfx.draft);
                 }
@@ -289,7 +289,7 @@ impl App {
         if let Some(f) = self.selfx.feedback.clone() {
             ui.add_space(8.0);
             card(ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     for (label, v) in [("종합", f.overall), ("유창성", f.fluency), ("문법", f.grammar), ("어휘", f.vocabulary)] {
                         ui.vertical(|ui| {
                             ui.label(RichText::new(format!("{v}")).size(26.0).strong().color(if v >= 70 { GOOD } else { warn() }));
@@ -323,7 +323,7 @@ impl App {
             ui.add_space(8.0);
             let target = crate::offline_talk::target_words(self.store.profile.level);
             card(ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     for (label, v, good) in [
                         ("말한 글자", format!("{}", lf.words), lf.words >= target),
                         ("말하기 속도", format!("{:.0}자/분", lf.wpm), lf.wpm >= 150.0),
@@ -392,7 +392,7 @@ impl App {
                     cefr_of(self.store.profile.level)
                 )));
             });
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 extra(ui);
                 if has_key && ui.button("🔄 Claude 다시 연결").clicked() {
                     retry = true;
@@ -749,7 +749,7 @@ impl App {
             card(ui, |ui| {
                 ui.label("연습하고 싶은 상황을 적어 주세요 (한국어/일본어 모두 가능)");
                 ui.add(egui::TextEdit::singleline(&mut self.roleplay.custom.0).hint_text("예: 해외 출장 중 호텔 예약이 누락되어 항의하기").desired_width(f32::INFINITY));
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("상대 역할");
                     ui.add(egui::TextEdit::singleline(&mut self.roleplay.custom.1).hint_text("예: hotel manager"));
                     ui.label("내 역할");
@@ -864,7 +864,7 @@ impl App {
                 .filter(|l| l.user && !l.correction.is_empty())
                 .map(|l| Phrase { text: l.correction.clone(), ko: l.correction_ko.clone() })
                 .collect();
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if !corrections.is_empty() && ui.button(format!("🔁 교정된 문장 {}개 따라 말하기", corrections.len())).clicked() {
                     self.start_phrase_queue("교정 문장 연습", "business", &corrections);
                 }
@@ -878,7 +878,7 @@ impl App {
         if !self.roleplay.suggestions.is_empty() {
             ui.label(RichText::new("💡 이렇게 말해 보세요").color(warn()));
             for p in self.roleplay.suggestions.clone() {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, &p.text);
                     ui.label(RichText::new(&p.text).strong());
                     crate::grammar::ko_label(ui, &p.ko, 16.0, muted());

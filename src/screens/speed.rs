@@ -68,7 +68,7 @@ impl App {
 
     pub fn speed_ui(&mut self, ui: &mut Ui) {
         page_title(ui, "⚡ 스피드 트레이닝", "빨리 읽고 빨리 말하기. 정확도를 지키면서 속도를 올립니다. 오늘 목표: 3라운드.");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.speed.tab, 0, "📖 스피드 리딩 (자/분)");
             ui.selectable_value(&mut self.speed.tab, 1, "💨 순발력 말하기");
             ui.selectable_value(&mut self.speed.tab, 2, "⏱ 4/3/2 말하기");
@@ -328,7 +328,7 @@ impl App {
             self.voice.say(&sentences[k]);
         }
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let mut whole = self.speed.whole;
             ui.selectable_value(&mut whole, false, RichText::new("② 문장별 따라 읽기").size(16.0));
             ui.label(RichText::new("→").color(muted()));
@@ -381,7 +381,7 @@ impl App {
                 crate::art::cheer_strip(ui, t_read, &format!("👍 정확해요! {:.0}% — 이제 속도를 올려 봐요", r.score));
             }
             card(ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("{wpm:.0}자/분")).size(34.0).strong().color(if *wpm >= target { GOOD } else { warn() }));
                     ui.add_space(16.0);
                     ui.label(RichText::new(format!("정확도 {:.0}%", r.score)).size(24.0).color(if r.score >= 85.0 { GOOD } else { BAD }));
@@ -398,7 +398,7 @@ impl App {
                     ui.label(RichText::new(format!("반복 읽기: {}", trail.join(" → "))).color(muted()));
                 }
             });
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("↻ 같은 지문 더 빠르게").clicked() {
                     self.speed.last = None;
                 }
@@ -512,7 +512,7 @@ impl App {
                             .size(18.0)
                             .color(if *ok { GOOD } else { warn() }),
                     );
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.add_space((ui.available_width() - 200.0).max(0.0) / 2.0);
                         if ui.button("🔊 정답 듣기").clicked() {
                             self.voice.say(&target);

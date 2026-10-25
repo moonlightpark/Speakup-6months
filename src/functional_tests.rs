@@ -230,6 +230,10 @@ fn temp_dir(name: &str) -> PathBuf {
 static THEME_LOCK: Mutex<()> = Mutex::new(());
 
 fn launch_at(dir: PathBuf, with_key: bool, prepare: impl FnOnce(&mut Store)) -> T {
+    launch_sized(dir, with_key, egui::vec2(1280.0, 2400.0), prepare)
+}
+
+fn launch_sized(dir: PathBuf, with_key: bool, size: egui::Vec2, prepare: impl FnOnce(&mut Store)) -> T {
     let mut store = Store::open_at(dir.clone()).unwrap();
     store.settings.api_key = if with_key { "test-key".into() } else { String::new() };
     prepare(&mut store);
@@ -247,7 +251,7 @@ fn launch_at(dir: PathBuf, with_key: bool, prepare: impl FnOnce(&mut Store)) -> 
     let url = mock.url.clone();
     // Launching sets the process-wide theme from the settings: not while ft42 switches it.
     let theme_guard = THEME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let h = Harness::builder().with_size(egui::vec2(1280.0, 2400.0)).build_eframe(move |cc| {
+    let h = Harness::builder().with_size(size).build_eframe(move |cc| {
         let mut app = App::new_with(cc, store, voice);
         app.api_url = url;
         app
@@ -2362,4 +2366,50 @@ fn ft_kanji_cards_for_the_level() {
     assert_eq!(t.app().store.profile.kanji.values().filter(|&&v| v == 1).count(), 10);
     t.click("◀ 새 단어 목록");
     assert!(t.has("오늘 10/20장 (필수)"));
+}
+
+#[test]
+fn ft_phone_layout_fits_every_screen() {
+    // A phone held upright (412 × 915 points): the menu folds into ☰ and no page is wider than the screen.
+    let mut t = launch_sized(temp_dir("phone"), true, egui::vec2(412.0, 915.0), |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.record_level(1.5, "test setup");
+        s.profile.today = no_idioms_today(mock_word_set());
+    });
+    assert!(t.has("☰ 메뉴") && !t.has_exact("📚  새 단어"), "no side bar on a phone");
+    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
+    let mut wide = Vec::new();
+    for s in screens {
+        t.click("☰ 메뉴");
+        t.nav(s);
+        t.steps(4);
+        assert!(!t.app().nav_open, "picking a screen closes the menu");
+        if let Some(o) = t.app_mut().overflow.take() {
+            wide.push(format!("{:?} {:.0}", o.0, o.1));
+        }
+    }
+    // Inside the practice screens too: the card quizzes and the drills.
+    let mut check = |t: &mut T, what: &str| {
+        t.steps(4);
+        if let Some(o) = t.app_mut().overflow.take() {
+            wide.push(format!("{what} {:.0}", o.1));
+        }
+        t.app_mut().overflow = None;
+    };
+    t.click("☰ 메뉴");
+    t.nav("📚  새 단어");
+    t.click("▶ 히라가나 카드 10장");
+    check(&mut t, "kana card");
+    t.click("그만하기");
+    t.click("▶ 한자 카드 10장");
+    check(&mut t, "kanji card");
+    let q = t.app().kana_quiz.as_ref().unwrap();
+    let wrong = q.choices.iter().copied().find(|&c| c != q.cards[0]).unwrap();
+    t.click(&crate::kanji::all()[wrong].card_label());
+    check(&mut t, "kanji answer");
+    t.click("그만하기");
+    t.h.get_all_by_label("▶ 시작하기").next().unwrap().click();
+    check(&mut t, "word drill");
+    assert!(wide.is_empty(), "wider than the phone: {wide:?}");
 }

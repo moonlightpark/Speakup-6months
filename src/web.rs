@@ -1,6 +1,6 @@
 //! A web page inside the app window (YouGlish videos in the listening lab): a native web
-//! view (WKWebView on macOS, WebView2 on Windows) laid over the part of the screen a page
-//! asks for. Screens ask each frame with `App::web_req`; nothing asked = hidden.
+//! view (WKWebView on macOS and iOS, WebView2 on Windows, Android's WebView) laid over the part
+//! of the screen a page asks for. Screens ask each frame with `App::web_req`; nothing asked = hidden.
 
 use std::path::PathBuf;
 
@@ -56,6 +56,7 @@ if (location.host.endsWith('youglish.com')) {
 }
 "#;
 
+#[cfg(not(target_os = "android"))]
 #[derive(Default)]
 pub struct WebPane {
     view: Option<wry::WebView>,
@@ -67,10 +68,12 @@ pub struct WebPane {
     pub failed: Option<String>,
 }
 
+#[cfg(not(target_os = "android"))]
 impl WebPane {
-    /// Creates, moves, loads or hides the web view to match `req`. `zoom` is egui's zoom factor
-    /// (points × zoom = logical pixels of the window).
-    pub fn sync(&mut self, window: &eframe::Frame, req: Option<&WebRequest>, zoom: f32, data_dir: PathBuf) {
+    /// Creates, moves, loads or hides the web view to match `req` (points × egui's zoom factor
+    /// = logical pixels of the window).
+    pub fn sync(&mut self, window: &eframe::Frame, req: Option<&WebRequest>, egui_ctx: &egui::Context, data_dir: PathBuf) {
+        let zoom = egui_ctx.zoom_factor();
         let Some(req) = req else {
             if self.visible {
                 if let Some(v) = &self.view {
@@ -88,6 +91,8 @@ impl WebPane {
         match &self.view {
             Some(v) => {
                 let _ = v.set_bounds(bounds);
+                #[cfg(target_os = "ios")]
+                place_ios(v, r, zoom);
                 if (self.zoom - req.zoom).abs() > 0.01 {
                     let _ = v.zoom(req.zoom as f64);
                     self.zoom = req.zoom;
@@ -110,6 +115,8 @@ impl WebPane {
                 match built {
                     Ok(v) => {
                         crate::applog!("web: 웹 화면 생성 · {}", req.url);
+                        #[cfg(target_os = "ios")]
+                        place_ios(&v, r, zoom);
                         let _ = v.zoom(req.zoom as f64);
                         self.zoom = req.zoom;
                         self.view = Some(v);
@@ -125,4 +132,106 @@ impl WebPane {
             None => {}
         }
     }
+}
+
+/// iOS: wry places a child web view as if y grew upwards (macOS) and can't move it afterwards,
+/// so the frame is set here, in UIKit points (top-left origin), without autoresizing.
+#[cfg(target_os = "ios")]
+fn place_ios(v: &wry::WebView, r: egui::Rect, zoom: f32) {
+    use objc2::msg_send;
+    use objc2_core_foundation::{CGPoint, CGRect, CGSize};
+    use wry::WebViewExtIOS;
+    let view = v.webview();
+    let frame = CGRect::new(
+        CGPoint::new((r.min.x * zoom) as f64, (r.min.y * zoom) as f64),
+        CGSize::new((r.width() * zoom).max(1.0) as f64, (r.height() * zoom).max(1.0) as f64),
+    );
+    unsafe {
+        let _: () = msg_send![&*view, setAutoresizingMask: 0usize];
+        let _: () = msg_send![&*view, setFrame: frame];
+    }
+}
+
+/// Android: the system WebView, shown by a small Java class (android/java/…/WebPane.java)
+/// because a view can only be added and moved on the activity's UI thread. Called only when
+/// something changes, in physical pixels (points × pixels per point).
+#[cfg(target_os = "android")]
+#[derive(Default)]
+pub struct WebPane {
+    /// What the view shows now: url and pixel rectangle; None = hidden.
+    shown: Option<(String, [i32; 4])>,
+    class: Option<jni::objects::GlobalRef>,
+    /// The Java class couldn't be loaded or called: the page says so.
+    pub failed: Option<String>,
+}
+
+#[cfg(target_os = "android")]
+impl WebPane {
+    pub fn sync(&mut self, _: &eframe::Frame, req: Option<&WebRequest>, egui_ctx: &egui::Context, _: PathBuf) {
+        let want = req.map(|req| {
+            let ppp = egui_ctx.pixels_per_point();
+            let r = req.rect;
+            let px = [r.min.x, r.min.y, r.width(), r.height()].map(|v| (v * ppp).round() as i32);
+            (req.url.clone(), px)
+        });
+        if want == self.shown || self.failed.is_some() {
+            return;
+        }
+        let ok = match &want {
+            Some((url, px)) => self.show(url, *px),
+            None => self.hide(),
+        };
+        if ok {
+            if let Some((url, _)) = &want {
+                if self.shown.as_ref().is_none_or(|(u, _)| u != url) {
+                    crate::applog!("web: {url}");
+                }
+            }
+            self.shown = want;
+        } else {
+            crate::applog!("web: 안드로이드 웹 화면을 띄울 수 없음");
+            self.failed = Some("안드로이드 웹 화면을 띄울 수 없음".into());
+        }
+    }
+
+    fn show(&mut self, url: &str, [x, y, w, h]: [i32; 4]) -> bool {
+        use jni::objects::JValue;
+        let class = &mut self.class;
+        crate::android::with_activity(|env, activity| {
+            let c = web_pane_class(env, activity, class)?;
+            let url = env.new_string(url)?;
+            let script = env.new_string(PAGE_SCRIPT)?;
+            let args = [JValue::Object(activity), JValue::Object(&url), JValue::Object(&script), JValue::Int(x), JValue::Int(y), JValue::Int(w), JValue::Int(h)];
+            env.call_static_method(c, "show", "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;IIII)V", &args)?;
+            Ok(())
+        })
+        .is_some()
+    }
+
+    fn hide(&mut self) -> bool {
+        let class = &mut self.class;
+        crate::android::with_activity(|env, activity| {
+            let c = web_pane_class(env, activity, class)?;
+            env.call_static_method(c, "hide", "(Landroid/app/Activity;)V", &[jni::objects::JValue::Object(activity)])?;
+            Ok(())
+        })
+        .is_some()
+    }
+}
+
+/// WebPane.java, found once through the activity's class loader (a native thread only sees the
+/// system's classes).
+#[cfg(target_os = "android")]
+fn web_pane_class<'a>(
+    env: &mut jni::JNIEnv,
+    activity: &jni::objects::JObject,
+    class: &'a mut Option<jni::objects::GlobalRef>,
+) -> jni::errors::Result<&'a jni::objects::JClass<'static>> {
+    if class.is_none() {
+        let loader = env.call_method(activity, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
+        let name = env.new_string("com.speakup.sixmonths.WebPane")?;
+        let c = env.call_method(&loader, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;", &[jni::objects::JValue::Object(&name)])?.l()?;
+        *class = Some(env.new_global_ref(c)?);
+    }
+    Ok(class.as_ref().unwrap().as_obj().into())
 }

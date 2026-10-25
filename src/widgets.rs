@@ -201,7 +201,7 @@ pub fn card<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
 pub fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
     ui.add_space(4.0);
     let (icon, text) = crate::art::split_icon(title);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if let Some(icon) = icon {
             let (rect, _) = ui.allocate_exact_size(Vec2::splat(54.0), Sense::hover());
             let (a, b) = crate::art::badge_colors(text);
@@ -275,7 +275,7 @@ pub fn primary_button(ui: &mut Ui, text: &str) -> egui::Response {
 }
 
 pub fn spinner_label(ui: &mut Ui, text: &str) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.spinner();
         ui.label(RichText::new(text).color(muted()));
     });
@@ -666,7 +666,7 @@ pub fn chunk_view(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, siz
             pos += len;
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     // Furigana space on every chunk keeps the row on one baseline.
                     let show = furigana_on(ui.ctx());
@@ -829,7 +829,7 @@ impl Drill {
                 if !self.tip.is_empty() && self.hint > 0 {
                     ui.label(RichText::new(&self.tip).color(muted()));
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.add_space((ui.available_width() - 220.0).max(0.0) / 2.0);
                     if ui.button("💡 힌트").clicked() {
                         self.hint += 1;
@@ -861,7 +861,7 @@ impl Drill {
                 if !self.tip.is_empty() {
                     ui.label(RichText::new(format!("💡 {}", self.tip)).color(warn()));
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.add_space((ui.available_width() - 360.0).max(0.0) / 2.0);
                     if ui.button("🔊 듣기").clicked() {
                         voice.say(&self.target);
@@ -939,7 +939,7 @@ impl Drill {
                     ui.label(RichText::new(format!("⚡ 말하기 속도 분당 {:.0}자 (원어민 대화 약 350자)", self.last_wpm)).color(muted()).small());
                 }
                 if r.score < pass {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.add_space((ui.available_width() - 260.0).max(0.0) / 2.0);
                         if let Some(c) = claude {
                             if self.coach.running() {
@@ -982,7 +982,7 @@ impl Drill {
 pub fn reps_dots(ui: &mut Ui, passed: u32, needed: u32) {
     let r = 7.0;
     let w = needed as f32 * (r * 2.0 + 8.0);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space((ui.available_width() - w).max(0.0) / 2.0);
         let (rect, _) = ui.allocate_exact_size(Vec2::new(w, r * 2.0 + 4.0), Sense::hover());
         for i in 0..needed {
@@ -1014,4 +1014,29 @@ pub fn ring(ui: &mut Ui, frac: f32, label: &str, size: f32) {
         p.add(egui::Shape::line(pts, Stroke::new(9.0_f32, ACCENT)));
     }
     p.text(c, Align2::CENTER_CENTER, label, FontId::proportional(size * 0.2), Color32::WHITE);
+}
+
+/// Debug aid for the phone layout: prints how wide the page has grown so far (only with
+/// SPEAKUP_DBGW set, in tests).
+#[cfg(test)]
+#[allow(dead_code)]
+pub fn dbgw(ui: &Ui, tag: &str) {
+    if std::env::var_os("SPEAKUP_DBGW").is_some() {
+        eprintln!("DBGW {tag} {:.0}", ui.min_rect().width());
+    }
+}
+
+/// The rest of a row, right-aligned (a chip or button at the end of a line). In a wrapping row
+/// with less than `room` left (a phone), it goes on the next line instead of past the edge.
+pub fn at_right<R>(ui: &mut Ui, room: f32, add: impl FnOnce(&mut Ui) -> R) -> R {
+    if ui.layout().main_wrap && ui.available_size_before_wrap().x < room {
+        ui.end_row();
+    }
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), add).inner
+}
+
+/// A table (or anything of a fixed width) that scrolls sideways when the screen is narrower
+/// (phones), instead of pushing the page wider.
+pub fn wide<R>(ui: &mut Ui, id: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
+    egui::ScrollArea::horizontal().id_salt(id).auto_shrink([true, true]).show(ui, add).inner
 }

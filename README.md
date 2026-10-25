@@ -18,6 +18,9 @@
 |---|---|---|
 | macOS (Apple Silicon) | `SpeakUp6M-JP-macos-arm64.zip` | 압축을 풀고 `SpeakUp 6M JP.app` 실행. 처음에 "확인되지 않은 개발자" 경고가 뜨면 앱을 **우클릭 → 열기** |
 | Windows | `SpeakUp6M-JP-windows-x64.zip` | 압축을 풀고 `SpeakUp6M-JP.exe` 실행 |
+| Android (폰·태블릿, 64비트) | `SpeakUp6M-JP-android-arm64.apk` | 폰에서 받아 열고 **출처를 알 수 없는 앱 설치 허용** → 설치. Android 9 이상 |
+
+Android: 폰에서는 왼쪽 메뉴 대신 위쪽 **☰ 메뉴**를 눌러 화면을 고릅니다(태블릿 가로 화면은 PC와 같은 배치). 일본어 음성은 폰의 **Google 일본어 음성**을 씁니다(VOICEVOX는 PC 전용). 음성 인식 모델(small 466MB)은 Wi-Fi에서 받으세요. iOS는 준비 중입니다.
 
 ---
 
@@ -158,6 +161,7 @@ Rust 1.88 이상과 CMake가 필요합니다.
 cargo run --release              # 실행
 cargo test --release             # 테스트
 ./scripts/bundle_macos.sh        # macOS .app 만들기 (SpeakUp 6M JP.app)
+./scripts/build_android.sh       # Android APK (Android SDK·NDK, cargo-ndk, aarch64-linux-android 타깃 필요)
 ```
 
 ## 🙏 사용한 오픈소스

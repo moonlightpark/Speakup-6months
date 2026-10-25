@@ -402,23 +402,34 @@ pub fn onboarding_hero(ui: &mut Ui) {
     for (i, (x, y)) in [(0.62, 0.2), (0.9, 0.75), (0.55, 0.85), (0.97, 0.15)].iter().enumerate() {
         sparkle(&p, pos2(rect.left() + rect.width() * x, rect.top() + rect.height() * y), 5.0 + (t * 2.0 + i as f32).sin().abs() * 3.0, Color32::from_white_alpha(150));
     }
-    mascot(&p, pos2(rect.right() - 130.0, rect.center().y - 6.0), 110.0, Mood::Talking, t);
-    // Speech bubble "Hi!"
-    let b = Rect::from_min_size(pos2(rect.right() - 290.0, rect.top() + 26.0), vec2(96.0, 40.0));
-    p.rect_filled(b, 14.0, Color32::WHITE);
-    p.add(Shape::convex_polygon(vec![b.right_bottom() - vec2(26.0, 2.0), b.right_bottom() + vec2(4.0, 12.0), b.right_bottom() - vec2(10.0, 2.0)], Color32::WHITE, Stroke::NONE));
-    p.text(b.center(), egui::Align2::CENTER_CENTER, "こんにちは！", egui::FontId::proportional(17.0), INDIGO_DEEP);
-    let left = rect.left() + 34.0;
-    p.text(pos2(left, rect.top() + 58.0), egui::Align2::LEFT_CENTER, "말하고, 연습하고, 활용하세요.", egui::FontId::proportional(32.0), Color32::WHITE);
-    p.text(pos2(left, rect.top() + 100.0), egui::Align2::LEFT_CENTER, "6개월 뒤 일본어로 듣고 말하는 것만을 목표로 하는 음성 학습 앱", egui::FontId::proportional(16.0), Color32::from_rgb(220, 226, 255));
+    // A phone: title on two lines, tagline wrapped, no mascot.
+    let narrow = w < 600.0;
+    if !narrow {
+        mascot(&p, pos2(rect.right() - 130.0, rect.center().y - 6.0), 110.0, Mood::Talking, t);
+        // Speech bubble "Hi!"
+        let b = Rect::from_min_size(pos2(rect.right() - 290.0, rect.top() + 26.0), vec2(96.0, 40.0));
+        p.rect_filled(b, 14.0, Color32::WHITE);
+        p.add(Shape::convex_polygon(vec![b.right_bottom() - vec2(26.0, 2.0), b.right_bottom() + vec2(4.0, 12.0), b.right_bottom() - vec2(10.0, 2.0)], Color32::WHITE, Stroke::NONE));
+        p.text(b.center(), egui::Align2::CENTER_CENTER, "こんにちは！", egui::FontId::proportional(17.0), INDIGO_DEEP);
+    }
+    let left = rect.left() + if narrow { 20.0 } else { 34.0 };
+    let title = if narrow { "말하고, 연습하고,\n활용하세요." } else { "말하고, 연습하고, 활용하세요." };
+    let title = p.layout_no_wrap(title.to_string(), egui::FontId::proportional(if narrow { 24.0 } else { 32.0 }), Color32::WHITE);
+    let title_h = title.size().y;
+    p.galley(pos2(left, rect.top() + if narrow { 22.0 } else { 38.0 }), title, Color32::WHITE);
+    let tag = p.layout("6개월 뒤 일본어로 듣고 말하는 것만을 목표로 하는 음성 학습 앱".to_string(), egui::FontId::proportional(if narrow { 13.5 } else { 16.0 }), Color32::from_rgb(220, 226, 255), rect.right() - left - 20.0);
+    let tag_top = rect.top() + if narrow { 30.0 + title_h } else { 90.0 };
+    let tag_h = tag.size().y;
+    p.galley(pos2(left, tag_top), tag, Color32::WHITE);
+    let pill_top = if narrow { tag_top + tag_h + 14.0 } else { rect.top() + 140.0 };
     let mut x = left;
     for (txt, col) in [("🎧 듣기", CYAN), ("🎤 말하기", PINK), ("🔁 반복", GOOD), ("⚡ 스피드", warn())] {
         let galley = p.layout_no_wrap(txt.to_string(), egui::FontId::proportional(15.0), Color32::WHITE);
-        let pill = Rect::from_min_size(pos2(x, rect.top() + 140.0), galley.size() + vec2(24.0, 12.0));
+        let pill = Rect::from_min_size(pos2(x, pill_top), galley.size() + vec2(if narrow { 14.0 } else { 24.0 }, 12.0));
         p.rect_filled(pill, 16.0, col.gamma_multiply(0.35));
         p.rect_stroke(pill, 16.0, Stroke::new(1.0_f32, col.gamma_multiply(0.8)), egui::StrokeKind::Inside);
-        p.galley(pill.min + vec2(12.0, 6.0), galley, Color32::WHITE);
-        x = pill.right() + 10.0;
+        p.galley(pill.min + vec2(if narrow { 7.0 } else { 12.0 }, 6.0), galley, Color32::WHITE);
+        x = pill.right() + if narrow { 6.0 } else { 10.0 };
     }
     ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
 }

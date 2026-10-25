@@ -441,7 +441,7 @@ impl App {
         let (mut back, mut enter) = (false, false);
         let w = COLUMNS.len() as f32 * (key + 3.0);
         for row in 0..5 {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 3.0;
                 ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
                 // Right to left like a printed 50음도 table: あ column on the right.
@@ -462,7 +462,7 @@ impl App {
             });
             ui.add_space(3.0);
         }
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.add_space(((ui.available_width() - 2.0 * 90.0) / 2.0).max(0.0));
             if ui.add(egui::Button::new(RichText::new("입력").size(15.0).strong()).min_size(Vec2::new(84.0, 40.0))).clicked() {
                 enter = true;

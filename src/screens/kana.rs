@@ -221,7 +221,7 @@ impl App {
             ui.add_space(6.0);
             for (deck, known) in [(Deck::Hiragana, hira), (Deck::Katakana, kata)] {
                 let name = deck.name();
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("{name} {known}/{total}")).strong().color(if known >= total { GOOD } else { text_strong() }));
                     ui.add(egui::ProgressBar::new(known as f32 / total as f32).desired_width(160.0).desired_height(8.0).fill(if known >= total { GOOD } else { ACCENT }));
                     let label = if known >= total { format!("↻ {name} 복습") } else { format!("▶ {name} 카드 {ROUND}장") };
@@ -264,7 +264,7 @@ impl App {
             });
             ui.label(RichText::new(format!("{jlpt}까지 꼭 알아야 하는 한자 {total}자(N5부터 차례로)를 모두 외워요. 한자를 보고 훈음·읽는 법(음독·훈독)·일본어 뜻을 4개 중에서 고르고, 예시 단어로 확인해요. 하루 {KANJI_PER_DAY}장은 꼭!")).color(muted()));
             ui.add_space(6.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(format!("기억 완료 {known}/{total}")).strong().color(if known >= total { GOOD } else { text_strong() }));
                 ui.add(egui::ProgressBar::new(known as f32 / total.max(1) as f32).desired_width(160.0).desired_height(8.0).fill(if known >= total { GOOD } else { ACCENT }));
                 let label = if known >= total && g > 1 { format!("▶ 다음 레벨 한자 {ROUND}장") } else { format!("▶ 한자 카드 {ROUND}장") };
@@ -355,7 +355,7 @@ impl App {
                 }
             });
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.add(egui::Button::new(RichText::new(format!("↻ {ROUND}장 더")).size(16.0)).fill(ACCENT).min_size(ACTION_BUTTON)).clicked() {
                     q = KanaQuiz::new(round(self.known_map(deck), deck), deck);
                 }
@@ -368,7 +368,7 @@ impl App {
         }
         let answer = q.cards[q.idx];
         let g = deck.front(answer);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(format!("{} {} 카드", deck.icon(), deck.name())).size(20.0).strong());
             ui.label(RichText::new(format!("{} / {}", q.idx + 1, q.cards.len())).color(muted()));
         });
@@ -400,7 +400,9 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 for &c in &q.choices {
                     let label = if let Deck::Kanji(_) = deck { kanji_choice(&crate::kanji::all()[c]) } else { RichText::new(deck.answer(c)).size(20.0).into() };
-                    let mut b = egui::Button::new(label).min_size(egui::vec2(if let Deck::Kanji(_) = deck { 220.0 } else { 140.0 }, 52.0));
+                    // Kanji choices are three lines: the whole width on a phone, two across otherwise.
+                    let w = if let Deck::Kanji(_) = deck { (ui.available_width().min(860.0) / 2.0 - 8.0).max(220.0).min(ui.available_width()) } else { 140.0 };
+                    let mut b = egui::Button::new(label).min_size(egui::vec2(w, 52.0));
                     if let Some(p) = q.picked {
                         if c == answer {
                             b = b.fill(GOOD.gamma_multiply(0.45));
@@ -441,7 +443,7 @@ impl App {
                 if let Deck::Kanji(_) = deck {
                     ui.label(RichText::new(kanji_info(&crate::kanji::all()[answer])).size(17.0).color(text_strong()));
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("🔊").on_hover_text("듣기").clicked() {
                         self.voice.say(&deck.speak(answer));
                     }
@@ -449,7 +451,7 @@ impl App {
                 });
             }
         });
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             close = ui.button("그만하기").clicked();
         });
         if next {

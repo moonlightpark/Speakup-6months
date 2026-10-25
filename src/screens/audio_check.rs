@@ -173,7 +173,7 @@ impl App {
         let label = |name: &str| if name.is_empty() { "시스템 기본값".to_string() } else { name.to_string() };
         egui::Grid::new("audio_devices").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
             ui.label("🎤 마이크");
-            egui::ComboBox::from_id_salt("mic_dev").width(320.0).selected_text(label(&self.store.settings.input_device)).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("mic_dev").width(ui.available_width().clamp(160.0, 320.0)).selected_text(label(&self.store.settings.input_device)).show_ui(ui, |ui| {
                 for name in std::iter::once(String::new()).chain(inputs.iter().cloned()) {
                     if ui.selectable_label(self.store.settings.input_device == name, label(&name)).clicked() {
                         self.store.settings.input_device = name.clone();
@@ -184,7 +184,7 @@ impl App {
             });
             ui.end_row();
             ui.label("🔈 스피커");
-            egui::ComboBox::from_id_salt("out_dev").width(320.0).selected_text(label(&self.store.settings.output_device)).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("out_dev").width(ui.available_width().clamp(160.0, 320.0)).selected_text(label(&self.store.settings.output_device)).show_ui(ui, |ui| {
                 for name in std::iter::once(String::new()).chain(outputs.iter().cloned()) {
                     if ui.selectable_label(self.store.settings.output_device == name, label(&name)).clicked() {
                         self.store.settings.output_device = name.clone();
@@ -205,7 +205,7 @@ impl App {
                 }
             }
         }
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button("↻ 장치 목록 새로고침").clicked() {
                 *st.devices.lock().unwrap() = None;
                 st.listing = false;
@@ -219,7 +219,7 @@ impl App {
         ui.add_space(6.0);
 
         // Live test
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if st.testing {
                 let rec = &self.voice.recorder;
                 st.peak = st.peak.max(rec.level());

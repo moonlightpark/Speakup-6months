@@ -54,7 +54,7 @@ impl App {
             let ko_ready = self.voice.stt_ko.is_ready();
             if ko_ready {
                 let cap = self.translator.capture.get_or_insert_with(Capture::korean);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if let Some(text) = cap.ui(ui, &mut self.voice, 20.0) {
                         self.translator.korean = text.clone();
                         ask = Some(text);
@@ -66,7 +66,7 @@ impl App {
             }
             ui.add_space(6.0);
             ui.label(RichText::new("⌨ 또는 직접 입력").strong());
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let resp = ui.add(egui::TextEdit::singleline(&mut self.translator.korean).desired_width(ui.available_width() - 110.0).font(egui::FontId::proportional(18.0)).hint_text("하고 싶은 말을 한국어로"));
                 let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 let can = !self.translator.korean.trim().is_empty() && !self.translator.job.running();
@@ -98,14 +98,14 @@ impl App {
                     let colors = [GOOD, ACCENT, crate::art::VIOLET];
                     for (i, v) in t.versions.iter().enumerate() {
                         card(ui, |ui| {
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 chip(ui, &v.level_ko, colors[i % 3]);
                                 ui.label(RichText::new(&v.japanese).size(21.0).strong());
                             });
                             if !v.note_ko.is_empty() {
                                 ui.label(RichText::new(format!("💡 {}", v.note_ko)).color(gloss()));
                             }
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 if ui.button("🔊 듣기").clicked() {
                                     self.voice.say(&v.japanese);
                                 }
@@ -156,7 +156,7 @@ impl App {
             ui.label(RichText::new("최근 번역").strong());
             let mut reopen: Option<usize> = None;
             for (i, (k, t)) in self.translator.history.iter().enumerate().skip(1) {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(k).color(muted()));
                     if let Some(v) = t.versions.get(1).or(t.versions.first()) {
                         if ui.link(&v.japanese).clicked() {
@@ -176,7 +176,7 @@ impl App {
     /// Download / load the multilingual model used for Korean speech.
     fn korean_stt_setup_ui(&mut self, ui: &mut Ui) {
         ui.label(RichText::new("한국어 음성 인식 모델이 필요해요 (한 번만 받으면 됩니다).").color(muted()));
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             for (id, label) in KOREAN_MODELS {
                 if ui.radio_value(&mut self.store.settings.korean_model, id.to_string(), format!("{id} ({label})")).changed() {
                     self.store.save_settings();

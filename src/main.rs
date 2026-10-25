@@ -1,49 +1,17 @@
-//! SpeakUp 6M JP — a voice-first Japanese speaking & listening trainer for Korean speakers (macOS / Windows).
-//! Native Rust GUI (egui); Claude API for all language intelligence; whisper.cpp for offline
-//! speech recognition; lindera for Japanese text analysis; the OS's Japanese voices for text-to-speech.
+//! Desktop entry point (macOS / Windows): opens the window at the size the layout needs.
+//! On iOS the same binary starts the iPad app (ios.rs).
 
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
-mod app;
-mod applog;
-mod art;
-mod audio;
-mod claude;
-mod content;
-mod curriculum;
-mod dictionary;
-mod expressions;
-mod freetalk;
-mod grammar;
-mod idioms;
-mod ja;
-mod kanji;
-mod language;
-mod library;
-mod mic_permission;
-mod passages;
-mod print;
-mod models;
-mod offline_talk;
-mod scoring;
-mod screens;
-mod srs;
-mod storage;
-mod speed_scripts;
-mod web;
-mod scenes;
-mod credits;
-mod tenses;
-mod stt;
-mod theme;
-mod voice;
-mod voicevox;
-mod widgets;
-mod wordbank;
+#[cfg(target_os = "ios")]
+fn main() -> eframe::Result<()> {
+    speakup::ios::run()
+}
 
-#[cfg(test)]
-mod functional_tests;
+#[cfg(not(target_os = "ios"))]
+use speakup::{app, applog, storage};
 
+#[cfg(not(target_os = "ios"))]
 fn main() -> eframe::Result<()> {
     applog::init(&storage::data_dir());
     // Exactly sidebar + content column + margins (32 + 24) + scrollbar, so nothing is wasted.

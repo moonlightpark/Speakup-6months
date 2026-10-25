@@ -248,7 +248,7 @@ impl App {
                     st.played = true;
                     self.voice.say_at(&en, rate);
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("🔊 다시 듣기").clicked() {
                         self.voice.say_at(&en, rate);
                     }
@@ -283,7 +283,7 @@ impl App {
                 if r.score >= 80.0 {
                     crate::art::cheer_strip(ui, t_check, if r.score >= 95.0 { "🎉 완벽해요! 정답이에요!" } else { "👏 잘했어요!" });
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("{:.0}점", r.score)).size(22.0).strong().color(if r.score >= 80.0 { GOOD } else { warn() }));
                     ui.label(RichText::new(if dictation { "정답과 비교 (초록 = 맞음, 빨강 = 다름)" } else { "모범 답안과 비교" }).color(muted()));
                 });
@@ -302,7 +302,7 @@ impl App {
                         Err(e) => error_label(ui, e),
                     }
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("🔊 정답 듣기").clicked() {
                         self.voice.say(&en);
                     }
@@ -421,7 +421,7 @@ impl App {
         if let Some(r) = &st.diary_result {
             card(ui, |ui| match r {
                 Ok(f) => {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new(format!("{}점", f.score)).size(24.0).strong().color(if f.score >= 80 { GOOD } else { warn() }));
                         ui.label(&f.feedback_ko);
                     });
@@ -504,7 +504,7 @@ impl App {
         let mut go = None;
         let mut picked = None;
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("◀").clicked() {
                     go = Some(prev_month);
                 }
@@ -582,7 +582,7 @@ impl App {
             }
             if !w.corrected.is_empty() {
                 ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new("✨ Claude 교정본").strong());
                     if w.score > 0.0 {
                         ui.label(RichText::new(format!("{:.0}점", w.score)).color(if w.score >= 80.0 { GOOD } else { warn() }));

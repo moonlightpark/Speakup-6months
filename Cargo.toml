@@ -1,17 +1,16 @@
 [package]
 name = "speakup"
-version = "2.0.6"
+version = "2.1.0"
 edition = "2024"
 rust-version = "1.88"
 description = "6개월 일본어 듣기·말하기 완성 – 음성 지원 일본어 학습 데스크톱 앱 (Claude API)"
 license = "MIT"
 
 [dependencies]
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+eframe = { version = "0.31", default-features = false, features = ["default_fonts"] }
 egui = "0.31"
 cpal = "0.15"
 rodio = { version = "0.20", default-features = false, features = ["symphonia-all"] }
-tts = "0.26"
 whisper-rs = "0.14"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
@@ -21,8 +20,6 @@ directories = "6"
 anyhow = "1"
 rand = "0.9"
 open = "5"
-# YouGlish videos inside the window (macOS WKWebView / Windows WebView2).
-wry = { version = "0.53", default-features = false, features = ["os-webview"] }
 # 받아쓰기 pictures (Wikimedia Commons photos).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 # Japanese morphological analysis (IPADIC built in): readings for furigana and scoring, words,
@@ -37,6 +34,34 @@ voicevox_core = { git = "https://github.com/VOICEVOX/voicevox_core.git", tag = "
 typed_floats = "1"
 flate2 = "1"
 tar = "0.4"
+
+# Drawn with OpenGL (glow) everywhere but iOS, which has no OpenGL to speak of: there it is
+# wgpu over Metal.
+[target.'cfg(not(target_os = "ios"))'.dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "wgpu"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+objc2-foundation = "0.3"
+block2 = "0.6"
+objc2 = "0.6"
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
+
+# Not on Android, which has its own ways (android.rs, voice.rs, web.rs):
+[target.'cfg(not(target_os = "android"))'.dependencies]
+# The OS voice (macOS, Windows, iOS). On Android it needs a Java bridge class.
+tts = "0.26"
+# YouGlish videos inside the window (WKWebView on macOS / iOS, WebView2 on Windows). On Android
+# it needs a Kotlin activity; there android/java/…/WebPane.java shows the system WebView.
+wry = { version = "0.53", default-features = false, features = ["os-webview"] }
+
+# Android (tablets and phones): the app runs in a NativeActivity; android.rs is its entry.
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "android-native-activity"] }
+winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }
+jni = "0.21"
+ndk-context = "0.1"
 
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["eframe"] }
@@ -58,6 +83,10 @@ lto = "thin"
 
 [profile.dev.package."*"]
 opt-level = 2
+
+[lib]
+name = "speakup"
+path = "src/lib.rs"
 
 [package.metadata.bundle]
 name = "SpeakUp 6M JP"

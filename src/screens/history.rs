@@ -27,6 +27,11 @@ pub fn stat_card_centered(ui: &mut Ui, width: f32, value: &str, label: &str, col
 }
 
 fn stat_card_with(ui: &mut Ui, width: f32, value: &str, label: &str, color: Color32, centered: bool, extra: impl FnOnce(&mut Ui)) {
+    // In a wrapping row a frame doesn't wrap by itself: start the next row when this tile
+    // (width + 32 margin + 2 border) won't fit (phones).
+    if ui.layout().main_wrap && ui.available_size_before_wrap().x < width + 34.0 && ui.cursor().left() > ui.max_rect().left() + 1.0 {
+        ui.end_row();
+    }
     let row_id = ui.id();
     let card_id = row_id.with(("stat_card", label));
     egui::Frame::new().fill(card_bg()).corner_radius(14.0).inner_margin(egui::Margin::symmetric(16, 12)).stroke(Stroke::new(1.0_f32, border())).show(ui, |ui| {
@@ -174,7 +179,7 @@ impl App {
             self.open_journal(d);
         }
         ui.add_space(6.0);
-        if ui.button("📂 기록 파일 폴더 열기 (history.json · attempts.jsonl · level_log.csv)").clicked() {
+        if !cfg!(target_os = "android") && ui.button("📂 기록 파일 폴더 열기 (history.json · attempts.jsonl · level_log.csv)").clicked() {
             let _ = open::that(&self.store.dir);
         }
     }
@@ -182,8 +187,9 @@ impl App {
 
 /// A GitHub-style heatmap: 26 week columns × 7 day rows from the program start date.
 fn calendar(ui: &mut Ui, start: chrono::NaiveDate, hist: &[DayRecord]) {
-    let cell = 16.0;
-    let gap = 4.0;
+    // Smaller cells when the 26 weeks don't fit (phones).
+    let gap = 4.0_f32.min(ui.available_width() / 26.0 * 0.2);
+    let cell = 16.0_f32.min(ui.available_width() / 26.0 - gap);
     let size = Vec2::new(26.0 * (cell + gap), 7.0 * (cell + gap));
     let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
     let p = ui.painter();

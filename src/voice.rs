@@ -6,7 +6,100 @@
 use crate::audio::{Player, Recorder};
 use crate::language::LanguagePack;
 use crate::stt::Stt;
+#[cfg(not(target_os = "android"))]
 use tts::Tts;
+#[cfg(target_os = "android")]
+use android_voice::Tts;
+
+/// Android's own speech engine (android.speech.tts.TextToSpeech) called through JNI, with the
+/// same calls as `tts::Tts` (the tts crate needs a Java bridge class there). The engine connects
+/// in the background, so a sentence asked for in its first moment is not spoken. One voice:
+/// the engine's Japanese.
+#[cfg(target_os = "android")]
+mod android_voice {
+    use crate::android::with_activity;
+    use jni::objects::{GlobalRef, JObject, JValue};
+
+    pub struct Tts {
+        engine: GlobalRef,
+        rate: f32,
+    }
+    pub struct Voice;
+    type R<T> = Result<T, String>;
+
+    impl Tts {
+        pub fn default() -> R<Self> {
+            let engine = with_activity(|env, activity| {
+                let tts = env.new_object(
+                    "android/speech/tts/TextToSpeech",
+                    "(Landroid/content/Context;Landroid/speech/tts/TextToSpeech$OnInitListener;)V",
+                    &[JValue::Object(activity), JValue::Object(&JObject::null())],
+                )?;
+                env.new_global_ref(tts)
+            });
+            engine.map(|engine| Self { engine, rate: 1.0 }).ok_or_else(|| "안드로이드 음성 엔진을 열 수 없습니다".to_string())
+        }
+        /// The one voice: the engine's Japanese (Google's on most phones).
+        pub fn voices(&self) -> R<Vec<Voice>> {
+            Ok(vec![Voice])
+        }
+        pub fn set_voice(&mut self, _: &Voice) -> R<()> {
+            Ok(())
+        }
+        pub fn set_rate(&mut self, rate: f32) -> R<()> {
+            self.rate = rate;
+            Ok(())
+        }
+        pub fn min_rate(&self) -> f32 {
+            0.5
+        }
+        pub fn normal_rate(&self) -> f32 {
+            1.0
+        }
+        pub fn max_rate(&self) -> f32 {
+            2.0
+        }
+        pub fn speak(&mut self, text: &str, interrupt: bool) -> R<()> {
+            let (engine, rate) = (self.engine.as_obj(), self.rate);
+            let result = with_activity(|env, _| {
+                let ja = env.get_static_field("java/util/Locale", "JAPAN", "Ljava/util/Locale;")?.l()?;
+                env.call_method(engine, "setLanguage", "(Ljava/util/Locale;)I", &[JValue::Object(&ja)])?;
+                env.call_method(engine, "setSpeechRate", "(F)I", &[JValue::Float(rate)])?;
+                let text = env.new_string(text)?;
+                let id = env.new_string("speakup")?;
+                let mode = if interrupt { 0 } else { 1 }; // QUEUE_FLUSH / QUEUE_ADD
+                env.call_method(
+                    engine,
+                    "speak",
+                    "(Ljava/lang/CharSequence;ILandroid/os/Bundle;Ljava/lang/String;)I",
+                    &[JValue::Object(&text), JValue::Int(mode), JValue::Object(&JObject::null()), JValue::Object(&id)],
+                )?
+                .i()
+            });
+            match result {
+                Some(0) => Ok(()),
+                _ => Err("안드로이드 음성 엔진이 아직 준비되지 않았습니다".into()),
+            }
+        }
+        pub fn stop(&mut self) -> R<()> {
+            let engine = self.engine.as_obj();
+            with_activity(|env, _| env.call_method(engine, "stop", "()I", &[]).map(|_| ()));
+            Ok(())
+        }
+    }
+
+    impl Voice {
+        pub fn id(&self) -> String {
+            "android-ja".into()
+        }
+        pub fn name(&self) -> String {
+            "Android 일본어".into()
+        }
+        pub fn language(&self) -> String {
+            "ja-JP".into()
+        }
+    }
+}
 
 pub struct Speaker {
     tts: Option<Tts>,
@@ -51,7 +144,8 @@ impl Speaker {
                 crate::applog!("tts: {} ({})", v.name(), v.id());
                 let _ = tts.set_voice(v);
             }
-            natural = matching.first().is_some_and(|v| voice_rank(&v.id(), &v.name()) <= 1);
+            // Android's engine voice (Google's neural Japanese on most phones) counts as natural.
+            natural = cfg!(target_os = "android") || matching.first().is_some_and(|v| voice_rank(&v.id(), &v.name()) <= 1);
             voices = matching.iter().map(|v| (v.id(), voice_label(&v.id(), &v.name(), v.language().as_str()))).collect();
         }
         let error = voices.is_empty().then(|| format!("{} 음성이 설치되어 있지 않습니다. {}", lang.name_ko, INSTALL_VOICE_HELP));
