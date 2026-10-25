@@ -49,7 +49,7 @@ fn role() -> Value {
     json!({"type": "string", "enum": crate::grammar::role_ids()})
 }
 fn phrase_chunk() -> Value {
-    obj(json!({"en": s(), "ko": s(), "role": role()}))
+    obj(json!({"ja": s(), "ko": s(), "role": role()}))
 }
 
 /// The 직독직해 rule plus the grammatical role of each chunk (for colouring).
@@ -57,10 +57,12 @@ fn chunk_rule() -> String {
     format!("{CHUNK_RULE} For each chunk, {}", crate::grammar::ROLE_RULE)
 }
 
-const CHUNK_RULE: &str = "chunks = 직독직해 (direct reading) for Korean learners: split the sentence, in English word order, into the smallest \
-     meaningful units — usually single words, but keep fixed expressions together (e.g. \"wake up\", \"a lot of\", \"in charge of\"). \
-     Each chunk's en must be copied exactly from the sentence (keep punctuation attached to its word) so that joining all en values with spaces \
-     reproduces the sentence exactly; ko is that chunk's Korean meaning as it would be read in English order (e.g. I / am / a / boy → 나 / 이다 / 한 / 소년).";
+const CHUNK_RULE: &str = "chunks = 직독직해 (direct reading) for Korean learners: split the Japanese sentence, in its own order, into 文節 \
+     (bunsetsu: a content word with the particles and endings that follow it, e.g. 昨日、/ 友達と / 映画を / 見に / 行きました。); keep fixed \
+     expressions together (e.g. よろしくお願いします, ～てもいいですか). Each chunk's ja must be copied exactly from the sentence (punctuation \
+     attached to the chunk before it) so that concatenating all ja values with nothing in between reproduces the sentence exactly; ko is that \
+     chunk's Korean meaning in the same order — Japanese and Korean share word order, so the ko values read together form a natural Korean \
+     sentence (e.g. 私は / 学生です。 → 나는 / 학생입니다.).";
 
 fn phrase_schema() -> Value {
     obj(json!({"text": s(), "ko": s()}))
@@ -71,11 +73,14 @@ impl Claude {
         format!(
             "You are the AI engine of a voice-first {lang} speaking and listening app for Korean adults. \
              The learner's single goal is to understand and speak {lang} within a 6-month program. \
-             Write learning content in natural, spoken, native {lang} — the way people actually talk, not textbook prose. \
+             Write learning content in natural, spoken, native {lang} (standard Tokyo Japanese) — the way people actually talk, not textbook prose. \
+             Write Japanese with normal kanji and kana as natives do (no spaces between words, no romaji, no furigana: the app adds readings), \
+             with full-width punctuation 。、？！. Use です・ます for beginners and in polite situations, casual speech between friends, keigo at work. \
              Write every explanation, translation and piece of feedback for the learner in Korean (field names ending in _ko), \
              short and encouraging, like a friendly tutor. \
-             The learner's speech reaches you as an automatic speech-recognition transcript, so ignore missing punctuation and capitalization, \
-             and remember that a wrong word in the transcript may be a pronunciation problem.",
+             The learner's speech reaches you as an automatic speech-recognition transcript, so ignore missing punctuation, and remember that \
+             the recognizer may write a word in kana instead of kanji or pick a homophone — a wrong word may be a pronunciation problem \
+             (Korean speakers often confuse long/short vowels, っ, ん, voiced/unvoiced consonants (か/が, た/だ), つ/ちゅ, ざ/じゃ).",
             lang = self.lang.name
         )
     }
@@ -150,7 +155,7 @@ impl Claude {
 
     pub fn generate_lesson(&self, req: &LessonRequest) -> Result<Lesson> {
         let schema = obj(json!({
-            "words": arr(obj(json!({"word": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
+            "words": arr(obj(json!({"word": s(), "reading": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
             "sentences": arr(obj(json!({"text": s(), "ko": s(), "tip_ko": s(), "chunks": arr(phrase_chunk())}))),
             "self_expression": obj(json!({
                 "question": s(), "question_ko": s(), "useful_phrases": arr(phrase_schema()), "model_answer": s()
@@ -160,26 +165,26 @@ impl Claude {
                 "key_phrases": arr(phrase_schema())
             })),
             "listening": obj(json!({"search_queries": arr(s()), "focus_ko": s()})),
-            "expressions": arr(obj(json!({"word": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
-            "phrases": arr(obj(json!({"word": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
+            "expressions": arr(obj(json!({"word": s(), "reading": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
+            "phrases": arr(obj(json!({"word": s(), "reading": s(), "meaning_ko": s(), "example": s(), "example_ko": s()}))),
         }));
         // Idioms/slang stay at ~5% of new material: one a day, classic and recent in turn.
         let expression_kind = if req.day % 2 == 1 {
-            "one recent slang term (2010s-2020s social media, e.g. 'no cap', 'low-key')"
+            "one recent slang term / 若者言葉 (2010s-2020s social media, e.g. 'エモい', 'それな', '推し')"
         } else {
-            "one classic everyday expression (still common, may be from past decades, e.g. 'my bad', 'rain check')"
+            "one classic everyday expression still heard daily (e.g. 'お疲れさまです', 'しょうがない', '猫の手も借りたい')"
         };
-        // The ~2,000 most frequent words cover 80-90% of everyday conversation; go beyond them after B1.
+        // The most frequent words cover most of everyday conversation; go beyond them after N3.
         let frequency_band = if req.level < 5.0 {
-            "from the 2,000 most frequent words of everyday spoken English"
+            "from the most frequent words of everyday spoken Japanese (JLPT N5-N4 level)"
         } else {
-            "from the next frequency band (roughly the 2,000th-5,000th most frequent words of spoken English)"
+            "from the next frequency band (JLPT N3-N2 level words used in conversation, work and news)"
         };
         let user = format!(
             "Create today's lesson.\n\
              Program day {day} of 182 (week {week}). Phase: {phase}.\n\
              Weekly theme: {theme}. Business focus: {business}. Background grammar (never teach it explicitly): {grammar}.\n\
-             Learner level: {level:.1}/10 (CEFR {cefr}).\n\
+             Learner level: {level:.1}/10 (JLPT {cefr}).\n\
              Words the learner already knows (do NOT repeat them): {known}\n\
              Chunks the learner already knows (do NOT repeat them): {known_phrases}\n\
              Items the learner keeps getting wrong (reuse some of them inside the new example sentences so they get extra practice): {weak}\n\
@@ -187,21 +192,23 @@ impl Claude {
              - sentences: {avoid_s}\n\
              - self-expression questions: {avoid_q}\n\
              - role-play scenarios: {avoid_r}\n\n\
-             Style: everyday English exactly as native speakers really say it — contractions, phrasal verbs, fillers, \
-             natural reactions and idioms. Do not write textbook or grammar-drill sentences; the goal is listening and speaking, not grammar.\n\
+             Style: everyday Japanese exactly as native speakers really say it — natural sentence endings (～んです, ～よね, ～かな), \
+             aizuchi and reactions (そうなんだ, なるほど), fillers (えっと, あの), common contractions (～ちゃう, ～てる). \
+             Do not write textbook or grammar-drill sentences; the goal is listening and speaking, not grammar.\n\
              Requirements:\n\
              - phrases: exactly {np} high-frequency spoken chunks / sentence frames that natives use all the time and the learner can reuse in many \
-             situations (e.g. 'I was wondering if', 'It depends on', 'I'm thinking about', 'The thing is'), fitting the theme where possible. \
-             Write the chunk itself without '...' (the example shows how it continues); meaning_ko: natural Korean meaning and when to use it; \
+             situations (e.g. 'と思います', 'てもいいですか', 'んですけど', 'かもしれない', 'ことにした'), fitting the theme where possible. \
+             Write the chunk itself without '…' (the example shows how it is used); meaning_ko: natural Korean meaning and when to use it; \
              example: a short everyday sentence that contains the chunk exactly.\n\
-             - words: exactly {nw} new high-frequency words {frequency_band}, for the theme, each with a short natural example sentence. \
-             Write them in lower case, and never use names of places, people or brands as words.\n\
-             - sentences: exactly {ns} easy-to-read, longer natural sentences (about 12-20 words, at or slightly below the learner's level) for reading aloud / shadowing right after the day's short idiom sentences; tip_ko is one pronunciation or linking tip. {chunk_rule}\n\
+             - words: exactly {nw} new high-frequency words {frequency_band}, for the theme, each in its usual written form with its hiragana reading \
+             (reading; katakana words as written) and a short natural example sentence. Never use names of places, people or brands as words.\n\
+             - sentences: exactly {ns} easy-to-read, longer natural sentences (about 25-45 characters, at or slightly below the learner's level) for reading aloud / shadowing right after the day's short sentences; tip_ko is one pronunciation tip in Korean (long vowels, っ, ん, voiced/unvoiced consonants, pitch, devoiced vowels). {chunk_rule}\n\
              - self_expression: one open question on the theme that makes the learner talk about their own life for 30-60 seconds; 4 useful_phrases; a model_answer of 3-5 sentences at the learner's level.\n\
              - business: a realistic role-play for the business focus; ai_role is who you will play; opening_line is your first line; 4 key_phrases the learner can use.\n\
              - expressions: exactly 1 item the learner hasn't seen: {expression_kind}. \
-             meaning_ko: natural Korean meaning plus when/where it's used (e.g. '(요즘 유행어) …', '(90년대) …'); example: a short real-life line using it.\n\
-             - listening: 2-3 YouTube search queries that find real native-speaker videos (channels such as BBC Learning English, VOA Learning English, TED, Rachel's English) on this theme at a suitable level; focus_ko says what to listen for.",
+             meaning_ko: natural Korean meaning plus when/where it's used (e.g. '(요즘 유행어) …', '(회사에서) …'); example: a short real-life line using it.\n\
+             - listening: 2-3 YouTube search queries in Japanese that find real native-speaker videos (e.g. 日本語の森, Japanese Ammo with Misa, \
+             Comprehensible Japanese, Onomappu, NHK, vlogs and interviews) on this theme at a suitable level; focus_ko says what to listen for.",
             day = req.day,
             week = req.week,
             phase = req.phase,
@@ -237,10 +244,10 @@ impl Claude {
             "new_expressions": arr(phrase_schema()),
         }));
         let user = format!(
-            "The learner (level {level:.1}/10, CEFR {cefr}) answered this question out loud.\n\
+            "The learner (level {level:.1}/10, JLPT {cefr}) answered this question out loud in Japanese.\n\
              Question: {question}\nTranscript of their answer: \"{transcript}\"\n\n\
              Score fluency, grammar, vocabulary and overall from 0 to 100 for their level. \
-             List the most important corrections (max 5). natural_version: rewrite their answer as a native speaker would say it, \
+             List the most important corrections (max 5; wrong particles, conjugation, politeness level, unnatural wording). natural_version: rewrite their answer as a native speaker would say it, \
              keeping their ideas, at most one level above theirs — they will read it aloud several times. \
              new_expressions: 2-4 useful expressions from the natural version worth memorizing. \
              feedback_ko: 2-3 sentences of encouraging, concrete feedback. If the transcript is empty or unrelated, say so kindly and give 0 scores.",
@@ -264,9 +271,9 @@ impl Claude {
         let convo = if convo.is_empty() { "(nothing yet — you speak first: open the scene naturally)\n".to_string() } else { convo };
         let turns = history.iter().filter(|(u, _)| *u).count();
         let user = format!(
-            "Role-play. Scenario: {title} — {scenario}. You play {ai}. The learner plays {usr}. Learner level {level:.1}/10 (CEFR {cefr}).\n\
+            "Role-play in Japanese. Scenario: {title} — {scenario}. You play {ai}. The learner plays {usr}. Learner level {level:.1}/10 (JLPT {cefr}).\n\
              Conversation so far:\n{convo}\n\
-             Continue as {ai}: reply in 1-3 short spoken sentences matched to the learner's level, and keep the conversation moving with a question. \
+             Continue as {ai}: reply in 1-3 short spoken Japanese sentences matched to the learner's level and the relationship (polite, casual or keigo), and keep the conversation moving with a question. \
              reply_ko: Korean translation of your reply.\n\
              correction: if the learner's LAST line had a mistake or sounded unnatural, the natural way to say it (else empty string); correction_ko: brief Korean explanation (else empty).\n\
              suggestions: 2 things the learner could say next (text + ko).\n\
@@ -294,10 +301,10 @@ impl Claude {
         let schema = obj(json!({"title": s(), "passage": s(), "passage_ko": s(), "chunks": arr(phrase_chunk())}));
         let user = format!(
             "Write a script for SPEED READING ALOUD practice (read along, then read the whole of it in 2 minutes) — day {day} of the course.\n\
-             Theme: {theme}. Practise this grammar naturally and often: {grammar}. Learner level {level:.1}/10 (CEFR {cefr}).\n\
-             Length: {words} words (±10) — about 2 minutes read aloud at the learner's target pace.\n\
+             Theme: {theme}. Practise this grammar naturally and often: {grammar}. Learner level {level:.1}/10 (JLPT {cefr}).\n\
+             Length: {words} Japanese characters (±30, not counting punctuation) — about 2 minutes read aloud at the learner's target pace.\n\
              It must sound like natural spoken {lang} (a first-person story, monologue or mini talk), use mostly words the learner knows, \
-             with short-to-medium sentences (each ending with . ? or !) that are fun to say quickly. Where natural, reuse some of these learned words: {known}.\n\
+             with short-to-medium sentences (each ending with 。？ or ！) that are fun to say quickly. Where natural, reuse some of these learned words: {known}.\n\
              Pick a fresh topic: the learner already read passages titled {avoid}.\n\
              passage_ko: a natural Korean translation. {chunk_rule} (Here the whole passage is the sentence.)",
             cefr = cefr_of(level),
@@ -353,10 +360,10 @@ impl Claude {
         }
         let schema = obj(json!({"questions": arr(obj(json!({"question": s(), "question_ko": s(), "sample_answer": s()})))}));
         let user = format!(
-            "Listen-and-respond practice. Write exactly 6 short questions or remarks a native speaker would say to the learner \
-             in real conversation (theme: {theme}), at the learner's listening level {level:.1}/10 (CEFR {cefr}) — natural speed \
-             and wording, contractions included. The learner only HEARS each one and must answer out loud. Mix question types \
-             (yes/no, wh-, opinion, follow-up). question_ko: Korean translation (shown only after answering); \
+            "Listen-and-respond practice. Write exactly 6 short Japanese questions or remarks a native speaker would say to the learner \
+             in real conversation (theme: {theme}), at the learner's listening level {level:.1}/10 (JLPT {cefr}) — natural wording \
+             and endings as really spoken. The learner only HEARS each one and must answer out loud. Mix question types \
+             (はい/いいえ, なに・どこ・いつ, opinion, follow-up). question_ko: Korean translation (shown only after answering); \
              sample_answer: a natural 1-2 sentence answer at the learner's level. Do not repeat: {avoid}",
             cefr = cefr_of(level),
             avoid = list_or_none(avoid),
@@ -375,7 +382,7 @@ impl Claude {
             "Listen-and-respond check. The learner (level {level:.1}/10) heard this question without seeing it: \"{question}\"\n\
              Their spoken answer (speech recognition transcript): \"{transcript}\"\n\n\
              understood: did the answer show they understood the question? score 0-100: how well it works as a reply \
-             (understanding and fit first, then naturalness; small grammar slips matter little). feedback_ko: 1-2 encouraging \
+             (understanding and fit first, then naturalness and a suitable politeness level; small particle slips matter little). feedback_ko: 1-2 encouraging \
              sentences in Korean — if they misunderstood, say what the question actually asked. better_answer: a natural reply \
              a native speaker might give, keeping the learner's idea if it fits, at most one level above theirs."
         );
@@ -385,9 +392,12 @@ impl Claude {
     pub fn pronunciation_coach(&self, target: &str, transcript: &str, missed: &[String]) -> Result<CoachTip> {
         let schema = obj(json!({"tip_ko": s(), "focus_words": arr(s())}));
         let user = format!(
-            "The learner tried to read aloud: \"{target}\"\nSpeech recognition heard: \"{transcript}\"\nWords not recognized: {missed:?}\n\n\
-             Diagnose the likely pronunciation problems (sounds Korean speakers often struggle with: r/l, f/p, v/b, th, z, final consonants, word stress, linking). \
-             tip_ko: 2-4 short, practical sentences on how to fix it (mouth position, stress, linking). focus_words: the words to practice."
+            "The learner tried to read aloud in Japanese: \"{target}\"\nSpeech recognition heard: \"{transcript}\"\nWords not recognized: {missed:?}\n\n\
+             Diagnose the likely pronunciation problems (what Korean speakers often struggle with: long vowels おばさん/おばあさん, \
+             the small っ (きて/きって), ん as a full beat, voiced vs unvoiced consonants at the start of a word (か/が, た/だ, ぱ/ば), \
+             つ, ず/ざ (z sound), じゃ, え-row vowels, pitch accent, keeping every mora the same length). Remember that the recognizer \
+             may write a word in kana or another kanji with the same sound — that is not an error. \
+             tip_ko: 2-4 short, practical sentences on how to fix it (beats/mora, mouth, pitch). focus_words: the words to practice."
         );
         self.call(user, schema, "low")
     }
@@ -395,8 +405,8 @@ impl Claude {
     pub fn check_word_use(&self, word: &str, meaning_ko: &str, transcript: &str) -> Result<WordUseCheck> {
         let schema = obj(json!({"ok": json!({"type": "boolean"}), "feedback_ko": s(), "better": s()}));
         let user = format!(
-            "Homework: the learner had to say an original sentence using \"{word}\" ({meaning_ko}).\nThey said: \"{transcript}\"\n\n\
-             ok=true if they used the word (or a form of it) correctly in a meaningful sentence; small grammar slips are fine. \
+            "Homework: the learner had to say an original Japanese sentence using \"{word}\" ({meaning_ko}).\nThey said: \"{transcript}\"\n\n\
+             ok=true if they used the word (or a conjugated form of it; the recognizer may write it in kana) correctly in a meaningful sentence; small grammar slips are fine. \
              feedback_ko: one or two short sentences. better: a natural version of their sentence."
         );
         self.call(user, schema, "low")
@@ -409,12 +419,12 @@ impl Claude {
         })))}));
         let list: String = words.iter().map(|(w, ko)| format!("- {w} ({ko})\n")).collect();
         let user = format!(
-            "Tense frames: for each English word or phrase below write three short, natural spoken sentences that use it, all with the same idea, \
-             for a learner at level {level:.1}/10 (CEFR {cefr}), 5-10 words each:\n\
-             present = \"I'm thinking of …ing …\" (Korean: ~할까 생각 중이에요), past = \"I was thinking of …ing …\" (Korean: ~할까 생각했어요), \
-             future = \"I'll think about …ing …\" (Korean: ~할까 생각할 거예요). The word or phrase itself must appear in each sentence (any form; a phrase that is a question or a frame can be quoted or embedded, \
-             e.g. \"I'm thinking of asking, 'Do you mind if I sit here?'\"). word: exactly as given. \
-             *_ko: natural Korean translations ending with those Korean frames.\n\nWords and phrases:\n{list}",
+            "Tense frames: for each Japanese word or phrase below write three short, natural spoken sentences that use it, all with the same idea, \
+             for a learner at level {level:.1}/10 (JLPT {cefr}), 8-25 characters each:\n\
+             present = \"～しようと思っています\" (Korean: ~할까 생각 중이에요), past = \"～しようと思っていました\" (Korean: ~할까 생각했어요), \
+             future = \"～するつもりです\" (Korean: ~할 생각이에요) — with the volitional / dictionary form of the verb that fits the word. \
+             The word or phrase itself must appear in each sentence (any conjugated form; nouns with a fitting verb, e.g. 会議 → 会議の準備をしようと思っています). \
+             word: exactly as given. *_ko: natural Korean translations ending with those Korean frames.\n\nWords and phrases:\n{list}",
             cefr = cefr_of(level)
         );
         #[derive(Deserialize)]
@@ -435,11 +445,11 @@ impl Claude {
         })))}));
         let list: String = sentences.iter().map(|(t, ko)| format!("- {t} ({ko})\n")).collect();
         let user = format!(
-            "Sentence tenses: for each English sentence below (a learner at level {level:.1}/10, CEFR {cefr}, reads them aloud), \
-             give the same sentence in the present, the past and the future (will / be going to), changing as little as possible \
-             and keeping any idiom or expression in it intact (e.g. \"I've got a lot on my plate.\" → present \"I have a lot on my plate.\", \
-             past \"I had a lot on my plate.\", future \"I'll have a lot on my plate.\"). One of the three may be the sentence itself. \
-             ok=false (and the other fields empty) when the tense can't naturally change: greetings, fixed sayings, set phrases, \
+            "Sentence tenses: for each Japanese sentence below (a learner at level {level:.1}/10, JLPT {cefr}, reads them aloud), \
+             give the same sentence in the present (～ます / ～ています), the past (～ました) and the future or intention (～つもりです / ～予定です / ～でしょう), \
+             changing as little as possible and keeping its politeness level and any expression in it intact (e.g. 毎朝コーヒーを飲みます。 → \
+             past 今朝コーヒーを飲みました。, future 明日もコーヒーを飲むつもりです。). One of the three may be the sentence itself. \
+             ok=false (and the other fields empty) when the tense can't naturally change: greetings, aizuchi, fixed sayings, set phrases, \
              most questions and requests. sentence: exactly as given. *_ko: natural Korean translations.\n\nSentences:\n{list}",
             cefr = cefr_of(level)
         );
@@ -466,10 +476,10 @@ impl Claude {
     pub fn scene_query(&self, sentence: &str) -> Result<String> {
         let schema = obj(json!({"query": s()}));
         let user = format!(
-            "Scene image: a learner hears this English sentence and a photo of its situation is shown with it. \
+            "Scene image: a learner hears this Japanese sentence and a photo of its situation is shown with it. \
              Give a short photo search (2-4 plain English words, concrete things or a place, no names, no abstract words) \
-             that would find a fitting stock photo on Wikimedia Commons, e.g. \"I'd like a cup of coffee.\" → \"coffee cup cafe\", \
-             \"Where were you born?\" → \"newborn baby hospital\".\n\nSentence: {sentence}"
+             that would find a fitting stock photo on Wikimedia Commons, e.g. \"コーヒーをひとつください。\" → \"coffee cup cafe\", \
+             \"駅はどこですか。\" → \"train station platform\".\n\nSentence: {sentence}"
         );
         #[derive(Deserialize)]
         struct Out {
@@ -484,9 +494,9 @@ impl Claude {
     pub fn check_sentence_mission(&self, word: &str, meaning_ko: &str, theme: &str, grammar: &str, transcript: &str, level: f32) -> Result<WordUseCheck> {
         let schema = obj(json!({"ok": json!({"type": "boolean"}), "feedback_ko": s(), "better": s()}));
         let user = format!(
-            "Sentence mission: the learner (level {level:.1}/10, CEFR {cefr}) had to make an original spoken sentence using \"{word}\" ({meaning_ko}), \
+            "Sentence mission: the learner (level {level:.1}/10, JLPT {cefr}) had to make an original spoken Japanese sentence using \"{word}\" ({meaning_ko}), \
              about this week's theme \"{theme}\", ideally practising this week's grammar ({grammar}).\nThey said: \"{transcript}\"\n\n\
-             ok=true if they used the word (or a form of it) correctly in a meaningful sentence; small grammar slips are fine and the theme is a suggestion. \
+             ok=true if they used the word (or a conjugated form of it; the recognizer may write it in kana) correctly in a meaningful sentence; small grammar slips are fine and the theme is a suggestion. \
              feedback_ko: one or two short, encouraging sentences in Korean; mention the week's grammar if they used it or could have. \
              better: a natural version of their sentence (keep their idea), using the week's grammar where it fits.",
             cefr = cefr_of(level)
@@ -504,48 +514,49 @@ impl Claude {
             "natural_version_ko": s(),
         }));
         let user = format!(
-            "The learner (level {level:.1}/10, CEFR {cefr}) wrote this in English.\nPrompt: {prompt}\nTheir text: \"{text}\"\n\n\
-             score 0-100 for their level (meaning, naturalness, accuracy). corrections: the most important fixes (max 6), each original → corrected \
-             with a short Korean explanation. natural_version: how a native speaker would write the same ideas in everyday, spoken-style English \
+            "The learner (level {level:.1}/10, JLPT {cefr}) wrote this in Japanese.\nPrompt: {prompt}\nTheir text: \"{text}\"\n\n\
+             score 0-100 for their level (meaning, naturalness, accuracy of particles, conjugation and kanji/kana). corrections: the most important fixes (max 6), each original → corrected \
+             with a short Korean explanation. natural_version: how a native speaker would write the same ideas in everyday, spoken-style Japanese \
              (they will read it aloud afterwards). natural_version_ko: its Korean translation. feedback_ko: 2 encouraging, concrete sentences.",
             cefr = cefr_of(level)
         );
         self.call(user, schema, "low")
     }
 
-    /// Checks a Korean→English translation; alternatives with the same meaning are fine.
+    /// Checks a Korean→Japanese translation; alternatives with the same meaning are fine.
     pub fn check_translation(&self, korean: &str, reference: &str, answer: &str) -> Result<TranslationCheck> {
         let schema = obj(json!({"ok": json!({"type": "boolean"}), "feedback_ko": s(), "better": s()}));
         let user = format!(
-            "Korean: \"{korean}\"\nReference English: \"{reference}\"\nLearner wrote: \"{answer}\"\n\n\
-             ok=true if the learner's sentence says the same thing in natural English (it doesn't have to match the reference word for word; \
-             minor spelling slips are fine). feedback_ko: one short sentence. better: the most natural way to say it (may be the reference)."
+            "Korean: \"{korean}\"\nReference Japanese: \"{reference}\"\nLearner wrote: \"{answer}\"\n\n\
+             ok=true if the learner's sentence says the same thing in natural Japanese (it doesn't have to match the reference word for word; \
+             kana instead of kanji, another politeness level that fits, or a minor typo are fine). feedback_ko: one short sentence. better: the most natural way to say it (may be the reference)."
         );
         self.call(user, schema, "low")
     }
 
-    /// Rewrites a page of a book in easier English for the learner's level.
+    /// Rewrites a page of a book in easier Japanese for the learner's level.
     pub fn simplify_page(&self, paragraphs: &[String], level: f32) -> Result<SimplifiedPage> {
         let schema = obj(json!({"paragraphs": arr(s()), "summary_ko": s()}));
         let user = format!(
-            "Rewrite this page of a story for an English learner at level {level:.1}/10 (CEFR {cefr}). Keep the story, the characters and \
-             the order of events, one output paragraph per input paragraph, but use simpler words and shorter sentences that sound natural \
-             when read aloud. summary_ko: a 2-3 sentence Korean summary of the page.\n\n{text}",
+            "Rewrite this page of a Japanese story for a Japanese learner at level {level:.1}/10 (JLPT {cefr}). Keep the story, the characters and \
+             the order of events, one output paragraph per input paragraph, but use modern, simpler words, common kanji only and shorter sentences \
+             (です・ます or plain style as fits the story) that sound natural when read aloud; old-fashioned expressions become modern ones. \
+             summary_ko: a 2-3 sentence Korean summary of the page.\n\n{text}",
             cefr = cefr_of(level),
             text = paragraphs.join("\n\n")
         );
         self.call(user, schema, "low")
     }
 
-    /// Korean → English at three levels (easy / intermediate / advanced) for the translator.
+    /// Korean → Japanese at three levels (easy / everyday / polished) for the translator.
     pub fn translate_levels(&self, korean: &str) -> Result<Translation> {
-        let version = obj(json!({"level_ko": s(), "english": s(), "note_ko": s()}));
+        let version = obj(json!({"level_ko": s(), "japanese": s(), "note_ko": s()}));
         let schema = obj(json!({"versions": arr(version), "meaning_ko": s()}));
         let user = format!(
-            "A Korean learner wants to say this in English: \"{korean}\"\n\n\
-             Give exactly 3 versions in natural, spoken English as natives really say it, in this order: \
-             level_ko \"쉽게\" (short, simple words a beginner can say right away), \"중간\" (everyday native style with common phrasal verbs/idioms), \
-             \"고급\" (fluent, nuanced, polished — still natural speech, not stiff). \
+            "A Korean learner wants to say this in Japanese: \"{korean}\"\n\n\
+             Give exactly 3 versions in natural, spoken Japanese as natives really say it, in this order: \
+             level_ko \"쉽게\" (short, simple です・ます Japanese a beginner can say right away), \"중간\" (everyday native style, casual or polite as the situation suggests, with common expressions), \
+             \"고급\" (fluent, nuanced, polished — e.g. proper keigo where it fits; still natural speech, not stiff). \
              note_ko: one short Korean tip about the key expression or nuance of that version. \
              meaning_ko: how you understood the Korean (one short line), in case it was ambiguous or the speech recognition was off."
         );
@@ -556,8 +567,8 @@ impl Claude {
     pub fn word_in_context(&self, word: &str, sentence: &str) -> Result<WordMeaning> {
         let schema = obj(json!({"meaning_ko": s(), "note_ko": s(), "example": s(), "example_ko": s(), "proper_noun": json!({"type": "boolean"})}));
         let user = format!(
-            "Word: \"{word}\"\nSentence: \"{sentence}\"\n\nmeaning_ko: its Korean meaning in this sentence (short). note_ko: one short note \
-             (base form, nuance, or if it's old-fashioned). example: a different, everyday example sentence. example_ko: its translation. \
+            "Japanese word: \"{word}\"\nSentence: \"{sentence}\"\n\nmeaning_ko: its Korean meaning in this sentence (short). note_ko: one short note \
+             (its reading in hiragana and dictionary form, nuance, or if it's old-fashioned). example: a different, everyday example sentence. example_ko: its translation. \
              proper_noun: true if it is a name here (a place, person, brand or organization), not an ordinary word."
         );
         self.call(user, schema, "low")
@@ -574,9 +585,9 @@ impl Claude {
             .collect();
         let user = format!(
             "Assess the learner's {lang} speaking level.\nCurrent recorded level: {current:.1}/10.\n\
-             Reading-aloud results (sentences go from A1 to C1 difficulty):\n{reads}\n\
+             Reading-aloud results (sentences go from JLPT N5 to N1 difficulty):\n{reads}\n\
              Free-speech question: {question}\nTheir answer (transcript): \"{answer}\"\n\n\
-             level: a number from 1.0 to 10.0 on this scale: 1-2 A1, 2-3.5 A2, 3.5-5 B1, 5-6.5 B1+, 6.5-8 B2, 8-9 B2+, 9-10 C1. \
+             level: a number from 1.0 to 10.0 on this scale of speaking ability: 1-2 N5, 2-3.5 N4, 3.5-5 N3, 5-6.5 N3+, 6.5-8 N2, 8-9 N2+, 9-10 N1. \
              Weigh free speech more than reading. summary_ko: 2-3 sentences. 2-3 strengths and weaknesses. focus_next_ko: what to focus on next month.",
             lang = self.lang.name
         );
@@ -731,12 +742,20 @@ mod tests {
         assert!(parse_response::<CoachTip>(body).is_err());
     }
 
+    fn real(key: String) -> Claude {
+        Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::JAPANESE, down: Default::default() }
+    }
+
+    fn key() -> String {
+        std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY")
+    }
+
     /// Hits the real API with a bad key: checks connectivity, headers and error mapping.
     #[test]
     #[ignore]
     fn bad_key_gives_korean_auth_error() {
-        let c = Claude { url: API_URL.into(), api_key: "sk-ant-invalid".into(), model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
-        let err = c.pronunciation_coach("think", "sink", &["think".into()]).unwrap_err().to_string();
+        let c = real("sk-ant-invalid".into());
+        let err = c.pronunciation_coach("きって", "きて", &["きって".into()]).unwrap_err().to_string();
         println!("{err}");
         assert!(err.contains("API 키"), "{err}");
     }
@@ -745,11 +764,10 @@ mod tests {
     #[test]
     #[ignore]
     fn real_api_proper_noun() {
-        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
-        let name = c.word_in_context("Daegu", "I grew up in Daegu, but now I live in Seoul.").unwrap();
-        let word = c.word_in_context("grew", "I grew up in Daegu, but now I live in Seoul.").unwrap();
-        println!("Daegu → {name:?}\ngrew → {word:?}");
+        let c = real(key());
+        let name = c.word_in_context("大邱", "大邱で育ちましたが、今はソウルに住んでいます。").unwrap();
+        let word = c.word_in_context("育ちました", "大邱で育ちましたが、今はソウルに住んでいます。").unwrap();
+        println!("大邱 → {name:?}\n育ちました → {word:?}");
         assert!(name.proper_noun && !word.proper_noun);
     }
 
@@ -758,15 +776,14 @@ mod tests {
     #[test]
     #[ignore]
     fn real_api_listen_and_respond() {
-        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
+        let c = real(key());
         let qs = c.listen_questions(3.0, "Shopping and money", &[]).expect("questions");
         for q in &qs {
             println!("Q: {} / {} / {}", q.question, q.question_ko, q.sample_answer);
         }
         assert_eq!(qs.len(), 6);
-        let good = c.judge_answer("How was your weekend?", "it was good I went to the park with my family", 3.0).expect("judge");
-        let bad = c.judge_answer("How was your weekend?", "I am thirty years old", 3.0).expect("judge");
+        let good = c.judge_answer("週末はどうでしたか。", "楽しかったです 家族と公園に行きました", 3.0).expect("judge");
+        let bad = c.judge_answer("週末はどうでしたか。", "わたしは三十歳です", 3.0).expect("judge");
         println!("good: {good:?}\nbad: {bad:?}");
         assert!(good.understood && !bad.understood);
     }
@@ -774,34 +791,33 @@ mod tests {
     #[test]
     #[ignore]
     fn real_api_lesson_chunks() {
-        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
+        let c = real(key());
         let req = LessonRequest {
-            day: 4, week: 1, phase: "1단계".into(), theme: "Shopping and money".into(), business: "Prices".into(), grammar: "how much/many".into(),
-            level: 3.0, known: vec![], known_phrases: vec!["It depends on".into()], weak: vec![], n_words: 8, n_sentences: 5,
+            day: 4, week: 5, phase: "1단계".into(), theme: "Shopping and money".into(), business: "Prices".into(), grammar: "いくら, ～がほしい".into(),
+            level: 3.0, known: vec![], known_phrases: vec!["と思います".into()], weak: vec![], n_words: 8, n_sentences: 5,
             avoid_sentences: vec![], avoid_questions: vec![], avoid_scenarios: vec![],
         };
         let l = c.generate_lesson(&req).expect("lesson");
         for p in &l.phrases {
             println!("chunk: {} = {} | {}", p.word, p.meaning_ko, p.example);
-            assert!(p.example.to_lowercase().contains(&p.word.to_lowercase()), "example uses the chunk");
+            assert!(p.example.contains(&p.word), "example uses the chunk");
         }
-        println!("words: {:?}", l.words.iter().map(|w| &w.word).collect::<Vec<_>>());
+        println!("words: {:?}", l.words.iter().map(|w| format!("{}({})", w.word, w.reading)).collect::<Vec<_>>());
         println!("expressions: {:?}", l.expressions.iter().map(|w| &w.word).collect::<Vec<_>>());
         assert_eq!(l.phrases.len(), 4);
         assert_eq!(l.expressions.len(), 1);
-        assert!(!l.phrases.iter().any(|p| p.word == "It depends on"));
+        assert!(!l.phrases.iter().any(|p| p.word == "と思います"));
+        assert!(l.words.iter().all(|w| !w.reading.is_empty()));
     }
 
     #[test]
     #[ignore]
     fn real_api_grammar_roles() {
-        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
-        let g = c.chunk_gloss("I am a boy.").expect("gloss");
-        println!("{}", g.iter().map(|c| format!("{}={}({})", c.en, c.ko, c.role)).collect::<Vec<_>>().join(" / "));
+        let c = real(key());
+        let g = c.chunk_gloss("私は学生です。").expect("gloss");
+        println!("{}", g.iter().map(|c| format!("{}={}({})", c.ja, c.ko, c.role)).collect::<Vec<_>>().join(" / "));
+        assert!(crate::storage::chunks_match("私は学生です。", &g));
         assert_eq!(g[0].role, "subject");
-        assert_eq!(g[1].role, "verb");
         let texts = vec!["나는 커피를 좋아해.".to_string(), "제 일정을 확인해 볼게요.".to_string()];
         let r = c.ko_roles(&texts).expect("ko roles");
         for (t, segs) in texts.iter().zip(&r) {
@@ -813,14 +829,13 @@ mod tests {
     #[test]
     #[ignore]
     fn real_api_all_features() {
-        let key = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY");
-        let c = Claude { url: API_URL.into(), api_key: key, model: "claude-opus-5-5".into(), lang: &crate::language::ENGLISH, down: Default::default() };
+        let c = real(key());
         let t = std::time::Instant::now();
         let req = LessonRequest {
             day: 3, week: 1, phase: "1단계".into(), theme: "Introducing yourself".into(),
-            business: "Introducing yourself at work".into(), grammar: "be verbs".into(), level: 3.0,
-            known: vec!["introduce".into()], known_phrases: vec!["It depends on".into()], weak: vec!["Nice to meet you.".into()], n_words: 4, n_sentences: 3,
-            avoid_sentences: vec![], avoid_questions: vec!["Tell me about your typical day.".into()], avoid_scenarios: vec![],
+            business: "Introducing yourself at work".into(), grammar: "です・ます".into(), level: 3.0,
+            known: vec!["紹介".into()], known_phrases: vec!["と思います".into()], weak: vec!["はじめまして。".into()], n_words: 4, n_sentences: 3,
+            avoid_sentences: vec![], avoid_questions: vec!["週末はいつも何をしますか。".into()], avoid_scenarios: vec![],
         };
         let l = c.generate_lesson(&req).expect("lesson");
         println!("lesson ({:?}): words={:?}", t.elapsed(), l.words.iter().map(|w| &w.word).collect::<Vec<_>>());
@@ -828,29 +843,29 @@ mod tests {
         assert_eq!(l.sentences.len(), 3);
         for s in &l.sentences {
             let ok = crate::storage::chunks_match(&s.text, &s.chunks);
-            println!("  {} | {}", s.text, s.chunks.iter().map(|c| format!("{}={}", c.en, c.ko)).collect::<Vec<_>>().join(" / "));
+            println!("  {} | {}", s.text, s.chunks.iter().map(|c| format!("{}={}", c.ja, c.ko)).collect::<Vec<_>>().join(" / "));
             assert!(ok, "lesson chunks must spell the sentence: {}", s.text);
         }
-        let g = c.chunk_gloss("I have been working here for three years.").expect("gloss");
-        println!("gloss: {}", g.iter().map(|c| format!("{}={}", c.en, c.ko)).collect::<Vec<_>>().join(" / "));
-        assert!(crate::storage::chunks_match("I have been working here for three years.", &g));
-        let f = c.speech_feedback("What do you do?", "i am work in company as designer since two year", 3.0).expect("feedback");
+        let g = c.chunk_gloss("ここで三年働いています。").expect("gloss");
+        println!("gloss: {}", g.iter().map(|c| format!("{}={}", c.ja, c.ko)).collect::<Vec<_>>().join(" / "));
+        assert!(crate::storage::chunks_match("ここで三年働いています。", &g));
+        let f = c.speech_feedback("お仕事は何ですか。", "わたしは会社で働きますデザイナーです二年から", 3.0).expect("feedback");
         println!("feedback: overall={} natural={:?} corrections={}", f.overall, f.natural_version, f.corrections.len());
         assert!(!f.corrections.is_empty() && !f.natural_version.is_empty());
         let sc = l.business.clone();
-        let turn = c.roleplay_turn(&sc, &[(false, sc.opening_line.clone()), (true, "yesterday i go to meeting with my boss".into())], 3.0).expect("roleplay");
+        let turn = c.roleplay_turn(&sc, &[(false, sc.opening_line.clone()), (true, "きのう部長と会議に行きます".into())], 3.0).expect("roleplay");
         println!("roleplay: {:?} / correction {:?}", turn.reply, turn.correction);
         assert!(!turn.reply.is_empty());
-        let open = c.roleplay_turn(&BusinessScenario { title: "Hotel".into(), scenario_ko: "호텔 예약 누락 항의".into(), ai_role: "hotel manager".into(), user_role: "guest".into(), ..Default::default() }, &[], 3.0).expect("open");
-        println!("custom scene opening: {:?}", open.reply);
-        let sp = c.speed_passage(8, "Daily routines", "present simple", 3.0, 210, &["usually".into()], &["My Morning".into()]).expect("passage");
-        println!("speed passage: {} words, chunks ok={}", sp.passage.split_whitespace().count(), crate::storage::chunks_match(&sp.passage, &sp.chunks));
-        let w = c.check_word_use("deadline", "마감일", "the deadline of project is next monday").expect("word");
+        let sp = c.speed_passage(8, "Daily routines", "ます-form", 3.0, 450, &["いつも".into()], &["わたしの一日".into()]).expect("passage");
+        println!("speed passage: {} chars, chunks ok={}", crate::ja::char_count(&sp.passage), crate::storage::chunks_match(&sp.passage, &sp.chunks));
+        let w = c.check_word_use("締め切り", "마감", "プロジェクトのしめきりは来週の月曜日です").expect("word");
         println!("word use: ok={} {}", w.ok, w.feedback_ko);
         assert!(w.ok);
-        let tip = c.pronunciation_coach("I think so.", "I sink so", &["think".into()]).expect("coach");
+        let tip = c.pronunciation_coach("切手を買いました。", "きてを買いました", &["切手".into()]).expect("coach");
         println!("coach: {} {:?}", tip.tip_ko, tip.focus_words);
-        let a = c.assess_level(&[("Hello, my name is Alex.".into(), "hello my name is alex".into(), 100.0)], "Introduce yourself.", "i am engineer. i like english but speaking is hard", 2.0).expect("assess");
+        let tr = c.translate_levels("내일 회의 시간 좀 바꿀 수 있을까요?").expect("translate");
+        println!("translate: {:?}", tr.versions.iter().map(|v| &v.japanese).collect::<Vec<_>>());
+        let a = c.assess_level(&[("はじめまして。キムと申します。".into(), "はじめましてキムともうします".into(), 100.0)], "自己紹介をお願いします。", "わたしはエンジニアです。日本語が好きですが話すのは難しいです", 2.0).expect("assess");
         println!("assess: level {:.1} {}", a.level, a.summary_ko);
         println!("total {:?}", t.elapsed());
     }
@@ -899,7 +914,7 @@ pub struct WordMeaning {
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct TranslationVersion {
     pub level_ko: String,
-    pub english: String,
+    pub japanese: String,
     pub note_ko: String,
 }
 

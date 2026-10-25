@@ -1,10 +1,10 @@
 #!/bin/sh
-# Builds "SpeakUp 6M.app" with a microphone usage description, so macOS asks for (and remembers)
+# Builds "SpeakUp 6M JP.app" with a microphone usage description, so macOS asks for (and remembers)
 # microphone permission for the app itself instead of for the terminal that launched it.
 set -e
 cd "$(dirname "$0")/.."
 cargo build --release
-APP="target/release/SpeakUp 6M.app"
+APP="target/release/SpeakUp 6M JP.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp target/release/speakup "$APP/Contents/MacOS/speakup"
@@ -15,9 +15,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>SpeakUp 6M</string>
-  <key>CFBundleDisplayName</key><string>SpeakUp 6M</string>
-  <key>CFBundleIdentifier</key><string>com.speakup.sixmonths</string>
+  <key>CFBundleName</key><string>SpeakUp 6M JP</string>
+  <key>CFBundleDisplayName</key><string>SpeakUp 6M JP</string>
+  <key>CFBundleIdentifier</key><string>com.speakup.sixmonths.japanese</string>
   <key>CFBundleExecutable</key><string>speakup</string>
   <key>CFBundleIconFile</key><string>icon</string>
   <key>CFBundlePackageType</key><string>APPL</string>

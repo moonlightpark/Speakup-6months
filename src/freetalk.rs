@@ -1,5 +1,5 @@
 //! 자유 회화 scenario library: 8 categories × 50 scenarios (`assets/freetalk.json`). In each
-//! the app plays someone and asks 5 questions in turn; the learner answers in English. With
+//! the app plays someone and asks 5 questions in turn; the learner answers in Japanese. With
 //! Claude the questions are a plan the AI follows while reacting naturally; without it they are
 //! asked one after another as a script, with a sample answer as the hint.
 
@@ -34,7 +34,7 @@ pub struct Question {
 pub struct FreeScenario {
     pub id: String,
     pub category: String,
-    /// 1 = easy (A1–A2), 2 = A2–B1, 3 = B1–B2.
+    /// 1 = easy (N5–N4), 2 = N4–N3, 3 = N3–N2.
     pub level: u32,
     pub title: String,
     pub title_ko: String,
@@ -49,7 +49,7 @@ pub struct FreeScenario {
 
 pub fn all() -> &'static [FreeScenario] {
     static DATA: OnceLock<Vec<FreeScenario>> = OnceLock::new();
-    DATA.get_or_init(|| serde_json::from_str(include_str!("../assets/freetalk.json")).unwrap_or_default())
+    DATA.get_or_init(|| serde_json::from_str(include_str!("../assets/ja/freetalk.json")).unwrap_or_default())
 }
 
 pub fn by_category(id: &str) -> Vec<&'static FreeScenario> {

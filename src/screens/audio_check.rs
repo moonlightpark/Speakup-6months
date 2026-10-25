@@ -262,7 +262,7 @@ impl App {
                 self.voice.player.test_tone();
             }
             if ui.button("💬 원어민 음성 테스트").clicked() {
-                self.voice.say("Hello! Can you hear me clearly?");
+                self.voice.say("こんにちは。わたしの声、はっきり聞こえますか。");
             }
         });
         if self.voice.player.output_failed() {

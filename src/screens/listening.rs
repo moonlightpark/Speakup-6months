@@ -25,10 +25,10 @@ impl Default for ListeningState {
     }
 }
 
-/// YouGlish search for a word or sentence: "peckish" →
-/// https://youglish.com/pronounce/peckish/english (a sentence without its end mark).
+/// YouGlish search (Japanese videos) for a word or sentence: "なるほど" →
+/// https://youglish.com/pronounce/%E3%81%AA…/japanese (a sentence without its end mark).
 pub fn youglish_url(text: &str) -> String {
-    let q = text.trim().trim_end_matches(['.', '!', '?', ',']).trim();
+    let q = text.trim().trim_end_matches(['.', '!', '?', ',', '。', '！', '？', '、']).trim();
     let mut enc = String::new();
     for c in q.chars() {
         match c {
@@ -43,7 +43,7 @@ pub fn youglish_url(text: &str) -> String {
             }
         }
     }
-    format!("https://youglish.com/pronounce/{enc}/english")
+    format!("https://youglish.com/pronounce/{enc}/{}", crate::language::JAPANESE.youglish)
 }
 
 impl App {
@@ -53,7 +53,7 @@ impl App {
         // Today's longer sentences come with the lesson.
         self.ensure_lesson();
         let lesson = self.lesson.clone().filter(|l| l.date == Some(today())).unwrap_or_default();
-        let sentences: Vec<(String, String)> = self.idiom_set().iter().map(|i| (i.en.clone(), i.ko.clone())).chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone()))).collect();
+        let sentences: Vec<(String, String)> = self.idiom_set().iter().map(|i| (i.ja.clone(), i.ko.clone())).chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone()))).collect();
         if sentences.is_empty() {
             card(ui, |ui| {
                 ui.label(RichText::new("오늘 문장이 아직 없어요. 📖 문장 읽기를 먼저 열어 주세요.").color(muted()));
@@ -243,10 +243,8 @@ impl App {
 mod tests {
     #[test]
     fn youglish_search_urls() {
-        assert_eq!(super::youglish_url("peckish"), "https://youglish.com/pronounce/peckish/english");
-        assert_eq!(super::youglish_url(" café "), "https://youglish.com/pronounce/caf%C3%A9/english");
-        assert_eq!(super::youglish_url("I'm a little peckish."), "https://youglish.com/pronounce/I'm%20a%20little%20peckish/english");
-        assert_eq!(super::youglish_url("Rock & roll, baby!"), "https://youglish.com/pronounce/Rock%20%26%20roll%2C%20baby/english");
-        assert_eq!(super::youglish_url("I’m in"), "https://youglish.com/pronounce/I'm%20in/english");
+        assert_eq!(super::youglish_url("なるほど"), "https://youglish.com/pronounce/%E3%81%AA%E3%82%8B%E3%81%BB%E3%81%A9/japanese");
+        assert_eq!(super::youglish_url("なるほど。"), super::youglish_url("なるほど"), "end mark dropped");
+        assert_eq!(super::youglish_url("OK です"), "https://youglish.com/pronounce/OK%20%E3%81%A7%E3%81%99/japanese");
     }
 }

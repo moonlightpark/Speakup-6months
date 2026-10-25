@@ -1,4 +1,4 @@
-//! 🌐 Translator: say (or type) something in Korean and get it in English at three levels —
+//! 🌐 Translator: say (or type) something in Korean and get it in Japanese at three levels —
 //! easy, everyday native, and advanced — shown as text and spoken, ready to repeat aloud.
 
 use crate::app::App;
@@ -24,7 +24,7 @@ pub struct TranslatorState {
 
 impl App {
     pub fn translator_ui(&mut self, ui: &mut Ui) {
-        page_title(ui, "🌐 자동 번역기", "한국어로 말하거나 쓰면, 쉬운 · 중간 · 고급 영어 표현으로 바꿔서 보여 주고 읽어 줍니다.");
+        page_title(ui, "🌐 자동 번역기", "한국어로 말하거나 쓰면, 쉬운 · 중간 · 고급 일본어 표현으로 바꿔서 보여 주고 읽어 줍니다.");
         let claude = self.claude();
         if claude.is_none() {
             card(ui, |ui| {
@@ -40,9 +40,9 @@ impl App {
                 // Speak the version closest to the learner's level.
                 let pick = if self.store.profile.level < 4.0 { 0 } else if self.store.profile.level < 7.0 { 1 } else { 2 };
                 if let Some(v) = t.versions.get(pick.min(t.versions.len().saturating_sub(1))) {
-                    self.voice.say(&v.english);
+                    self.voice.say(&v.japanese);
                 }
-                self.store.log_attempt("translator", &self.translator.korean, &t.versions.iter().map(|v| v.english.clone()).collect::<Vec<_>>().join(" | "), 0.0);
+                self.store.log_attempt("translator", &self.translator.korean, &t.versions.iter().map(|v| v.japanese.clone()).collect::<Vec<_>>().join(" | "), 0.0);
             }
             self.translator.result = Some(r.map_err(|e| format!("{e:#}")));
             self.translator.drill = None;
@@ -80,7 +80,7 @@ impl App {
             self.translator.job.spawn(move || c.translate_levels(&k));
         }
         if self.translator.job.running() {
-            spinner_label(ui, "영어 표현을 만들고 있어요…");
+            spinner_label(ui, "일본어 표현을 만들고 있어요…");
         }
 
         // Three versions
@@ -100,23 +100,23 @@ impl App {
                         card(ui, |ui| {
                             ui.horizontal(|ui| {
                                 chip(ui, &v.level_ko, colors[i % 3]);
-                                ui.label(RichText::new(&v.english).size(21.0).strong());
+                                ui.label(RichText::new(&v.japanese).size(21.0).strong());
                             });
                             if !v.note_ko.is_empty() {
                                 ui.label(RichText::new(format!("💡 {}", v.note_ko)).color(gloss()));
                             }
                             ui.horizontal(|ui| {
                                 if ui.button("🔊 듣기").clicked() {
-                                    self.voice.say(&v.english);
+                                    self.voice.say(&v.japanese);
                                 }
                                 if ui.button("🐢 천천히").clicked() {
-                                    self.voice.say_slow(&v.english);
+                                    self.voice.say_slow(&v.japanese);
                                 }
                                 if ui.button("🎤 따라 말하기").clicked() {
-                                    practice = Some(v.english.clone());
+                                    practice = Some(v.japanese.clone());
                                 }
                                 if ui.button("⭐ 저장 (복습)").clicked() {
-                                    save = Some((v.english.clone(), self.translator.korean.clone()));
+                                    save = Some((v.japanese.clone(), self.translator.korean.clone()));
                                 }
                             });
                         });
@@ -159,7 +159,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(k).color(muted()));
                     if let Some(v) = t.versions.get(1).or(t.versions.first()) {
-                        if ui.link(&v.english).clicked() {
+                        if ui.link(&v.japanese).clicked() {
                             reopen = Some(i);
                         }
                     }

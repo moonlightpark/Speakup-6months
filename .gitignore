@@ -13,3 +13,6 @@
 
 # Working files (Order.md: never committed)
 /DATA/
+
+# Content drafts the assets/ja/*.json files were merged from
+/assets/ja/parts/

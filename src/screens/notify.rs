@@ -96,7 +96,7 @@ impl App {
                     icon: "📊",
                     title: format!("지금까지 {}일 · {hours:.1}시간 공부했어요", p.days_studied.max(1)),
                     body: format!(
-                        "단어 {}개 (기억 완료 {}) · 숙어 문장 {}개 (기억 완료 {}).{}",
+                        "단어 {}개 (기억 완료 {}) · 회화 문장 {}개 (기억 완료 {}).{}",
                         words.0,
                         words.1,
                         idioms.0,

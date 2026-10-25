@@ -30,7 +30,7 @@ pub fn word_sheet_html(title: &str, rows: &[(String, String)]) -> String {
 <style>
 @page {{ size: A4 portrait; margin: 14mm 12mm; }}
 * {{ box-sizing: border-box; }}
-body {{ margin: 0; font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; font-size: {font_pt:.1}pt; color: #000; }}
+body {{ margin: 0; font-family: -apple-system, "Hiragino Sans", "Yu Gothic", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans JP", "Noto Sans KR", sans-serif; font-size: {font_pt:.1}pt; color: #000; }}
 h1 {{ font-size: 15pt; margin: 0 0 4mm; }}
 .cols {{ display: flex; gap: 6mm; align-items: flex-start; }}
 table {{ flex: 1; border-collapse: collapse; table-layout: fixed; }}

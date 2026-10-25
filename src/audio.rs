@@ -1,6 +1,6 @@
 //! Microphone capture (cpal) and playback (rodio), each on its own thread: device lists and
 //! mic diagnostics, learner recordings (resampled to 16 kHz for speech recognition), and
-//! playback of recordings and the neural voice.
+//! playback of recordings.
 
 use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -499,7 +499,7 @@ pub fn voiced_seconds(samples: &[f32], rate: u32) -> f32 {
     }
 }
 
-/// Words per minute over the voiced part of a recording.
+/// Speaking speed over the voiced part of a recording: units (Japanese characters) a minute.
 pub fn wpm(words: usize, voiced_secs: f32) -> f32 {
     if voiced_secs < 0.3 { 0.0 } else { words as f32 / voiced_secs * 60.0 }
 }
@@ -508,8 +508,6 @@ pub fn wpm(words: usize, voiced_secs: f32) -> f32 {
 
 enum PlayCmd {
     Play(Vec<f32>, u32),
-    /// Queue after whatever is playing (sentence-by-sentence speech).
-    Append(Vec<f32>, u32),
     Stop,
     Device(String),
 }
@@ -609,23 +607,6 @@ impl Player {
                             }
                         }
                     }
-                    Ok(PlayCmd::Append(samples, rate)) => {
-                        match (&sink, &out) {
-                            (Some(s), Some(o)) if !s.empty() => s.append(o.clip(samples, rate)),
-                            _ => {
-                                if out.is_none() {
-                                    out = open_output(&preferred);
-                                    fl.store(out.is_none(), Ordering::Relaxed);
-                                }
-                                if let Some(o) = &out {
-                                    if let Ok(s) = Sink::try_new(&o.handle) {
-                                        s.append(o.clip(samples, rate));
-                                        sink = Some(s);
-                                    }
-                                }
-                            }
-                        }
-                    }
                     Ok(PlayCmd::Stop) => {
                         if let Some(s) = sink.take() {
                             s.stop();
@@ -647,11 +628,6 @@ impl Player {
             }
         });
         Self { tx, opening_since, playing, failed, clip_len: 0.0 }
-    }
-
-    /// A cloneable sender for other threads (the speech synthesizer) to play through.
-    pub fn handle(&self) -> PlayerHandle {
-        PlayerHandle { tx: self.tx.clone(), playing: self.playing.clone() }
     }
 
     /// True when the OS audio output has not responded for several seconds (e.g. a hung
@@ -700,23 +676,6 @@ impl Player {
         };
         let samples: Vec<f32> = note(660.0, 0.25).chain(note(880.0, 0.35)).collect();
         self.play_samples(samples, rate);
-    }
-}
-
-#[derive(Clone)]
-pub struct PlayerHandle {
-    tx: std::sync::mpsc::Sender<PlayCmd>,
-    playing: Arc<AtomicBool>,
-}
-
-impl PlayerHandle {
-    pub fn play(&self, samples: Vec<f32>, rate: u32) {
-        self.playing.store(true, Ordering::Relaxed);
-        let _ = self.tx.send(PlayCmd::Play(samples, rate));
-    }
-    pub fn append(&self, samples: Vec<f32>, rate: u32) {
-        self.playing.store(true, Ordering::Relaxed);
-        let _ = self.tx.send(PlayCmd::Append(samples, rate));
     }
 }
 

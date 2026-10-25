@@ -18,7 +18,7 @@ pub struct Script {
 
 pub fn all() -> &'static [Script] {
     static DATA: OnceLock<Vec<Script>> = OnceLock::new();
-    DATA.get_or_init(|| serde_json::from_str(include_str!("../assets/speed_scripts.json")).unwrap_or_default())
+    DATA.get_or_init(|| serde_json::from_str(include_str!("../assets/ja/speed_scripts.json")).unwrap_or_default())
 }
 
 /// Week of a program day (7 days a week, 26 weeks).
@@ -43,8 +43,8 @@ mod tests {
         for week in 1..=26 {
             for variant in 0..2 {
                 let s = all().iter().find(|s| s.week == week && s.variant == variant).unwrap_or_else(|| panic!("week {week} variant {variant}"));
-                let n = s.script.split_whitespace().count();
-                assert!((200..=280).contains(&n), "week {week}/{variant}: {n} words");
+                let n = crate::ja::char_count(&s.script);
+                assert!((350..=680).contains(&n), "week {week}/{variant}: {n} characters");
                 assert!(!s.title.is_empty() && !s.title_ko.is_empty() && !s.script_ko.is_empty());
             }
         }

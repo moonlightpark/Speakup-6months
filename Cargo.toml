@@ -1,9 +1,9 @@
 [package]
 name = "speakup"
-version = "1.28.2"
+version = "2.0.0"
 edition = "2024"
-rust-version = "1.86"
-description = "6개월 영어 듣기·말하기 완성 – 음성 지원 영어 학습 데스크톱 앱 (Claude API)"
+rust-version = "1.88"
+description = "6개월 일본어 듣기·말하기 완성 – 음성 지원 일본어 학습 데스크톱 앱 (Claude API)"
 license = "MIT"
 
 [dependencies]
@@ -21,25 +21,22 @@ directories = "6"
 anyhow = "1"
 rand = "0.9"
 open = "5"
-bzip2 = "0.5"
-tar = "0.4"
 # YouGlish videos inside the window (macOS WKWebView / Windows WebView2).
 wry = { version = "0.53", default-features = false, features = ["os-webview"] }
 # 받아쓰기 pictures (Wikimedia Commons photos).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# Japanese morphological analysis (IPADIC built in): readings for furigana and scoring, words,
+# base forms and parts of speech. The dictionary is static data paged in on use (~5 MB resident).
+lindera = { version = "6.2", default-features = false, features = ["embed-ipadic"] }
+# 青空文庫 books: ZIP archives of Shift_JIS text.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+encoding_rs = "0.8"
 
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["eframe"] }
 hound = "3.5"
 
-# Neural TTS (sherpa-onnx). Statically linked on macOS; the prebuilt static Windows/Linux
-# libraries have no TTS, so there the shared libraries are shipped next to the executable.
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries"] }
-
 [target.'cfg(target_os = "macos")'.dependencies]
-sherpa-rs = { version = "0.6.8", default-features = false, features = ["tts", "download-binaries", "static"] }
 block2 = "0.6"
 objc2 = "0.6"
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
@@ -57,7 +54,7 @@ lto = "thin"
 opt-level = 2
 
 [package.metadata.bundle]
-name = "SpeakUp 6M"
-identifier = "com.speakup.sixmonths"
+name = "SpeakUp 6M JP"
+identifier = "com.speakup.sixmonths.japanese"
 category = "Education"
-short_description = "6개월 영어 듣기·말하기 완성"
+short_description = "6개월 일본어 듣기·말하기 완성"

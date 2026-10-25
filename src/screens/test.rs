@@ -1,5 +1,5 @@
 //! Level test: the placement test on first run and the monthly checkpoints. Six graded
-//! sentences read aloud (A1→C1) plus one free-speech answer, assessed by Claude.
+//! sentences read aloud (N5→N1) plus one free-speech answer, assessed by Claude.
 
 use crate::app::{App, Screen};
 use crate::claude::LevelAssessment;
@@ -25,7 +25,7 @@ pub struct LevelTest {
 
 impl LevelTest {
     pub fn new(placement: bool, week: u32) -> Self {
-        let (t, ko) = content::PLACEMENT[0];
+        let (t, ko) = content::placement()[0];
         Self {
             placement,
             retest: false,
@@ -71,11 +71,11 @@ impl App {
             ui.add_space(10.0);
             ui.heading(title);
         });
-        let total = content::PLACEMENT.len() + 1;
+        let total = content::placement().len() + 1;
         ui.add(egui::ProgressBar::new((t.idx as f32 / total as f32).min(1.0)).desired_height(6.0).fill(ACCENT));
         ui.add_space(10.0);
 
-        if t.idx < content::PLACEMENT.len() {
+        if t.idx < content::placement().len() {
             ui.label(RichText::new("문장을 듣지 말고 바로 소리 내어 읽어 보세요. 어려우면 '모르겠어요'를 눌러도 됩니다.").color(muted()));
             // Reading test: no audio model first — the learner reads cold.
             let ev = card(ui, |ui| t.drill.ui(ui, &mut self.voice, pass, None));
@@ -95,12 +95,12 @@ impl App {
             }
             if next {
                 t.idx += 1;
-                if let Some((s, ko)) = content::PLACEMENT.get(t.idx) {
+                if let Some((s, ko)) = content::placement().get(t.idx) {
                     t.drill = Drill::new(s, ko, "", 1, false, false).without_autoplay();
                 }
             }
         } else if t.result.is_none() && t.answer.is_none() {
-            let (q, qko) = content::PLACEMENT_QUESTION;
+            let (q, qko) = content::placement_question();
             card(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.label(RichText::new("마지막: 자유롭게 말하기 (30초~1분)").color(muted()));
@@ -113,7 +113,7 @@ impl App {
                     if let Some(a) = t.capture.ui(ui, &mut self.voice, 75.0) {
                         t.answer = Some(a);
                     }
-                    if ui.button("영어로 말하기 어려워요 (건너뛰기)").clicked() {
+                    if ui.button("일본어로 말하기 어려워요 (건너뛰기)").clicked() {
                         t.answer = Some(String::new());
                     }
                 });

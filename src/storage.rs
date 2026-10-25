@@ -76,9 +76,15 @@ pub fn data_dir() -> PathBuf {
     if let Ok(d) = std::env::var("SPEAKUP_DATA_DIR") {
         return PathBuf::from(d);
     }
-    directories::ProjectDirs::from("com", "SpeakUp", "SpeakUp6M")
+    // Its own folder, apart from the English app's (SpeakUp6M), so the two records never mix.
+    directories::ProjectDirs::from("com", "SpeakUp", "SpeakUp6M-JP")
         .map(|p| p.data_dir().to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("speakup-data"))
+        .unwrap_or_else(|| PathBuf::from("speakup-jp-data"))
+}
+
+/// The English app's models folder, whose multilingual whisper models this app can reuse.
+pub fn english_app_models_dir() -> Option<PathBuf> {
+    directories::ProjectDirs::from("com", "SpeakUp", "SpeakUp6M").map(|p| p.data_dir().join("models"))
 }
 
 impl Store {
@@ -277,8 +283,11 @@ impl Store {
         }
         for w in words {
             let w: String = w.chars().filter(|c| c.is_alphanumeric() || *c == '\'' || *c == '’').collect::<String>().to_lowercase();
-            if w.chars().count() < 3 {
-                continue; // tiny function words are mostly recognizer noise
+            // Particles and endings (は, を, ます) are mostly recognizer noise; a word with a
+            // kanji counts from one character (机), kana-only from two.
+            let function = crate::ja::tokenize(&w).iter().all(|t| matches!(t.pos.as_str(), "助詞" | "助動詞" | "記号"));
+            if function || w.chars().count() < if crate::ja::has_kanji(&w) { 1 } else { 2 } {
+                continue;
             }
             match self.mistakes.iter_mut().find(|m| m.word == w) {
                 Some(m) => {
@@ -363,11 +372,10 @@ impl Store {
     }
 }
 
+/// The chunks put together spell the sentence (whitespace aside), so colours line up.
 pub fn chunks_match(text: &str, chunks: &[Chunk]) -> bool {
-    let joined: Vec<String> = chunks.iter().map(|c| c.en.clone()).collect();
-    !chunks.is_empty()
-        && text.split_whitespace().count() == joined.join(" ").split_whitespace().count()
-        && crate::scoring::normalize(text) == crate::scoring::normalize(&joined.join(" "))
+    let compact = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    !chunks.is_empty() && compact(text) == compact(&chunks.iter().map(|c| c.ja.as_str()).collect::<String>())
 }
 
 fn log_err(r: Result<()>) {
@@ -380,19 +388,21 @@ fn log_err(r: Result<()>) {
 mod tests {
     use super::*;
 
-    fn ch(en: &str, ko: &str) -> Chunk {
-        Chunk { en: en.into(), ko: ko.into(), role: "subject".into() }
+    fn ch(ja: &str, ko: &str) -> Chunk {
+        Chunk { ja: ja.into(), ko: ko.into(), role: "subject".into() }
+    }
+
+    fn boy() -> Vec<Chunk> {
+        vec![ch("私は", "나는"), ch("学生です。", "학생이다.")]
     }
 
     #[test]
     fn gloss_must_spell_the_sentence() {
-        let good = vec![ch("I", "나"), ch("am", "이다"), ch("a", "한"), ch("boy.", "소년")];
-        assert!(chunks_match("I am a boy.", &good));
-        let phrase = vec![ch("I", "나는"), ch("wake up", "일어난다"), ch("early.", "일찍")];
-        assert!(chunks_match("I wake up early.", &phrase));
-        let wrong = vec![ch("I", "나"), ch("am", "이다"), ch("boy", "소년")];
-        assert!(!chunks_match("I am a boy.", &wrong));
-        assert!(!chunks_match("I am a boy.", &[]));
+        assert!(chunks_match("私は学生です。", &boy()));
+        assert!(chunks_match("私は 学生です。", &boy()), "spaces don't matter");
+        let wrong = vec![ch("私は", "나는"), ch("学生", "학생")];
+        assert!(!chunks_match("私は学生です。", &wrong));
+        assert!(!chunks_match("私は学生です。", &[]));
     }
 
     #[test]
@@ -400,14 +410,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("speakup-test-{}", std::process::id()));
         let mut s = Store::open_at(dir.clone()).unwrap();
         s.add_mistakes(&["Think".into(), "a".into(), "think".into()]);
-        s.put_gloss("I am a boy.", &[ch("I", "나"), ch("am", "이다"), ch("a", "한"), ch("boy.", "소년")]);
+        s.put_gloss("私は学生です。", &boy());
         s.record_level(4.2, "test");
         let s2 = Store::open_at(dir.clone()).unwrap();
         assert_eq!(s2.mistakes.len(), 1);
         assert_eq!(s2.mistakes[0].count, 2);
-        assert_eq!(s2.gloss_for("I am a boy.").len(), 4);
+        assert_eq!(s2.gloss_for("私は学生です。").len(), 2);
         assert_eq!(s2.profile.level, 4.2);
-        assert!(std::fs::read_to_string(dir.join("level_log.csv")).unwrap().contains("4.20,B1"));
+        assert!(std::fs::read_to_string(dir.join("level_log.csv")).unwrap().contains("4.20,N3"));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

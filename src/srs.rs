@@ -156,6 +156,7 @@ mod tests {
 
     #[test]
     fn ids_are_stable() {
-        assert_eq!(make_id(ItemKind::Sentence, "Nice to meet you!"), "s:nice_to_meet_you");
+        assert_eq!(make_id(ItemKind::Sentence, "はじめまして！"), "s:はじめまして");
+        assert_eq!(make_id(ItemKind::Word, "食べる"), make_id(ItemKind::Word, "食べる。"));
     }
 }

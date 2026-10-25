@@ -1,9 +1,9 @@
 //! Speed training (Order.md: "빨리 읽고 빨리 말할 수 있는 훈련").
 //! 1) Speed reading aloud — each program day (회차) has a 2-minute script on the week's theme:
-//!    hear it, read along sentence by sentence, then read all of it (WPM over correctly read
-//!    words, against a level-based target).
+//!    hear it, read along sentence by sentence, then read all of it (characters a minute over
+//!    the correctly read words, against a level-based target).
 //! 2) Quick response — a Korean prompt appears, the mic opens automatically, and the learner
-//!    must say the English within a time limit.
+//!    must say the Japanese within a time limit.
 
 use crate::app::App;
 use crate::audio;
@@ -47,13 +47,14 @@ pub struct SpeedState {
     pub stats: Vec<(f32, f32, bool)>,
 }
 
-/// Target reading speed for a level: ~100 WPM for beginners up to ~160 (natural native pace).
+/// Target reading-aloud speed for a level, in Japanese characters a minute (자/분): ~180 for
+/// beginners up to ~360 (natural native conversation, about 7–8 morae a second).
 pub fn target_wpm(level: f32) -> f32 {
-    (80.0 + level * 9.0).min(165.0)
+    (150.0 + level * 22.0).min(360.0)
 }
 
 fn time_limit(target: &str) -> f32 {
-    2.5 + 0.45 * target.split_whitespace().count() as f32
+    2.5 + 0.2 * crate::ja::char_count(target) as f32
 }
 
 impl App {
@@ -68,7 +69,7 @@ impl App {
     pub fn speed_ui(&mut self, ui: &mut Ui) {
         page_title(ui, "⚡ 스피드 트레이닝", "빨리 읽고 빨리 말하기. 정확도를 지키면서 속도를 올립니다. 오늘 목표: 3라운드.");
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.speed.tab, 0, "📖 스피드 리딩 (WPM)");
+            ui.selectable_value(&mut self.speed.tab, 0, "📖 스피드 리딩 (자/분)");
             ui.selectable_value(&mut self.speed.tab, 1, "💨 순발력 말하기");
             ui.selectable_value(&mut self.speed.tab, 2, "⏱ 4/3/2 말하기");
             ui.label(RichText::new(format!("오늘 {}/3 라운드", self.store.profile.today.speed_rounds.min(3))).color(muted()));
@@ -139,7 +140,7 @@ impl App {
                 known.shuffle(&mut rand::rng());
                 known.truncate(15);
                 let avoid: Vec<String> = self.store.speed_scripts.values().map(|p| p.title.clone()).collect();
-                crate::applog!("speed: {day}일차 2분 대본 요청 ({words}단어, {})", w.theme);
+                crate::applog!("speed: {day}일차 2분 대본 요청 ({words}자, {})", w.theme);
                 self.speed.job_day = day;
                 self.speed.job.spawn(move || c.speed_passage(day, &theme, &grammar, level, words, &known, &avoid));
             }
@@ -149,7 +150,7 @@ impl App {
 
     fn builtin_day(&mut self, day: u32) {
         let p = crate::speed_scripts::for_day(day).unwrap_or_else(|| {
-            let (t, text) = content::SPEED_PASSAGES[day as usize % content::SPEED_PASSAGES.len()];
+            let (t, text) = content::speed_passages()[day as usize % content::speed_passages().len()];
             SpeedPassage { title: t.into(), passage: text.into(), passage_ko: String::new(), chunks: Vec::new() }
         });
         self.show_day_script(p);
@@ -194,8 +195,8 @@ impl App {
         let target = target_wpm(level);
         let best = self.store.profile.speed_history.iter().filter(|r| r.kind == "reading" && r.accuracy >= 85.0).map(|r| r.wpm).fold(0.0f32, f32::max);
         card(ui, |ui| {
-            ui.label("방법: 회차마다 2분 분량의 영어 대본 — ① 원어민 음성 듣기 → ② 문장별 따라 읽기 → ③ 대본 전체를 2분 안에 통째로 읽기 (반복할수록 빨라져요)");
-            ui.label(RichText::new(format!("목표: 정확도 85% 이상 + {target:.0} WPM 이상 · 내 최고 {best:.0} WPM · 원어민 대화 속도 약 150 WPM")).color(ACCENT));
+            ui.label("방법: 회차마다 2분 분량의 일본어 대본 — ① 원어민 음성 듣기 → ② 문장별 따라 읽기 → ③ 대본 전체를 2분 안에 통째로 읽기 (반복할수록 빨라져요)");
+            ui.label(RichText::new(format!("목표: 정확도 85% 이상 + 분당 {target:.0}자 이상 · 내 최고 {best:.0}자/분 · 원어민 대화 속도 약 350자/분")).color(ACCENT));
         });
         ui.add_space(6.0);
         // Which script: the 회차 (◀ ▶ to earlier days), or a book from the passages folder.
@@ -276,13 +277,13 @@ impl App {
             ui.add_space(4.0);
         }
         let sentences = crate::screens::speaking::split_sentences(&p.passage);
-        let words = p.passage.split_whitespace().count();
+        let words = crate::ja::char_count(&p.passage);
         let size = self.store.settings.list_size().max(18.0);
         let mut jump: Option<usize> = None;
         card(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(&p.title).size(20.0).strong());
-                ui.label(RichText::new(format!("{words}단어 · 약 {:.1}분", words as f32 / target)).color(muted()));
+                ui.label(RichText::new(format!("{words}자 · 약 {:.1}분", words as f32 / target)).color(muted()));
             });
             ui.horizontal_wrapped(|ui| {
                 if ui.add(egui::Button::new("🔊 원어민 속도").min_size(ACTION_BUTTON)).clicked() {
@@ -362,7 +363,7 @@ impl App {
         });
         if let Some(t) = new_result {
             let r = scoring::score(&p.passage, &t);
-            let correct = r.marks.iter().filter(|m| m.ok).count();
+            let correct = r.heard_chars();
             let wpm = audio::wpm(correct, self.speed.capture.last_secs);
             let missed: Vec<String> = r.marks.iter().filter(|m| !m.ok).map(|m| m.word.clone()).collect();
             self.record_attempt("speed-reading", &p.passage, &Attempt { score: r.score, transcript: t.clone(), missed });
@@ -375,13 +376,13 @@ impl App {
         if let Some((_, r, wpm)) = &self.speed.last {
             let ok = r.score >= 85.0 && *wpm >= target;
             if ok {
-                crate::art::cheer_strip(ui, t_read, &format!("🎯 목표 달성! {wpm:.0} WPM"));
+                crate::art::cheer_strip(ui, t_read, &format!("🎯 목표 달성! 분당 {wpm:.0}자"));
             } else if r.score >= 85.0 {
                 crate::art::cheer_strip(ui, t_read, &format!("👍 정확해요! {:.0}% — 이제 속도를 올려 봐요", r.score));
             }
             card(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{wpm:.0} WPM")).size(34.0).strong().color(if *wpm >= target { GOOD } else { warn() }));
+                    ui.label(RichText::new(format!("{wpm:.0}자/분")).size(34.0).strong().color(if *wpm >= target { GOOD } else { warn() }));
                     ui.add_space(16.0);
                     ui.label(RichText::new(format!("정확도 {:.0}%", r.score)).size(24.0).color(if r.score >= 85.0 { GOOD } else { BAD }));
                 });
@@ -390,7 +391,7 @@ impl App {
                 } else if r.score < 85.0 {
                     RichText::new("속도보다 정확도가 먼저예요. 빨간 단어를 듣고 다시 읽어 보세요.").color(warn())
                 } else {
-                    RichText::new(format!("정확해요! 이제 {:.0} WPM까지 속도를 올려 봅시다 — 문장 사이 쉬는 시간을 줄이세요.", target)).color(warn())
+                    RichText::new(format!("정확해요! 이제 분당 {:.0}자까지 속도를 올려 봅시다 — 문장 사이 쉬는 시간을 줄이세요.", target)).color(warn())
                 });
                 if self.speed.attempts.len() > 1 {
                     let trail: Vec<String> = self.speed.attempts.iter().enumerate().map(|(i, (w, a))| format!("{}회 {w:.0}({a:.0}%)", i + 1)).collect();
@@ -427,7 +428,7 @@ impl App {
             if let Some(l) = &self.lesson {
                 pool.extend(l.sentences.iter().map(|s| (s.text.clone(), s.ko.clone())));
             }
-            pool.extend(content::PLACEMENT.iter().take(4).map(|(e, k)| (e.to_string(), k.to_string())));
+            pool.extend(content::placement().iter().take(4).map(|(e, k)| (e.to_string(), k.to_string())));
         }
         pool.shuffle(&mut rand::rng());
         pool.truncate(10);
@@ -442,7 +443,7 @@ impl App {
         let pass = self.pass_score();
         let t_done = crate::art::since_event(ui, egui::Id::new("cheer_quick_response"), self.store.profile.speed_history.iter().filter(|s| s.kind == "response").count() as u64);
         card(ui, |ui| {
-            ui.label("한국어가 나오면 마이크가 자동으로 켜집니다. 생각나는 즉시 영어로 말하세요 — 말이 끝나면 자동으로 채점돼요.");
+            ui.label("한국어가 나오면 마이크가 자동으로 켜집니다. 생각나는 즉시 일본어로 말하세요 — 말이 끝나면 자동으로 채점돼요.");
             ui.label(RichText::new("배운 단어·문장에서 출제됩니다. 제한 시간 안에 정확히 말해야 통과.").color(muted()));
         });
         ui.add_space(6.0);
@@ -548,7 +549,7 @@ mod tests {
     #[test]
     fn targets_scale_with_level() {
         assert!(target_wpm(2.0) < target_wpm(8.0));
-        assert!(target_wpm(10.0) <= 165.0);
+        assert!(target_wpm(10.0) <= 360.0);
         assert!(time_limit("I'm fine") < time_limit("Could you send me the report by Friday afternoon?"));
     }
 }

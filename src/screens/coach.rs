@@ -1,5 +1,5 @@
 //! Speaking coach (Study.md): listen-and-respond, 4/3/2 speaking, the weekly recording to hear
-//! progress, and logs for human tutor lessons and mock speaking tests (OPIc / TOEIC Speaking).
+//! progress, and logs for human tutor lessons and mock tests (JLPT / JPT / OPIc 일본어).
 
 use crate::app::{App, Screen};
 use crate::claude::{AnswerJudgement, ListenQuestion};
@@ -10,7 +10,7 @@ use egui::{RichText, Ui};
 use rand::seq::SliceRandom;
 
 /// The same question every week, so recordings can be compared.
-pub const WEEKLY_QUESTION: (&str, &str) = ("Tell me about yourself and what you did this week.", "자기소개와 이번 주에 한 일을 1분 동안 말해 보세요.");
+pub const WEEKLY_QUESTION: (&str, &str) = ("自己紹介と、今週したことを話してください。", "자기소개와 이번 주에 한 일을 1분 동안 말해 보세요.");
 /// Human tutor lessons are recommended from month 3.
 pub const TUTOR_FROM_DAY: i64 = 61;
 pub const MOCK_TEST_EVERY_DAYS: i64 = 14;
@@ -40,27 +40,27 @@ fn mmss(secs: f32) -> String {
 
 /// Offline listen-and-respond questions: (question, 한국어, sample answer).
 const LISTEN_QUESTIONS: &[(&str, &str, &str)] = &[
-    ("So, what do you do for a living?", "무슨 일 하세요?", "I work in marketing at a small company."),
-    ("How was your weekend?", "주말 어땠어요?", "It was great. I went hiking with my friends."),
-    ("Have you been here before?", "여기 와 본 적 있어요?", "No, it's my first time. It's really nice."),
-    ("What are you up to tonight?", "오늘 밤에 뭐 해요?", "Nothing special. I'll probably just stay home."),
-    ("Do you want to grab some coffee?", "커피 한잔할래요?", "Sure, I'd love to. Where do you want to go?"),
-    ("How long have you been learning English?", "영어 배운 지 얼마나 됐어요?", "About two months, but I studied it in school too."),
-    ("What kind of food do you like?", "어떤 음식 좋아해요?", "I like spicy food, especially Korean stews."),
-    ("Is there anything I can help you with?", "제가 도와드릴 게 있을까요?", "Yes, could you tell me where the station is?"),
-    ("What did you think of the movie?", "그 영화 어땠어요?", "It was a bit long, but the ending was great."),
-    ("Where would you like to travel next?", "다음엔 어디로 여행 가고 싶어요?", "I'd love to go to Canada to see the mountains."),
-    ("Could you send me the file by Friday?", "금요일까지 파일 보내 줄 수 있어요?", "Sure, I'll send it to you by Thursday."),
-    ("What's the best thing about your job?", "일에서 제일 좋은 점이 뭐예요?", "I like my team. Everyone helps each other."),
+    ("お仕事は何をされているんですか。", "무슨 일 하세요?", "小さい会社でマーケティングをしています。"),
+    ("週末はどうでしたか。", "주말 어땠어요?", "楽しかったです。友達と山に登りました。"),
+    ("ここに来たことはありますか。", "여기 와 본 적 있어요?", "いいえ、初めてです。すごくいいところですね。"),
+    ("今晩、何か予定ある？", "오늘 밤에 뭐 있어?", "特にないよ。たぶん家にいると思う。"),
+    ("ちょっとコーヒーでも飲みに行かない？", "커피라도 한잔하러 갈래?", "いいね、行こう。どこにする？"),
+    ("日本語を勉強してどのくらいですか。", "일본어 공부한 지 얼마나 됐어요?", "二か月ぐらいです。でも、アニメでよく聞いていました。"),
+    ("どんな食べ物が好きですか。", "어떤 음식 좋아해요?", "辛い食べ物が好きです。特にキムチチゲが好きです。"),
+    ("何かお困りですか。", "뭔가 도와드릴까요?", "はい、駅はどこか教えていただけますか。"),
+    ("あの映画、どうだった？", "그 영화 어땠어?", "ちょっと長かったけど、最後がすごくよかった。"),
+    ("次はどこに旅行したいですか。", "다음엔 어디로 여행 가고 싶어요?", "北海道に行ってみたいです。雪が見たいんです。"),
+    ("金曜日までに資料を送っていただけますか。", "금요일까지 자료 보내 주실 수 있나요?", "はい、木曜日までにお送りします。"),
+    ("今の仕事のいいところは何ですか。", "지금 일의 좋은 점이 뭐예요?", "チームの雰囲気がいいところです。みんな助け合っています。"),
 ];
 
 /// Example scripts for 4/3/2 when nothing is pasted: (title, script).
 const SAMPLE_SCRIPTS: &[(&str, &str)] = &[
-    ("My typical day", "I usually get up at seven. I make coffee and check my messages. Then I take the subway to work. It takes about forty minutes, so I listen to podcasts on the way. At work, I have a lot of meetings in the morning. After lunch, I focus on my own tasks. I get home at around seven and cook a simple dinner. Before bed, I read a book for half an hour."),
-    ("A trip I remember", "Last spring, I went to Jeju Island with two friends. We rented a small car and drove along the coast. The sea was so blue, and the weather was perfect. On the second day, we climbed a mountain early in the morning. It was hard, but the view from the top was amazing. In the evening, we ate fresh seafood at a local market. It was a short trip, but I still remember every moment."),
-    ("My job", "I work at a small design company in Seoul. My team makes websites and apps for other businesses. Every morning, we have a short meeting to share our plans for the day. I spend most of my time talking with clients and checking the schedule. Sometimes the deadlines are tight, so it can be stressful. But I like my job because I learn something new every week."),
-    ("A good friend", "My best friend's name is Minji. We met in high school, so we have known each other for fifteen years. She is funny, kind, and very honest. When I have a problem, she always listens to me first. We don't meet very often now because she lives in Busan. But we call each other every weekend and talk for hours. I'm really lucky to have a friend like her."),
-    ("My weekends", "On weekends, I try to relax and do things I enjoy. On Saturday mornings, I go to the gym or ride my bike along the river. In the afternoon, I often meet my friends for coffee. On Sundays, I usually stay home and clean the house. In the evening, I watch a movie or an English drama. It helps me rest and get ready for the new week."),
+    ("わたしの一日", "わたしはたいてい七時に起きます。コーヒーをいれて、メッセージをチェックします。それから地下鉄で会社に行きます。四十分ぐらいかかるので、電車の中でポッドキャストを聞きます。午前中は会議が多いです。昼ごはんのあとは、自分の仕事に集中します。七時ごろ家に帰って、簡単な晩ごはんを作ります。寝る前に三十分ぐらい本を読みます。"),
+    ("思い出の旅行", "去年の春、友達二人と済州島に行きました。小さい車を借りて、海沿いをドライブしました。海はとても青くて、天気も最高でした。二日目は朝早く山に登りました。大変でしたが、上からの景色はすばらしかったです。夜は市場で新鮮な海鮮を食べました。短い旅行でしたが、今でも全部覚えています。"),
+    ("わたしの仕事", "わたしはソウルの小さいデザイン会社で働いています。チームではほかの会社のウェブサイトやアプリを作っています。毎朝、短いミーティングで一日の予定を共有します。仕事の時間のほとんどは、お客さんと話したり、スケジュールを確認したりしています。締め切りが厳しいときはストレスもあります。でも、毎週新しいことが学べるので、この仕事が好きです。"),
+    ("いい友達", "親友の名前はミンジです。高校で出会ったので、もう十五年の付き合いです。彼女はおもしろくて、優しくて、とても正直です。困ったことがあると、いつもまず話を聞いてくれます。今は釜山に住んでいるので、あまり会えません。でも、毎週末電話して、何時間も話します。こんな友達がいて、本当にラッキーだと思います。"),
+    ("わたしの週末", "週末はゆっくりして、好きなことをするようにしています。土曜日の朝はジムに行ったり、川沿いを自転車で走ったりします。午後はよく友達とカフェで会います。日曜日はたいてい家にいて、掃除をします。夜は映画や日本のドラマを見ます。そうすると、新しい一週間の準備ができます。"),
 ];
 
 #[derive(Default)]
@@ -90,7 +90,7 @@ pub struct RoundResult {
     pub accuracy: f32,
 }
 
-/// 4/3/2 reading: paste an English script, hear it, read along sentence by sentence, then read
+/// 4/3/2 reading: paste a Japanese script, hear it, read along sentence by sentence, then read
 /// the whole of it three times in shorter and shorter time.
 #[derive(Default)]
 pub struct FourThreeTwoState {
@@ -116,8 +116,9 @@ pub struct CoachState {
     pub test_result: String,
 }
 
+/// Length of a Japanese text in characters (the unit of speaking speed, 자/분).
 fn word_count(t: &str) -> usize {
-    t.split_whitespace().filter(|w| w.chars().any(|c| c.is_alphanumeric())).count()
+    crate::ja::char_count(t)
 }
 
 /// Days of the current program week (for "this week" counts).
@@ -212,7 +213,7 @@ impl App {
         }
 
         card(ui, |ui| {
-            ui.label("글자 없이 질문을 듣고, 바로 영어로 대답하세요. 들을 수 있어야 대답할 수 있어요.");
+            ui.label("글자 없이 질문을 듣고, 바로 일본어로 대답하세요. 들을 수 있어야 대답할 수 있어요.");
             ui.label(RichText::new("질문 글과 해석은 대답한 뒤에 보여요. 이해한 대답은 오늘의 듣기 목표에 포함됩니다.").color(muted()));
         });
         ui.add_space(6.0);
@@ -255,7 +256,7 @@ impl App {
         let mut next = false;
         card(ui, |ui| {
             let st = &mut self.coach.listen;
-            ui.label(RichText::new(format!("질문 {}/{n} — 듣고 영어로 대답하세요", st.idx + 1)).color(muted()));
+            ui.label(RichText::new(format!("질문 {}/{n} — 듣고 일본어로 대답하세요", st.idx + 1)).color(muted()));
             let answered = st.result.is_some() || (st.transcript.is_some() && !st.judge.running());
             if st.peeked || answered {
                 ui.label(RichText::new(&q.question).size(22.0).strong());
@@ -330,7 +331,7 @@ impl App {
     /// the whole script 3 times in 4 : 3 : 2 time.
     pub fn four_three_two_ui(&mut self, ui: &mut Ui) {
         card(ui, |ui| {
-            ui.label("4/3/2 따라 읽기: 영어 대본을 붙여넣으면 ① 원어민 음성으로 들려주고 ② 문장마다 따라 읽은 뒤 ③ 대본 전체를 3번, 4 : 3 : 2 시간 안에 점점 빠르게 읽어요.");
+            ui.label("4/3/2 따라 읽기: 일본어 대본을 붙여넣으면 ① 원어민 음성으로 들려주고 ② 문장마다 따라 읽은 뒤 ③ 대본 전체를 3번, 4 : 3 : 2 시간 안에 점점 빠르게 읽어요.");
             ui.label(RichText::new("같은 대본을 더 짧은 시간에 정확하게 읽을수록 문장이 입에 붙어요. 시간이 끝나면 자동으로 멈춰요.").color(muted()));
         });
         ui.add_space(6.0);
@@ -402,10 +403,10 @@ impl App {
     fn ftt_paste_ui(&mut self, ui: &mut Ui) {
         let mut start = false;
         card(ui, |ui| {
-            ui.label(RichText::new("📋 영어 대본 붙여넣기").size(18.0).strong());
-            ui.label(RichText::new("연습할 영어 글(대본·기사·스피치·드라마 대사 등)을 붙여넣으세요. 문장 단위로 나눠서 연습해요.").color(muted()));
-            ui.add(egui::TextEdit::multiline(&mut self.coach.ftt.input).desired_rows(8).desired_width(f32::INFINITY).hint_text("Paste an English script here…"));
-            let ok = self.coach.ftt.input.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 10;
+            ui.label(RichText::new("📋 일본어 대본 붙여넣기").size(18.0).strong());
+            ui.label(RichText::new("연습할 일본어 글(대본·기사·스피치·드라마 대사 등)을 붙여넣으세요. 문장 단위로 나눠서 연습해요.").color(muted()));
+            ui.add(egui::TextEdit::multiline(&mut self.coach.ftt.input).desired_rows(8).desired_width(f32::INFINITY).hint_text("ここに日本語の文章を貼り付けてください…"));
+            let ok = self.coach.ftt.input.chars().filter(|c| crate::ja::is_japanese_char(*c)).count() >= 10;
             ui.horizontal_wrapped(|ui| {
                 start = ui.add_enabled(ok, egui::Button::new(RichText::new("✔ 이 대본으로 시작").size(17.0).color(egui::Color32::WHITE)).fill(ACCENT).min_size(BIG_BUTTON)).clicked();
                 if ui.add(egui::Button::new("📄 예시 대본 넣기").min_size(ACTION_BUTTON)).clicked() {
@@ -417,11 +418,11 @@ impl App {
                 }
             });
             if !ok && !self.coach.ftt.input.trim().is_empty() {
-                ui.label(RichText::new("영어 문장을 붙여넣어 주세요.").color(warn()).small());
+                ui.label(RichText::new("일본어 문장을 붙여넣어 주세요.").color(warn()).small());
             }
         });
         if start {
-            let sentences = crate::screens::speaking::split_sentences(&self.coach.ftt.input.split_whitespace().collect::<Vec<_>>().join(" "));
+            let sentences = crate::screens::speaking::split_sentences(&self.coach.ftt.input.split_whitespace().collect::<Vec<_>>().join(""));
             crate::applog!("4/3/2: 대본 {}문장으로 시작", sentences.len());
             self.coach.ftt = FourThreeTwoState {
                 input: std::mem::take(&mut self.coach.ftt.input),
@@ -464,7 +465,7 @@ impl App {
             }
             for (i, r) in self.coach.ftt.results.iter().enumerate() {
                 ui.label(format!(
-                    "라운드 {} ({} 제한): {}:{:02} 동안 {}단어 · {:.0} WPM · 정확도 {:.0}%",
+                    "라운드 {} ({} 제한): {}:{:02} 동안 {}단어 · {:.0}자/분 · 정확도 {:.0}%",
                     i + 1,
                     mmss(r.limit),
                     r.secs as u32 / 60,
@@ -483,7 +484,7 @@ impl App {
             let (a, b) = (r[0].wpm, r[2].wpm);
             card(ui, |ui| {
                 let gain = if a > 0.0 { (b / a - 1.0) * 100.0 } else { 0.0 };
-                ui.label(RichText::new(format!("읽기 속도 {a:.0} → {b:.0} WPM ({gain:+.0}%)")).size(22.0).strong().color(if b >= a { GOOD } else { warn() }));
+                ui.label(RichText::new(format!("읽기 속도 {a:.0} → {b:.0}자/분 ({gain:+.0}%)")).size(22.0).strong().color(if b >= a { GOOD } else { warn() }));
                 ui.label(RichText::new(format!("정확도 {:.0}% → {:.0}%", r[0].accuracy, r[2].accuracy)).size(18.0));
                 ui.label(RichText::new("속도가 올라도 정확도가 유지되면 성공! 같은 대본을 내일 한 번 더 하면 더 빨라져요.").color(muted()));
             });
@@ -544,7 +545,7 @@ impl App {
                     if ui.small_button("▶").clicked() {
                         play = Some(r.file.clone());
                     }
-                    ui.label(format!("{}주차 · {} · {}단어 · {:.0} WPM", r.week, r.date.map(|d| d.to_string()).unwrap_or_default(), r.words, r.wpm));
+                    ui.label(format!("{}주차 · {} · {}단어 · {:.0}자/분", r.week, r.date.map(|d| d.to_string()).unwrap_or_default(), r.words, r.wpm));
                     ui.label(RichText::new(&r.transcript).small().color(muted()));
                 });
             }
@@ -585,7 +586,7 @@ impl App {
         let mut log = false;
         card(ui, |ui| {
             ui.label(RichText::new("🎓 원어민 화상 수업").size(18.0).strong());
-            ui.label(RichText::new("AI 롤플레이만으로는 상대의 예상 못 한 반응에 대처하는 경험이 부족해요. 3개월 차부터 주 1~2회, 30분씩 원어민과 화상 수업(예: italki)을 함께 하세요.").color(muted()));
+            ui.label(RichText::new("AI 롤플레이만으로는 상대의 예상 못 한 반응에 대처하는 경험이 부족해요. 3개월 차부터 주 1~2회, 30분씩 원어민과 화상 수업(예: italki의 일본어 튜터)을 함께 하세요.").color(muted()));
             if day < TUTOR_FROM_DAY {
                 ui.label(format!("Day {TUTOR_FROM_DAY}부터 권장 (지금 Day {day})"));
             } else {
@@ -607,30 +608,33 @@ impl App {
     }
 
     fn mock_test_ui(&mut self, ui: &mut Ui) {
-        const KINDS: [&str; 2] = ["OPIc", "TOEIC Speaking"];
+        const KINDS: [&str; 3] = ["JLPT", "JPT", "OPIc 일본어"];
         let due_in = mock_test_due_in(&self.store.profile);
         let mut add = false;
         card(ui, |ui| {
             ui.label(RichText::new("📝 외부 모의고사 (2주마다)").size(18.0).strong());
-            ui.label(RichText::new("2주마다 OPIc이나 TOEIC Speaking 모의고사로 실력을 확인하고 결과를 기록하세요.").color(muted()));
+            ui.label(RichText::new("2주마다 JLPT 모의시험(청해), JPT, OPIc 일본어 같은 시험으로 실력을 확인하고 결과를 기록하세요.").color(muted()));
             if due_in <= 0 {
                 ui.label(RichText::new("지금 볼 때예요").strong().color(warn()));
             } else {
                 ui.label(format!("다음 모의고사까지 {due_in}일"));
             }
             ui.horizontal(|ui| {
+                if ui.button("🌐 JLPT 문제 예시").clicked() {
+                    let _ = open::that("https://www.jlpt.jp/samples/forlearners.html");
+                }
+                if ui.button("🌐 JPT").clicked() {
+                    let _ = open::that("https://www.jpt.co.kr");
+                }
                 if ui.button("🌐 OPIc").clicked() {
                     let _ = open::that("https://www.opic.or.kr");
-                }
-                if ui.button("🌐 TOEIC Speaking").clicked() {
-                    let _ = open::that("https://exam.toeic.co.kr");
                 }
             });
             ui.horizontal(|ui| {
                 for (i, k) in KINDS.iter().enumerate() {
                     ui.radio_value(&mut self.coach.test_kind, i, *k);
                 }
-                ui.add(egui::TextEdit::singleline(&mut self.coach.test_result).hint_text("등급·점수 (예: IM2, 130)").desired_width(160.0));
+                ui.add(egui::TextEdit::singleline(&mut self.coach.test_result).hint_text("등급·점수 (예: N3 합격, 650, IM2)").desired_width(160.0));
                 add = ui.add_enabled(!self.coach.test_result.trim().is_empty(), egui::Button::new("기록")).clicked();
             });
             for t in self.store.profile.external_tests.iter().rev() {
@@ -638,7 +642,7 @@ impl App {
             }
         });
         if add {
-            let test = KINDS[self.coach.test_kind.min(1)].to_string();
+            let test = KINDS[self.coach.test_kind.min(KINDS.len() - 1)].to_string();
             let result = std::mem::take(&mut self.coach.test_result).trim().to_string();
             self.store.profile.external_tests.push(ExternalTest { date: Some(today()), test, result });
             self.store.save_profile();
@@ -681,11 +685,11 @@ mod tests {
 
     #[test]
     fn round_limits_keep_the_4_3_2_ratio() {
-        // 60 words at 120 WPM: 30 s in the last round → 60 s, 45 s, 30 s.
-        assert_eq!(round_limits(60, 120.0), [60.0, 45.0, 30.0]);
+        // 120 characters at 240 a minute: 30 s in the last round → 60 s, 45 s, 30 s.
+        assert_eq!(round_limits(120, 240.0), [60.0, 45.0, 30.0]);
         // A very long script is capped at 4, 3, 2 minutes; a tiny one gets at least 10 s.
-        assert_eq!(round_limits(2000, 120.0), [240.0, 180.0, 120.0]);
-        assert_eq!(round_limits(3, 120.0), [20.0, 15.0, 10.0]);
+        assert_eq!(round_limits(4000, 240.0), [240.0, 180.0, 120.0]);
+        assert_eq!(round_limits(6, 240.0), [20.0, 15.0, 10.0]);
     }
 
     #[test]
@@ -700,6 +704,6 @@ mod tests {
         assert!(mock_test_due_in(&p) <= 0, "no test in the first 14 days → due");
         p.external_tests.push(ExternalTest { date: Some(today() - chrono::Duration::days(4)), ..Default::default() });
         assert_eq!(mock_test_due_in(&p), 10);
-        assert_eq!(word_count("I , think so ."), 3);
+        assert_eq!(word_count("はい、そうです。"), 6);
     }
 }

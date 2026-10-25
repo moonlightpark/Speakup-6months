@@ -32,8 +32,9 @@ impl ReadAlong {
     }
 }
 
+/// Length in Japanese characters (the unit of reading speed).
 fn words(t: &str) -> usize {
-    t.split_whitespace().filter(|w| w.chars().any(|c| c.is_alphanumeric())).count()
+    crate::ja::char_count(t)
 }
 
 impl App {
@@ -89,7 +90,7 @@ impl App {
             });
             ui.label(RichText::new("🔊 듣고 → 🎤 눌러서 똑같이 따라 읽어요").color(muted()).small());
             ui.vertical_centered(|ui| {
-                let limit = 6.0 + words(sentence) as f32;
+                let limit = 5.0 + words(sentence) as f32 * 0.3;
                 if let Some(t) = ra.capture.ui(ui, &mut self.voice, limit) {
                     let r = crate::scoring::score(sentence, &t);
                     self.store.log_attempt(kind, sentence, &t, r.score);

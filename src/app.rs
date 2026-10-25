@@ -122,7 +122,6 @@ pub struct App {
     pub vocab_mode: usize,
     pub show_key: bool,
     edit_name: bool,
-    prefetched: Option<chrono::NaiveDate>,
     edit_key: bool,
     pub api_url: String,
     /// The Claude API answered "can't be used" (no credit / key / network): speaking screens
@@ -141,6 +140,15 @@ impl App {
         let stt = Stt::new(lang.code);
         let mut store = store;
         let mut model_file = stt::model_path(&store.models_dir(), &store.settings.whisper_model);
+        // A multilingual model the English app already downloaded is linked, not downloaded again.
+        if let Some(other) = crate::storage::english_app_models_dir().filter(|_| std::env::var("SPEAKUP_DATA_DIR").is_err()) {
+            for (id, _) in lang.whisper_models {
+                let (src, dst) = (stt::model_path(&other, id), stt::model_path(&store.models_dir(), id));
+                if src.exists() && !dst.exists() && (std::fs::hard_link(&src, &dst).is_ok() || std::fs::copy(&src, &dst).is_ok()) {
+                    crate::applog!("stt: 영어판 앱의 {id} 모델을 가져옴");
+                }
+            }
+        }
         if !model_file.exists() {
             // A model downloaded earlier is reused even if a different one is selected.
             if let Some((id, path)) = lang.whisper_models.iter().map(|(id, _)| (id, stt::model_path(&store.models_dir(), id))).find(|(_, p)| p.exists()) {
@@ -153,20 +161,11 @@ impl App {
             stt.load(model_file);
         }
         let player = crate::audio::Player::new(store.settings.output_device.clone());
-        let mut speaker = speaker;
-        let neural = crate::neural_tts::NeuralTts::new(player.handle());
-        if crate::neural_tts::is_installed(&store.models_dir()) {
-            neural.load(&store.models_dir());
-        } else if store.settings.neural_tts && !cfg!(test) {
-            // The natural voice matters most: fetch it once in the background on first run.
-            neural.download(store.models_dir());
-        }
-        speaker.neural = Some(neural);
-        speaker.use_neural = store.settings.neural_tts;
-        speaker.neural_voice = store.settings.neural_voice.clone();
-        let stt_ko = Stt::new("ko");
+        // Korean speech (translator): the same multilingual model as Japanese when the files are
+        // the same, so it's in memory once.
+        let stt_ko = if store.settings.korean_model == store.settings.whisper_model { stt.with_language("ko") } else { Stt::new("ko") };
         let ko_model = stt::model_path(&store.models_dir(), &store.settings.korean_model);
-        if ko_model.exists() {
+        if ko_model.exists() && store.settings.korean_model != store.settings.whisper_model {
             stt_ko.load(ko_model);
         }
         let voice = Voice {
@@ -235,7 +234,6 @@ impl App {
             vocab_mode: 0,
             show_key: false,
             edit_name: false,
-            prefetched: None,
             edit_key: false,
             api_url: crate::claude::API_URL.to_string(),
             api_down: Default::default(),
@@ -264,6 +262,7 @@ impl App {
     fn apply_support_stage(&mut self, ctx: &egui::Context) {
         let stage = curriculum::support_stage(curriculum::day_number(&self.store.profile));
         crate::widgets::set_support_stage(ctx, stage);
+        crate::widgets::set_furigana(ctx, self.store.settings.furigana);
         if stage >= 1 && !self.store.settings.ko_colors_faded {
             self.store.settings.ko_colors_faded = true;
             if self.store.settings.ko_role_colors {
@@ -372,7 +371,7 @@ impl App {
         if category == "reading" {
             // 문장 읽기: today's idiom sentences and longer sentences keep a count too (list colours).
             let idioms = self.store.profile.today.idioms.clone().unwrap_or_default();
-            let in_today = idioms.iter().filter_map(|n| crate::idioms::by_no(*n)).any(|i| i.en == target)
+            let in_today = idioms.iter().filter_map(|n| crate::idioms::by_no(*n)).any(|i| i.ja == target)
                 || self.lesson.as_ref().is_some_and(|l| l.sentences.iter().any(|s| s.text == target));
             if in_today {
                 let pass = self.pass_score();
@@ -474,7 +473,7 @@ impl App {
             .flat_map(|(_, s)| s.words.iter().chain(&s.phrases).chain(&s.expressions).map(|w| w.word.to_lowercase()))
             .collect();
         let knows = |t: &str| earlier.contains(&t.to_lowercase()) || items.iter().any(|i| i.text.eq_ignore_ascii_case(t));
-        let lw = |e: crate::expressions::Expr| LessonWord { word: e.0.into(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() };
+        let lw = |e: crate::expressions::Expr| LessonWord { word: e.0.into(), reading: String::new(), meaning_ko: e.1.into(), example: e.2.into(), example_ko: e.3.into() };
         WordSet {
             words: crate::wordbank::pick(self.store.profile.level, n, knows).iter().map(|w| w.lesson_word()).collect(),
             phrases: crate::expressions::pick_chunks(content::CHUNKS_PER_DAY, knows).into_iter().map(lw).collect(),
@@ -482,7 +481,7 @@ impl App {
         }
     }
 
-    /// Days of the course the app wasn't opened on still get their 새 단어 and 숙어 문장, picked
+    /// Days of the course the app wasn't opened on still get their 새 단어 and 회화 문장, picked
     /// now, so every 일차 is in 📚 날짜별 전체 and its items in 지난 날 못 끝낸.
     fn fill_missed_days(&mut self) {
         let t = today();
@@ -502,7 +501,7 @@ impl App {
             }
             if !self.store.idiom_days.contains_key(&d) {
                 let nos = self.pick_idioms(chrono::NaiveDate::MAX);
-                crate::applog!("reading: {day_no}일차({d}) 숙어 문장 채움 {}개 · 앱을 열지 않은 날", nos.len());
+                crate::applog!("reading: {day_no}일차({d}) 회화 문장 채움 {}개 · 앱을 열지 않은 날", nos.len());
                 self.store.record_idiom_day(d, &nos);
             }
             d += CDuration::days(1);
@@ -634,7 +633,7 @@ impl App {
         self.fill_missed_days();
         if self.store.profile.today.idioms.is_none() {
             let picked = self.pick_idioms(today());
-            crate::applog!("reading: 오늘의 숙어 문장 {}개 · {:?}…", picked.len(), picked.first());
+            crate::applog!("reading: 오늘의 회화 문장 {}개 · {:?}…", picked.len(), picked.first());
             self.store.profile.today.idioms = Some(picked);
             self.store.save_profile();
         }
@@ -649,7 +648,7 @@ impl App {
         let items = &self.store.items;
         let earlier: std::collections::HashSet<u32> = self.store.idiom_days.range(..until).flat_map(|(_, v)| v.iter().copied()).collect();
         crate::idioms::pick(crate::idioms::PER_DAY, |t| {
-            items.iter().any(|i| i.text.eq_ignore_ascii_case(t)) || crate::idioms::all().iter().any(|i| i.en == t && earlier.contains(&i.no))
+            items.iter().any(|i| i.text.eq_ignore_ascii_case(t)) || crate::idioms::all().iter().any(|i| i.ja == t && earlier.contains(&i.no))
         })
     }
 
@@ -1019,16 +1018,15 @@ impl App {
                 SttStatus::Error(_) => ("● 음성 인식 오류", BAD),
             };
             ui.label(RichText::new(txt).color(col).size(12.5));
-            // Which voice is speaking: the natural neural one, or the OS fallback.
-            let neural = self.voice.speaker.neural.as_ref().map(|n| n.status());
-            let (vt, vc) = match neural {
-                _ if self.voice.speaker.neural_active() => ("● AI 원어민 음성 (Kokoro)".to_string(), GOOD),
-                Some(crate::neural_tts::NeuralStatus::Loading) => ("● AI 음성 불러오는 중".to_string(), warn()),
-                Some(crate::neural_tts::NeuralStatus::Downloading) => ("● AI 음성 받는 중".to_string(), warn()),
-                _ if !self.store.settings.neural_tts => ("● 시스템 음성 사용 중".to_string(), muted()),
-                _ => ("● 시스템 음성 — AI 음성 받기 ›".to_string(), warn()),
+            // Which Japanese voice is speaking (or that none is installed).
+            let (vt, vc) = if self.voice.speaker.voices.is_empty() {
+                ("● 일본어 음성 없음 — 설치 방법 ›", BAD)
+            } else if self.voice.speaker.natural {
+                ("● 일본어 음성 (고품질)", GOOD)
+            } else {
+                ("● 일본어 음성 (기본) — 고품질 받기 ›", warn())
             };
-            if ui.add(egui::Label::new(RichText::new(vt).color(vc).size(12.5)).sense(egui::Sense::click())).on_hover_text("설정에서 원어민 음성을 고를 수 있어요").clicked() {
+            if ui.add(egui::Label::new(RichText::new(vt).color(vc).size(12.5)).sense(egui::Sense::click())).on_hover_text("설정에서 일본어 음성을 고를 수 있어요").clicked() {
                 self.go(Screen::Settings);
             }
             let api = if self.claude().is_some() { ("● Claude 연결됨", GOOD) } else { ("● Claude API 키 없음", BAD) };
@@ -1058,7 +1056,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.set_width((ui.available_width() - 150.0).max(200.0));
-                        let hello = if p.name.is_empty() { "오늘도 영어로 말해 볼까요?".to_string() } else { format!("{}님, 오늘도 영어로 말해 볼까요?", p.name) };
+                        let hello = if p.name.is_empty() { "오늘도 일본어로 말해 볼까요?".to_string() } else { format!("{}님, 오늘도 일본어로 말해 볼까요?", p.name) };
                         ui.label(RichText::new(hello).size(26.0).strong().color(Color32::WHITE));
                         ui.label(RichText::new(format!("Day {day} / {TOTAL_DAYS}  ·  {week}주차  ·  {}", phase.name_ko)).size(15.0).color(Color32::from_rgb(200, 214, 255)));
                         ui.add_space(8.0);
@@ -1287,8 +1285,8 @@ impl App {
             ui.label(RichText::new("3. 음성 인식 모델 (오프라인, 최초 1회 다운로드)").strong());
             self.stt_setup_ui(ui);
             ui.add_space(8.0);
-            ui.label(RichText::new("4. 원어민 음성 (자연스러운 AI 음성, 최초 1회 다운로드)").strong());
-            if self.neural_setup_ui(ui) {
+            ui.label(RichText::new("4. 일본어 음성").strong());
+            if self.voice_setup_ui(ui) {
                 self.store.save_settings();
             }
             ui.add_space(8.0);
@@ -1309,93 +1307,49 @@ impl App {
                 self.test = Some(LevelTest::new(true, 0));
                 self.screen = Screen::LevelTest;
             }
-            if ui.button("테스트 없이 초급(A2)으로 시작").clicked() {
+            if ui.button("테스트 없이 처음부터(N5) 시작").clicked() {
                 self.store.save_settings();
                 self.store.profile.placement_done = true;
                 self.store.profile.start_date = today();
-                self.store.record_level(2.5, "시작 (레벨 테스트 생략)");
+                self.store.record_level(1.5, "시작 (레벨 테스트 생략)");
                 self.screen = Screen::Home;
             }
         });
     }
 
-    /// Natural neural voice: download once, choose a speaker, test.
-    pub fn neural_setup_ui(&mut self, ui: &mut egui::Ui) -> bool {
-        use crate::neural_tts::{self, NeuralStatus, VOICES};
+    /// The OS's Japanese voice: pick one, hear it, and how to install a better one.
+    pub fn voice_setup_ui(&mut self, ui: &mut egui::Ui) -> bool {
         let mut changed = false;
-        let Some(n) = self.voice.speaker.neural.as_ref() else { return false };
-        match n.status() {
-            NeuralStatus::Ready => {
-                ui.label(RichText::new("✅ 자연스러운 AI 음성 준비 완료 (Kokoro, 오프라인)").color(GOOD));
-            }
-            NeuralStatus::Loading => spinner_label(ui, "AI 음성 모델 불러오는 중…"),
-            NeuralStatus::Downloading => {
-                let d = n.downloaded.load(std::sync::atomic::Ordering::Relaxed) as f32;
-                let t = n.total.load(std::sync::atomic::Ordering::Relaxed).max(1) as f32;
-                ui.add(egui::ProgressBar::new(d / t).text(format!("AI 음성 모델 받는 중 {:.0} / {:.0} MB", d / 1e6, t / 1e6)));
-                ui.ctx().request_repaint_after(Duration::from_millis(200));
-            }
-            status => {
-                if let NeuralStatus::Error(e) = status {
-                    error_label(ui, &e);
-                }
-                ui.label(RichText::new("원어민처럼 매끄러운 신경망 음성입니다. 한 번만 받으면 인터넷 없이 계속 사용합니다 (약 330MB).").color(muted()));
-                if ui.add(egui::Button::new(RichText::new("⬇ 자연스러운 AI 음성 받기 (권장)").strong()).fill(ACCENT)).clicked() {
-                    n.download(self.store.models_dir());
-                }
-            }
+        if let Some(e) = &self.voice.speaker.error {
+            error_label(ui, e);
         }
-        let mut warm: Option<String> = None;
-        if n.is_ready() {
-            ui.horizontal(|ui| {
-                changed |= ui.checkbox(&mut self.store.settings.neural_tts, "AI 음성 사용").changed();
-                let current = neural_tts::voice_label(&self.store.settings.neural_voice);
-                egui::ComboBox::from_id_salt("neural_voice").width(240.0).selected_text(current).show_ui(ui, |ui| {
-                    for (_, id, label) in VOICES {
-                        if ui.selectable_label(self.store.settings.neural_voice == *id, *label).clicked() {
-                            self.store.settings.neural_voice = id.to_string();
-                            warm = Some(id.to_string());
-                            changed = true;
-                        }
+        let voices = self.voice.speaker.voices.clone();
+        let current = voices.iter().find(|v| v.0 == self.store.settings.tts_voice_id).map(|v| v.1.clone()).unwrap_or("기본".into());
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("tts_voice").width(280.0).selected_text(current).show_ui(ui, |ui| {
+                for (id, label) in &voices {
+                    if ui.selectable_label(self.store.settings.tts_voice_id == *id, label).clicked() {
+                        self.store.settings.tts_voice_id = id.clone();
+                        self.voice.speaker.set_voice(id);
+                        changed = true;
                     }
-                });
-                if ui.button("🔊 들어보기").clicked() {
-                    self.voice.speaker.use_neural = true;
-                    self.voice.speaker.neural_voice = self.store.settings.neural_voice.clone();
-                    self.voice.say("Hi! I'm your English coach. Let's practice speaking together, one sentence at a time.");
                 }
             });
+            if ui.button("🔊 들어보기").clicked() {
+                self.voice.say("こんにちは。一緒に日本語を話す練習をしましょう。");
+            }
+        });
+        if self.voice.speaker.natural {
+            ui.label(RichText::new("✅ 자연스러운 고품질 일본어 음성을 쓰고 있어요.").color(GOOD).small());
+        } else {
+            // The standard voices sound mechanical; the free high-quality ones are a big step up.
+            ui.label(RichText::new(format!("⚠ 지금은 기본 품질 음성이라 조금 어색하게 들려요. {}", crate::voice::INSTALL_VOICE_HELP)).color(warn()).small());
+            if ui.button("⚙ 음성 설정 열기").clicked() {
+                let url = if cfg!(target_os = "macos") { "x-apple.systempreferences:com.apple.Accessibility-Settings.extension?SpokenContent" } else { "ms-settings:speech" };
+                let _ = open::that(url);
+            }
         }
-        // Opens (and warms up) the engine for a newly chosen accent in the background.
-        if let (Some(v), Some(n)) = (warm, &self.voice.speaker.neural) {
-            n.prefetch("Hello there.", &v, 1.0);
-        }
-        self.voice.speaker.use_neural = self.store.settings.neural_tts;
-        self.voice.speaker.neural_voice = self.store.settings.neural_voice.clone();
         changed
-    }
-
-    /// Synthesizes today's lesson in the background so every 🔊 plays instantly.
-    pub fn prefetch_lesson(&mut self) {
-        let Some(lesson) = &self.lesson else { return };
-        if !self.voice.speaker.neural_active() || self.prefetched == lesson.date {
-            return;
-        }
-        self.prefetched = lesson.date;
-        let r = self.voice.base_rate;
-        for w in &lesson.words {
-            self.voice.speaker.prefetch(&w.word, r);
-        }
-        for s in &lesson.sentences {
-            self.voice.speaker.prefetch(&s.text, r);
-        }
-        for e in lesson.expressions.iter().chain(&lesson.phrases) {
-            self.voice.speaker.prefetch(&e.word, r);
-            self.voice.speaker.prefetch(&e.example, r);
-        }
-        for w in &lesson.words {
-            self.voice.speaker.prefetch(&w.example, r);
-        }
     }
 
     pub fn stt_setup_ui(&mut self, ui: &mut egui::Ui) {
@@ -1460,7 +1414,7 @@ impl App {
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.notify_minutes, 0..=30).text("분마다 알림 (0 = 끄기)")).changed();
             ui.label(RichText::new("화면 오른쪽 위에 못 끝낸 단어·문장, 진행 중인 주차와 진척, 배운 내용, 다음 레벨을 앞당기는 방법을 번갈아 알려 줘요. 말하는 중에는 뜨지 않아요.").color(muted()).small());
         });
-        // English in the 새 단어 / 문장 읽기 lists, big enough to copy into a notebook.
+        // Japanese in the 새 단어 / 문장 읽기 lists, big enough to copy into a notebook.
         card(ui, |ui| {
             ui.label(RichText::new("🔠 단어·문장 리스트 글자 크기").strong());
             let range = crate::models::Settings::LIST_TEXT_SIZES;
@@ -1482,10 +1436,10 @@ impl App {
             });
             let s = self.store.settings.list_size();
             egui::Frame::new().fill(subtle_fill()).corner_radius(10.0).inner_margin(10.0).show(ui, |ui| {
-                ui.label(RichText::new("deadline").size(s).strong().color(text_strong()));
-                ui.label(RichText::new("I've got a lot on my plate.").size(s).strong().color(text_strong()));
+                crate::widgets::ja_text(ui, "締め切り", s, text_strong());
+                crate::widgets::ja_text(ui, "今週は仕事がたくさんあって大変です。", s, text_strong());
             });
-            ui.label(RichText::new("📚 새 단어 · 📖 문장 읽기 목록의 영어 단어와 문장만 커집니다 (노트에 옮겨 적을 때). 바로 적용돼요.").color(muted()).small());
+            ui.label(RichText::new("📚 새 단어 · 📖 문장 읽기 목록의 일본어 단어와 문장만 커집니다 (노트에 옮겨 적을 때). 바로 적용돼요.").color(muted()).small());
         });
         card(ui, |ui| {
             ui.label(RichText::new("Claude API").strong());
@@ -1504,30 +1458,11 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("음성").strong());
-            ui.label(RichText::new("원어민 음성 (자연스러운 AI 음성)").color(text_strong()));
-            changed |= self.neural_setup_ui(ui);
-            ui.add_space(6.0);
-            ui.label(RichText::new("시스템 음성 (AI 음성을 쓰지 않을 때)").color(muted()));
-            if let Some(e) = &self.voice.speaker.error {
-                error_label(ui, e);
-            }
-            let voices = self.voice.speaker.voices.clone();
-            let current = voices.iter().find(|v| v.0 == self.store.settings.tts_voice_id).map(|v| v.1.clone()).unwrap_or("기본".into());
-            egui::ComboBox::from_label("원어민 음성 (TTS)").selected_text(current).show_ui(ui, |ui| {
-                for (id, label) in &voices {
-                    if ui.selectable_label(self.store.settings.tts_voice_id == *id, label).clicked() {
-                        self.store.settings.tts_voice_id = id.clone();
-                        self.voice.speaker.set_voice(id);
-                        changed = true;
-                    }
-                }
-            });
+            ui.label(RichText::new("일본어 음성 (시스템 음성)").color(text_strong()));
+            changed |= self.voice_setup_ui(ui);
             if ui.add(egui::Slider::new(&mut self.store.settings.tts_rate, 0.6..=1.4).text("말하기 속도")).changed() {
                 self.voice.base_rate = self.store.settings.tts_rate;
                 changed = true;
-            }
-            if ui.button("🔊 테스트").clicked() {
-                self.voice.say("Hello! Let's practice speaking English together.");
             }
             ui.add_space(6.0);
             // 받아쓰기: the level's pace, a little faster by default so it isn't too easy.
@@ -1542,7 +1477,7 @@ impl App {
                 }
                 if ui.button("🔊 들어 보기").clicked() {
                     let r = dictation_rate(level, self.store.settings.dictation_speed);
-                    self.voice.say_at("I usually take the subway to work, but today I walked.", r);
+                    self.voice.say_at("いつもは地下鉄で会社に行きますが、今日は歩きました。", r);
                 }
             });
             ui.label(RichText::new("느리게 = 레벨에 맞는 속도 · 보통 = 레벨 속도보다 3% 빠르게 (기본) · 빠르게 = 15% 빠르게. 레벨이 오르면 속도도 함께 올라가요.").color(muted()).small());
@@ -1561,6 +1496,7 @@ impl App {
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_new, 1..=6).text("새 항목 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10).text("약점 항목 반복 횟수")).changed();
             changed |= ui.add(egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=50).text("하루 새 단어 (0 = 35개)")).changed();
+            changed |= ui.checkbox(&mut self.store.settings.furigana, "한자 위에 후리가나(읽는 법) 표시").changed();
             changed |= ui.checkbox(&mut self.store.settings.ko_role_colors, "한글 지문에 문장 성분 색상 표시 (주어·동사·목적어…)").changed();
             ui.label(RichText::new("눈이 피로하면 끄세요. 직독직해 색상은 📖 직독직해 버튼으로 따로 켜고 끕니다.").color(muted()).small());
             ui.horizontal(|ui| {
@@ -1632,7 +1568,6 @@ impl eframe::App for App {
         self.apply_support_stage(ctx);
         crate::grammar::pump(ctx, self.claude(), self.store.settings.ko_role_colors);
         self.sync_lesson_words();
-        self.prefetch_lesson();
         self.track_time(ctx);
         if self.lesson_job.running() || self.voice.player.is_playing() {
             ctx.request_repaint_after(Duration::from_millis(100));

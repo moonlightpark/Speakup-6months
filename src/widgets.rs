@@ -70,6 +70,76 @@ pub fn set_support_stage(ctx: &egui::Context, stage: u8) {
     ctx.data_mut(|d| d.insert_temp(egui::Id::new("support_stage"), stage));
 }
 
+/// Furigana above kanji (설정 > 후리가나), set by the app each frame.
+pub fn furigana_on(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(egui::Id::new("furigana"))).unwrap_or(true)
+}
+
+pub fn set_furigana(ctx: &egui::Context, on: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("furigana"), on));
+}
+
+// ---------------------------------------------------------------- Japanese text with furigana
+
+/// Height of the furigana line above text of `size`.
+fn ruby_size(size: f32) -> f32 {
+    (size * 0.48).max(9.0)
+}
+
+/// One word: its reading (small, above) and its text, centred on each other. With `show`
+/// false (or no reading) the space above stays, so a line keeps one baseline.
+fn ruby_piece(ui: &mut Ui, text: &str, ruby: Option<&str>, size: f32, color: Color32, show: bool, sense: Sense) -> egui::Response {
+    let font = FontId::proportional(size);
+    let small = FontId::proportional(ruby_size(size));
+    let g = ui.painter().layout_no_wrap(text.to_string(), font, color);
+    let rg = ruby.filter(|_| show).map(|r| ui.painter().layout_no_wrap(r.to_string(), small.clone(), muted()));
+    let top = if show { ui.fonts(|f| f.row_height(&small)) } else { 0.0 };
+    let w = g.size().x.max(rg.as_ref().map_or(0.0, |r| r.size().x));
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, top + g.size().y), sense);
+    if ui.is_rect_visible(rect) {
+        if let Some(r) = rg {
+            let x = rect.center().x - r.size().x / 2.0;
+            ui.painter().galley(egui::pos2(x, rect.top()), r, muted());
+        }
+        let x = rect.center().x - g.size().x / 2.0;
+        ui.painter().galley(egui::pos2(x, rect.top() + top), g, color);
+    }
+    resp
+}
+
+/// Adds the words of `text` (with furigana when switched on) to the current wrapping row.
+pub fn ja_pieces(ui: &mut Ui, text: &str, size: f32, color: Color32) {
+    let show = furigana_on(ui.ctx()) && crate::ja::has_kanji(text);
+    for p in crate::ja::furigana_cached(text).iter() {
+        ruby_piece(ui, &p.text, p.ruby.as_deref(), size, color, show, Sense::hover());
+    }
+}
+
+/// Japanese text, wrapped, with furigana above the kanji (설정 > 후리가나).
+pub fn ja_text(ui: &mut Ui, text: &str, size: f32, color: Color32) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(0.0, size * 0.3);
+        ja_pieces(ui, text, size, color);
+    });
+}
+
+/// A sentence (furigana kept) that can be clicked as a whole, e.g. in the reader: returns
+/// (clicked, hovered). `highlight` paints behind it.
+pub fn ja_sentence(ui: &mut Ui, text: &str, size: f32, color: Color32, highlight: Option<Color32>) -> (bool, bool) {
+    let show = furigana_on(ui.ctx()) && crate::ja::has_kanji(text);
+    let (mut clicked, mut hovered) = (false, false);
+    for p in crate::ja::furigana_cached(text).iter() {
+        let where_ = ui.painter().add(egui::Shape::Noop);
+        let r = ruby_piece(ui, &p.text, p.ruby.as_deref(), size, color, show, Sense::click());
+        if let Some(bg) = highlight {
+            ui.painter().set(where_, egui::Shape::rect_filled(r.rect.expand(1.0), 2.0, bg));
+        }
+        clicked |= r.clicked();
+        hovered |= r.hovered();
+    }
+    (clicked, hovered)
+}
+
 // ---------------------------------------------------------------- background jobs
 
 pub struct Pending<T>(Option<Receiver<Result<T>>>);
@@ -222,7 +292,7 @@ pub struct Capture {
     rx: Pending<String>,
     pub error: Option<String>,
     recording: bool,
-    /// Voiced duration of the last recording, for speaking-speed (WPM) measurement.
+    /// Voiced duration of the last recording, for speaking-speed (자/분) measurement.
     pub last_secs: f32,
     /// Stop automatically after ~0.9 s of silence following speech (speed drills).
     pub auto_stop: bool,
@@ -447,11 +517,12 @@ pub fn speaker_button(ui: &mut Ui, voice: &mut Voice, text: &str) {
     }
 }
 
+/// The target with each word green (heard) or red (missed), furigana kept.
 pub fn word_feedback(ui: &mut Ui, r: &ScoreResult, size: f32) {
     ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.spacing_mut().item_spacing = Vec2::new(0.0, size * 0.3);
         for m in &r.marks {
-            ui.label(RichText::new(&m.word).size(size).color(if m.ok { GOOD } else { BAD }));
+            ja_pieces(ui, &m.word, size, if m.ok { GOOD } else { BAD });
         }
     });
 }
@@ -477,11 +548,9 @@ fn sentence_gap(ui: &mut Ui, i: usize, size: f32) {
     }
 }
 
-/// 직독직해 view: English chunks separated by " / " with the Korean meaning under each.
-/// With `marks`, each chunk is coloured green/red by whether its words were recognized.
-/// True for a word that ends a sentence ("day.", "you?", "stop!\"").
+/// True for a word or phrase that ends a sentence ("行きました。", "ですか？」").
 fn ends_sentence(word: &str) -> bool {
-    word.trim_end_matches(['"', '\'', '”', '’', ')']).ends_with(['.', '!', '?'])
+    word.trim_end_matches(['"', '\'', '”', '’', ')', '」', '』', '）']).ends_with(['.', '!', '?', '。', '！', '？'])
 }
 
 /// Word-by-word feedback with each sentence on its own line.
@@ -507,52 +576,104 @@ pub fn role_legend(ui: &mut Ui, chunks: &[Chunk]) {
 /// 직독직해 with each sentence on its own line; `marks` (one per word) color the chunks.
 pub fn chunk_view_lines(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, size: f32) {
     role_legend(ui, chunks);
-    let (mut start, mut word, mut n) = (0, 0, 0);
+    let (mut start, mut n) = (0, 0);
+    // Marks are words of the whole text: each sentence gets the marks inside its characters.
+    let mut offset = 0;
     for (i, c) in chunks.iter().enumerate() {
-        let last_word = c.en.split_whitespace().last().unwrap_or("");
-        if ends_sentence(last_word) || i + 1 == chunks.len() {
+        if ends_sentence(&c.ja) || i + 1 == chunks.len() {
             sentence_gap(ui, n, size);
             n += 1;
-            let words: usize = chunks[start..=i].iter().map(|c| c.en.split_whitespace().count()).sum();
-            let m = marks.and_then(|m| m.get(word..word + words));
-            chunk_view(ui, &chunks[start..=i], m, size);
-            word += words;
+            let len: usize = chunks[start..=i].iter().map(|c| compact_len(&c.ja)).sum();
+            let m = marks.map(|m| marks_in(m, offset, offset + len));
+            chunk_view(ui, &chunks[start..=i], m.as_deref(), size);
+            offset += len;
             start = i + 1;
         }
     }
 }
 
-/// Plain text with each sentence on its own line (Korean coloured by grammatical role).
+/// Characters of a text without whitespace (chunks and marks both spell the text this way).
+fn compact_len(s: &str) -> usize {
+    s.chars().filter(|c| !c.is_whitespace()).count()
+}
+
+/// The marks whose characters fall in `from..to` of the text, re-based to start at `from`.
+fn marks_in(marks: &[WordMark], from: usize, to: usize) -> Vec<WordMark> {
+    let mut out = Vec::new();
+    let mut pos = 0;
+    for m in marks {
+        let len = compact_len(&m.word);
+        if pos + len > from && pos < to {
+            out.push(m.clone());
+        }
+        pos += len;
+    }
+    out
+}
+
+/// Is the text range `from..to` all heard? (Marks cover the text from position 0.)
+fn range_ok(marks: &[WordMark], from: usize, to: usize) -> bool {
+    let mut pos = 0;
+    let mut ok = true;
+    for m in marks {
+        let len = compact_len(&m.word);
+        if pos + len > from && pos < to && !m.ok {
+            ok = false;
+        }
+        pos += len;
+    }
+    ok
+}
+
+/// Plain text with each sentence on its own line: Japanese with furigana, Korean coloured by
+/// grammatical role.
 pub fn sentence_lines(ui: &mut Ui, text: &str, size: f32, color: Color32) {
-    for (i, s) in crate::neural_tts::sentences(text).iter().enumerate() {
+    for (i, s) in crate::voice::sentences(text).iter().enumerate() {
         sentence_gap(ui, i, size);
-        crate::grammar::ko_label(ui, s, size, color);
+        if crate::ja::is_japanese(s) {
+            ja_text(ui, s, size, color);
+        } else {
+            crate::grammar::ko_label(ui, s, size, color);
+        }
     }
 }
 
+/// 직독직해 view: Japanese 문절 separated by " / " with the Korean meaning under each.
+/// With `marks` (words of these chunks' text, in order), each chunk is green/red by whether
+/// its words were recognized; before that it shows its grammatical role's colour.
 pub fn chunk_view(ui: &mut Ui, chunks: &[Chunk], marks: Option<&[WordMark]>, size: f32) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = Vec2::new(4.0, 10.0);
-        let mut k = 0;
+        let mut pos = 0;
         for (i, c) in chunks.iter().enumerate() {
             if i > 0 {
                 ui.vertical(|ui| {
+                    if furigana_on(ui.ctx()) {
+                        ui.add_space(ui.fonts(|f| f.row_height(&FontId::proportional(ruby_size(size)))));
+                    }
                     ui.label(RichText::new("/").size(size).color(muted()));
                     ui.label(RichText::new("/").size(size * 0.62).color(muted()));
                 });
             }
-            let n = c.en.split_whitespace().count();
-            // Before scoring the English shows the grammatical role; after, whether it was heard.
+            let len = compact_len(&c.ja);
             let role = crate::grammar::color(&c.role);
             let color = match marks {
-                Some(m) if k + n <= m.len() => {
-                    if m[k..k + n].iter().all(|w| w.ok) { GOOD } else { BAD }
+                Some(m) if !m.is_empty() => {
+                    if range_ok(m, pos, pos + len) { GOOD } else { BAD }
                 }
                 _ => role.unwrap_or(text_strong()),
             };
-            k += n;
+            pos += len;
             ui.vertical(|ui| {
-                ui.label(RichText::new(&c.en).size(size).strong().color(color));
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    // Furigana space on every chunk keeps the row on one baseline.
+                    let show = furigana_on(ui.ctx());
+                    for p in crate::ja::furigana_cached(&c.ja).iter() {
+                        ruby_piece(ui, &p.text, p.ruby.as_deref(), size, color, show, Sense::hover());
+                    }
+                });
                 ui.label(RichText::new(&c.ko).size(size * 0.62).strong().color(role.unwrap_or(gloss())));
             });
         }
@@ -580,23 +701,21 @@ mod tests {
 
     #[test]
     fn sentence_end_detection() {
-        assert!(ends_sentence("day.") && ends_sentence("you?\"") && ends_sentence("stop!”"));
-        assert!(!ends_sentence("Mr") && !ends_sentence("well,"));
+        assert!(ends_sentence("行きました。") && ends_sentence("ですか？」") && ends_sentence("すごい！"));
+        assert!(!ends_sentence("昨日、") && !ends_sentence("友達と"));
     }
 
     #[test]
     fn hints_reveal_letters_gradually() {
-        let mut d = Drill::new("schedule", "일정", "", 1, true, true);
-        assert_eq!(d.hidden_text(), "________");
+        let mut d = Drill::new("予定", "일정", "", 1, true, true);
+        assert_eq!(d.hidden_text(), "＿＿＿");
         d.hint = 1;
-        assert_eq!(d.hidden_text(), "s_______");
-        d.hint = 3;
-        assert_eq!(d.hidden_text(), "sch_____");
+        assert_eq!(d.hidden_text(), "よ＿＿");
         d.hint = 50;
-        assert_eq!(d.hidden_text(), "schedul_", "the last letter is never given away");
-        let mut s = Drill::new("Nice to meet you.", "만나서 반가워요.", "", 1, true, false);
-        s.hint = 1;
-        assert_eq!(s.hidden_text(), "N___ t_ m___ y__.");
+        assert_eq!(d.hidden_text(), "よて＿", "the last kana is never given away");
+        let mut s = Drill::new("はじめまして。", "처음 뵙겠습니다.", "", 1, true, false);
+        s.hint = 2;
+        assert_eq!(s.hidden_text(), "はじ＿＿＿＿。");
     }
 }
 
@@ -607,7 +726,7 @@ pub struct Drill {
     pub tip: String,
     pub reps_needed: u32,
     pub reps_passed: u32,
-    /// Production practice: show the Korean, the learner says the English from memory.
+    /// Production practice: show the Korean, the learner says the Japanese from memory.
     pub recall: bool,
     /// Single word / short phrase (recall is checked by "did they say it").
     pub is_word: bool,
@@ -659,29 +778,23 @@ impl Drill {
         self
     }
 
-    /// The answer with letters hidden; each hint reveals one more leading letter of every word
-    /// (never the whole of a word, so one hint can't give away a single-word answer).
+    /// The answer's reading with its kana hidden; each hint reveals one more kana from the start
+    /// (never the last one, so hints can't give the whole answer away). Punctuation stays.
     fn hidden_text(&self) -> String {
-        self.target
-            .split_whitespace()
-            .map(|w| {
-                let chars: Vec<char> = w.chars().collect();
-                let letters = chars.iter().filter(|c| c.is_alphanumeric()).count();
-                let keep = self.hint.min(letters.saturating_sub(1));
-                let mut seen = 0;
-                chars
-                    .iter()
-                    .map(|c| {
-                        if !c.is_alphanumeric() {
-                            return *c;
-                        }
-                        seen += 1;
-                        if seen <= keep { *c } else { '_' }
-                    })
-                    .collect::<String>()
+        let reading = crate::ja::reading(&self.target);
+        let letters = reading.chars().filter(|c| c.is_alphanumeric()).count();
+        let keep = self.hint.min(letters.saturating_sub(1));
+        let mut seen = 0;
+        reading
+            .chars()
+            .map(|c| {
+                if !c.is_alphanumeric() {
+                    return c;
+                }
+                seen += 1;
+                if seen <= keep { c } else { '＿' }
             })
-            .collect::<Vec<_>>()
-            .join(" ")
+            .collect()
     }
 
     pub fn ui(&mut self, ui: &mut Ui, voice: &mut Voice, pass: f32, claude: Option<&Claude>) -> DrillEvent {
@@ -709,10 +822,10 @@ impl Drill {
 
         ui.vertical_centered(|ui| {
             if self.recall && !self.revealed {
-                ui.label(RichText::new("영어로 말해 보세요").color(muted()));
+                ui.label(RichText::new("일본어로 말해 보세요").color(muted()));
                 crate::grammar::ko_label(ui, &self.ko, 26.0, text_strong());
                 ui.add_space(6.0);
-                ui.label(RichText::new(self.hidden_text()).size(22.0).monospace().color(muted()));
+                ui.label(RichText::new(self.hidden_text()).size(22.0).color(muted()));
                 if !self.tip.is_empty() && self.hint > 0 {
                     ui.label(RichText::new(&self.tip).color(muted()));
                 }
@@ -735,15 +848,13 @@ impl Drill {
                 } else {
                     match &self.last {
                         Some((_, r)) => word_feedback(ui, r, 26.0),
-                        None => {
-                            ui.label(RichText::new(&self.target).size(26.0).strong());
-                        }
+                        None => ja_text(ui, &self.target, 26.0, text_strong()),
                     }
                 }
                 if !self.ko.is_empty() {
                     if stage < 2 || self.ko_shown || self.last.is_some() {
                         crate::grammar::ko_label(ui, &self.ko, 16.0, muted());
-                    } else if ui.small_button("한국어 뜻 보기").on_hover_text("5~6개월 차: 영어만 보고, 한국어는 확인할 때만 봐요").clicked() {
+                    } else if ui.small_button("한국어 뜻 보기").on_hover_text("5~6개월 차: 일본어만 보고, 한국어는 확인할 때만 봐요").clicked() {
                         self.ko_shown = true;
                     }
                 }
@@ -764,15 +875,22 @@ impl Drill {
                     if !voice.last_recording.is_empty() && ui.button("🎧 내 목소리").clicked() {
                         voice.play_last_recording();
                     }
-                    if !self.is_word && self.target.split_whitespace().count() > 1 {
+                    if !self.is_word && crate::ja::char_count(&self.target) > 4 {
                         if !self.chunks.is_empty() {
                             ui.toggle_value(&mut self.show_gloss, "📖 직독직해");
                         } else if self.gloss_job.running() {
                             ui.spinner();
-                        } else if let Some(c) = claude {
-                            if ui.button("📖 직독직해").clicked() {
-                                let (c, t) = (c.clone(), self.target.clone());
-                                self.gloss_job.spawn(move || c.chunk_gloss(&t));
+                        } else if ui.button("📖 직독직해").clicked() {
+                            match claude {
+                                Some(c) => {
+                                    let (c, t) = (c.clone(), self.target.clone());
+                                    self.gloss_job.spawn(move || c.chunk_gloss(&t));
+                                }
+                                // Offline: 문절 and roles from the analyser, meanings from the dictionary.
+                                None => {
+                                    self.chunks = crate::ja::local_chunks(&self.target);
+                                    self.show_gloss = true;
+                                }
                             }
                         }
                     }
@@ -802,8 +920,8 @@ impl Drill {
                 }
                 self.coach_tip = None;
                 let missed = if recall_try { Vec::new() } else { result.marks.iter().filter(|m| !m.ok).map(|m| m.word.clone()).collect() };
-                let words = result.marks.iter().filter(|m| m.ok).count();
-                self.last_wpm = crate::audio::wpm(words, self.capture.last_secs);
+                let chars: usize = result.marks.iter().filter(|m| m.ok).map(|m| crate::ja::char_count(&m.word)).sum();
+                self.last_wpm = crate::audio::wpm(chars, self.capture.last_secs);
                 self.last = Some((transcript.clone(), result));
                 event = DrillEvent::Attempt(Attempt { score: s, transcript, missed });
                 if self.reps_passed >= self.reps_needed && !self.done {
@@ -817,8 +935,8 @@ impl Drill {
                     .on_hover_text(SCORE_MEANING);
                 ui.label(RichText::new(format!("들린 말: \"{heard}\"")).color(muted()));
                 ui.label(RichText::new("점수 = 알아듣기 쉬운 정도 (원어민 발음과 비교한 점수가 아니에요)").small().color(muted())).on_hover_text(SCORE_MEANING);
-                if self.last_wpm > 0.0 && r.marks.len() >= 4 {
-                    ui.label(RichText::new(format!("⚡ 말하기 속도 {:.0} WPM (원어민 대화 약 150)", self.last_wpm)).color(muted()).small());
+                if self.last_wpm > 0.0 && crate::ja::char_count(&self.target) >= 8 {
+                    ui.label(RichText::new(format!("⚡ 말하기 속도 분당 {:.0}자 (원어민 대화 약 350자)", self.last_wpm)).color(muted()).small());
                 }
                 if r.score < pass {
                     ui.horizontal(|ui| {

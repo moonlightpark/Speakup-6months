@@ -104,7 +104,7 @@ impl App {
                     word: task.text.clone(),
                     meaning_ko: task.meaning_ko.clone(),
                     week: None,
-                    starters: vec![format!("I … {} …", task.text), format!("Yesterday, my … {} …", task.text), format!("I think {} is …", task.text), format!("At work, I … {} …", task.text)],
+                    starters: vec![format!("わたしは…{}…", task.text), format!("昨日、…{}…", task.text), format!("{}は…と思います。", task.text), format!("会社で…{}…", task.text)],
                     already_passed: task.passed > 0,
                 };
                 let mut m = std::mem::take(&mut self.homework.mission);

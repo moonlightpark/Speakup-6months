@@ -58,10 +58,10 @@ struct Data {
 
 fn data() -> &'static Data {
     static DATA: OnceLock<Data> = OnceLock::new();
-    DATA.get_or_init(|| serde_json::from_str(include_str!("../assets/talk_offline.json")).unwrap_or_default())
+    DATA.get_or_init(|| serde_json::from_str(include_str!("../assets/ja/talk_offline.json")).unwrap_or_default())
 }
 
-/// Level band of the content: A1 → 0, A2 → 1, B1–B1+ → 2, B2 and up → 3.
+/// Level band of the content: N5 → 0, N4 → 1, N3–N3+ → 2, N2 and up → 3.
 pub fn band_for(level: f32) -> u32 {
     match level {
         l if l < 2.0 => 0,
@@ -156,9 +156,10 @@ impl TalkScenario {
     }
 }
 
-/// Spoken length a band's answer should reach (words), for the offline feedback.
+/// Spoken length a band's answer should reach, for the offline feedback.
+/// How long a self-expression answer should be at this level, in Japanese characters.
 pub fn target_words(level: f32) -> usize {
-    [12, 25, 45, 70][band_for(level) as usize]
+    [25, 50, 90, 150][band_for(level) as usize]
 }
 
 #[cfg(test)]

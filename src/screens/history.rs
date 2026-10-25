@@ -156,14 +156,14 @@ impl App {
                     }
                     if let Some(d) = self.diary_on(date) {
                         ui.horizontal_wrapped(|ui| {
-                            ui.label(format!("📝 영어 일기: {}", d.text.chars().take(60).collect::<String>()));
+                            ui.label(format!("📝 일본어 일기: {}", d.text.chars().take(60).collect::<String>()));
                             if ui.button("📅 일기장에서 보기").clicked() {
                                 open_diary = Some(date);
                             }
                         });
                     }
                     if r.best_wpm > 0.0 {
-                        ui.label(format!("⚡ 스피드 리딩 최고 {:.0} WPM", r.best_wpm));
+                        ui.label(format!("⚡ 스피드 리딩 최고 {:.0}자/분", r.best_wpm));
                     }
                     ui.label(RichText::new(format!("레벨 {:.2} ({})", r.level, cefr_of(r.level))).color(muted()));
                 });

@@ -1,11 +1,12 @@
-# Builds SpeakUp 6M for macOS and Windows on every push to main and publishes the
-# packages to the "latest" GitHub release. Pushing a tag like v1.2.0 also creates a versioned release.
+# Builds SpeakUp 6M JP (the Japanese course, branch `japanese`) for macOS and Windows on every
+# push and publishes the packages to the "latest-japanese" GitHub release. Pushing a tag like
+# ja-v2.0.0 also creates a versioned release.
 name: build
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches: [japanese]
+    tags: ["ja-v*"]
   workflow_dispatch:
 
 permissions:
@@ -40,23 +41,6 @@ jobs:
         with:
           key: ${{ matrix.name }}
 
-      # sherpa-onnx's prebuilt libraries live in the user cache dir, outside target/.
-      # Keep them cached, and rebuild sherpa-rs-sys if they are missing so a cached
-      # target/ never links against files that aren't there.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/sherpa-rs
-            ~/AppData/Local/sherpa-rs
-          key: sherpa-${{ matrix.name }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Refresh sherpa-onnx if needed
-        shell: bash
-        run: |
-          dir="$HOME/Library/Caches/sherpa-rs"
-          [ "$RUNNER_OS" = "Windows" ] && dir="$LOCALAPPDATA/sherpa-rs"
-          if [ ! -d "$dir" ]; then cargo clean --release -p sherpa-rs-sys; fi
-
       - name: Windows libclang
         if: runner.os == 'Windows'
         shell: bash
@@ -64,21 +48,14 @@ jobs:
 
       - name: Test
         shell: bash
-        run: |
-          cargo test --release --no-run
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            # The test binary in deps/ needs the sherpa-onnx DLLs beside it, and a cached
-            # target/ doesn't always have them (STATUS_DLL_NOT_FOUND).
-            find "$(cygpath "$LOCALAPPDATA")/sherpa-rs" -name '*.dll' -exec cp {} target/release/deps/ \; -exec cp {} target/release/ \;
-          fi
-          cargo test --release
+        run: cargo test --release
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
           ./scripts/bundle_macos.sh
           mkdir -p dist
-          ditto -c -k --keepParent "target/release/SpeakUp 6M.app" "dist/SpeakUp6M-${{ matrix.name }}.zip"
+          ditto -c -k --keepParent "target/release/SpeakUp 6M JP.app" "dist/SpeakUp6M-JP-${{ matrix.name }}.zip"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -86,16 +63,14 @@ jobs:
         run: |
           cargo build --release
           New-Item -ItemType Directory -Force dist | Out-Null
-          # The neural voice needs the sherpa-onnx / onnxruntime DLLs beside the .exe.
           New-Item -ItemType Directory -Force pkg | Out-Null
-          Copy-Item target/release/speakup.exe pkg/
-          Copy-Item target/release/*.dll pkg/
+          Copy-Item target/release/speakup.exe "pkg/SpeakUp6M-JP.exe"
           Get-ChildItem pkg
-          Compress-Archive -Path pkg/* -DestinationPath "dist/SpeakUp6M-${{ matrix.name }}.zip"
+          Compress-Archive -Path pkg/* -DestinationPath "dist/SpeakUp6M-JP-${{ matrix.name }}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SpeakUp6M-${{ matrix.name }}
+          name: SpeakUp6M-JP-${{ matrix.name }}
           path: dist/*
 
   release:
@@ -115,11 +90,12 @@ jobs:
           ls -la dist
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
-            gh release create "$TAG" dist/* --repo "$REPO" --title "SpeakUp 6M $TAG" --generate-notes
+            gh release create "$TAG" dist/* --repo "$REPO" --title "SpeakUp 6M JP $TAG" --generate-notes
           else
-            # Rolling release that always holds the newest build of main.
-            gh release delete latest --repo "$REPO" --cleanup-tag --yes || true
-            gh release create latest dist/* --repo "$REPO" --target "$GITHUB_SHA" --latest \
-              --title "SpeakUp 6M (최신 빌드)" \
-              --notes "main 브랜치 최신 커밋 ${GITHUB_SHA::7} 의 자동 빌드입니다. macOS(Apple Silicon) / Windows."
+            # Rolling release that always holds the newest build of the japanese branch (not
+            # marked "latest": that stays the English app's).
+            gh release delete latest-japanese --repo "$REPO" --cleanup-tag --yes || true
+            gh release create latest-japanese dist/* --repo "$REPO" --target "$GITHUB_SHA" --latest=false \
+              --title "SpeakUp 6M JP · 일본어 (최신 빌드)" \
+              --notes "japanese 브랜치 최신 커밋 ${GITHUB_SHA::7} 의 자동 빌드입니다. macOS(Apple Silicon) / Windows."
           fi

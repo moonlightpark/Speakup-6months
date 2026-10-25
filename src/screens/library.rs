@@ -154,15 +154,9 @@ impl App {
                     ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(6.0, rect.height())), 3.0, Color32::from_black_alpha(60));
                     let icon = match b.kind {
                         "동화" => "🐰",
-                        "그림책" => "🎨",
-                        "동물 이야기" => "🐾",
-                        "읽기 교재" => "✏",
-                        "어린이 고전" => "🌈",
-                        "추리 소설" => "🔍",
-                        "SF·모험" => "🚀",
-                        "단편집" => "📑",
-                        "논픽션" => "💡",
-                        "고전 문학" => "📜",
+                        "단편" => "📑",
+                        "소설" => "📜",
+                        "수필" => "💡",
                         _ => "📖",
                     };
                     ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(24.0), Color32::WHITE);
@@ -191,7 +185,7 @@ impl App {
                             if ui.add(egui::Button::new(RichText::new(label).strong()).fill(ACCENT)).clicked() {
                                 open = Some(b);
                             }
-                        } else if ui.button("⬇ 받기 (원문, 무료)").on_hover_text("Project Gutenberg의 퍼블릭 도메인 원문을 한 번만 받습니다.").clicked() {
+                        } else if ui.button("⬇ 받기 (원문, 무료)").on_hover_text("青空文庫(아오조라 문고)의 퍼블릭 도메인 원문을 한 번만 받습니다.").clicked() {
                             fetch = Some(b);
                         }
                     });
@@ -203,13 +197,13 @@ impl App {
             self.open_book(b);
         }
         if let Some(b) = fetch {
-            if let Source::Gutenberg(id) = b.source {
+            if let Source::Aozora(_) = b.source {
                 let dir = self.store.library_dir();
                 self.library.downloading = Some(b.id);
-                self.library.download.spawn(move || library::download(&dir, id));
+                self.library.download.spawn(move || library::download(&dir, b));
             }
         }
-        ui.label(RichText::new("원문 책은 저작권이 만료된 퍼블릭 도메인 작품(Project Gutenberg)입니다. 짧은 동화는 학습용으로 다시 쓴 이야기입니다.").color(muted()).small());
+        ui.label(RichText::new("원문 책은 저작권이 만료된 퍼블릭 도메인 작품(青空文庫 · 아오조라 문고)입니다. 쉬운 동화는 학습용으로 다시 쓴 이야기입니다.").color(muted()).small());
     }
 
     fn reader_ui(&mut self, ui: &mut Ui) {
@@ -259,7 +253,7 @@ impl App {
         let paras = r.paragraphs();
         // Toolbar
         ui.horizontal_wrapped(|ui| {
-            let whole = paras.join(" ");
+            let whole = paras.join("\n");
             if ui.add(egui::Button::new(RichText::new("▶ 이 페이지 듣기").strong()).fill(ACCENT)).clicked() {
                 self.voice.say(&whole);
             }
@@ -271,12 +265,12 @@ impl App {
                 self.voice.player.stop();
             }
             if r.simplified.as_ref().is_some_and(|(p, _)| *p == r.page) {
-                ui.checkbox(&mut r.show_simple, "✨ 쉬운 영어로 보기");
+                ui.checkbox(&mut r.show_simple, "✨ 쉬운 일본어로 보기");
             } else if r.simplify.running() {
                 ui.spinner();
-                ui.label(RichText::new("쉬운 영어로 바꾸는 중…").color(muted()));
+                ui.label(RichText::new("쉬운 일본어로 바꾸는 중…").color(muted()));
             } else if let Some(c) = claude.clone() {
-                if ui.button("✨ 쉬운 영어로 다시 쓰기").on_hover_text("Claude가 내 레벨에 맞게 이 페이지를 쉽게 바꿔 줍니다.").clicked() {
+                if ui.button("✨ 쉬운 일본어로 다시 쓰기").on_hover_text("Claude가 내 레벨에 맞게 이 페이지를 쉽게 바꿔 줍니다.").clicked() {
                     let p = r.pages[r.page].paragraphs.clone();
                     r.simplify.spawn(move || c.simplify_page(&p, level));
                 }
@@ -298,21 +292,22 @@ impl App {
         egui::Frame::new().fill(Color32::from_rgb(250, 246, 236)).corner_radius(14.0).inner_margin(egui::Margin::symmetric(26, 20)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             for (pi, para) in paras.iter().enumerate() {
-                let sents = crate::neural_tts::sentences(para);
+                let sents = crate::voice::sentences(para);
                 ui.horizontal_wrapped(|ui| {
-                    // Clear gaps between sentences (and lines) for easier reading.
-                    ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
+                    // A small gap between sentences, and room between lines for the furigana.
+                    ui.spacing_mut().item_spacing = Vec2::new(0.0, 10.0);
                     for (si, s) in sents.iter().enumerate() {
                         let sel = r.selected == Some((pi, si));
-                        let text = RichText::new(s).size(18.0).color(if sel { Color32::from_rgb(20, 40, 120) } else { Color32::from_rgb(40, 36, 30) });
-                        let text = if sel { text.background_color(Color32::from_rgb(255, 226, 140)) } else { text };
-                        let resp = ui.add(egui::Label::new(text).sense(Sense::click()));
-                        if resp.hovered() && !sel {
-                            ui.painter().rect_stroke(resp.rect.expand(1.0), 3.0_f32, egui::Stroke::new(1.0, Color32::from_rgb(200, 180, 120)), egui::StrokeKind::Outside);
-                        }
-                        if resp.clicked() {
+                        let color = if sel { Color32::from_rgb(20, 40, 120) } else { Color32::from_rgb(40, 36, 30) };
+                        let hover_id = egui::Id::new(("reader_hover", pi, si));
+                        let was_hovered = ui.ctx().data(|d| d.get_temp::<bool>(hover_id)).unwrap_or(false);
+                        let bg = if sel { Some(Color32::from_rgb(255, 226, 140)) } else if was_hovered { Some(Color32::from_rgb(240, 230, 200)) } else { None };
+                        let (c, h) = ja_sentence(ui, s, 19.0, color, bg);
+                        ui.ctx().data_mut(|d| d.insert_temp(hover_id, h));
+                        if c {
                             clicked = Some((pi, si));
                         }
+                        ui.add_space(6.0);
                     }
                 });
                 // Tools for the selected sentence, right under its paragraph.
@@ -338,11 +333,14 @@ impl App {
                                 if !has_gloss {
                                     if r.gloss.running() {
                                         ui.spinner();
-                                    } else if let Some(c) = claude.clone() {
-                                        if ui.button("📖 직독직해").clicked() {
-                                            r.gloss_text = sentence.clone();
-                                            let t = sentence.clone();
-                                            r.gloss.spawn(move || c.chunk_gloss(&t));
+                                    } else if ui.button("📖 직독직해").clicked() {
+                                        match claude.clone() {
+                                            Some(c) => {
+                                                r.gloss_text = sentence.clone();
+                                                let t = sentence.clone();
+                                                r.gloss.spawn(move || c.chunk_gloss(&t));
+                                            }
+                                            None => self.store.put_gloss(&sentence, &crate::ja::local_chunks(&sentence)),
                                         }
                                     }
                                 }
@@ -352,18 +350,20 @@ impl App {
                                 role_legend(ui, &chunks);
                                 chunk_view(ui, &chunks, None, 17.0);
                             }
-                            // Word lookup: the built-in 6,000-word dictionary first (instant, no API).
+                            // Word lookup: the built-in word dictionary first (instant, no API).
                             ui.horizontal_wrapped(|ui| {
                                 ui.label(RichText::new("단어 뜻:").color(muted()).small());
-                                for w in sentence.split_whitespace() {
-                                    let clean: String = w.chars().filter(|c| c.is_alphabetic() || *c == '\'' || *c == '’' || *c == '-').collect();
-                                    if clean.len() < 2 {
+                                let mut seen = std::collections::HashSet::new();
+                                for t in crate::ja::tokenize(&sentence).into_iter().filter(|t| t.is_content() && t.pos != "接頭詞") {
+                                    if !seen.insert(t.base.clone()) {
                                         continue;
                                     }
-                                    if ui.small_button(&clean).clicked() {
+                                    let clean = t.surface.clone();
+                                    if ui.small_button(&clean).on_hover_text(&t.base).clicked() {
                                         r.word_result = Some(match crate::dictionary::lookup(&clean) {
                                             Some((b, inflected)) => {
                                                 let base = if inflected { format!(" · '{clean}'의 기본형") } else { String::new() };
+                                                let base = format!(" · {} · N{}{base}", b.reading, b.jlpt);
                                                 let m = WordMeaning {
                                                     meaning_ko: b.meaning_ko.clone(),
                                                     note_ko: format!("{}{base} · 📖 사전", b.pos_ko),
@@ -431,7 +431,7 @@ impl App {
                 r.selected = Some(sel);
                 r.drill = None;
                 r.word_result = None;
-                if let Some(s) = crate::neural_tts::sentences(&paras[sel.0]).get(sel.1) {
+                if let Some(s) = crate::voice::sentences(&paras[sel.0]).get(sel.1) {
                     self.voice.say(s);
                 }
             }
@@ -474,8 +474,7 @@ impl App {
         if let Some((w, m)) = save_word {
             crate::srs::add_item(
                 &mut self.store.items,
-                // Stored in lower case like lesson words ("The" at a sentence start is still "the").
-                StudyItem { kind: ItemKind::Word, text: w.to_lowercase(), meaning_ko: m.meaning_ko, example: m.example, example_ko: m.example_ko, category: "vocab".into(), ..Default::default() },
+                StudyItem { kind: ItemKind::Word, text: w, meaning_ko: m.meaning_ko, example: m.example, example_ko: m.example_ko, category: "vocab".into(), ..Default::default() },
             );
             self.store.save_items();
             self.toast("📒 단어장에 추가했어요");
@@ -521,5 +520,5 @@ impl App {
 /// Paragraphs to read for the daily reading step.
 pub const READ_GOAL: u32 = 8;
 
-/// Shown when a word isn't in the built-in 6,000-word dictionary.
-const NOT_IN_DICTIONARY: &str = "사전에 없는 단어예요 (이름이거나 6,000단어 밖의 단어)";
+/// Shown when a word isn't in the built-in word dictionary.
+const NOT_IN_DICTIONARY: &str = "사전에 없는 단어예요 (이름이거나 내장 단어장 밖의 단어)";

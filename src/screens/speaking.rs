@@ -17,9 +17,9 @@ pub struct SelfExprState {
     pub feedback: Option<SpeechFeedback>,
     pub error: Option<String>,
     pub show_model: bool,
-    /// ✏ 영작 노트: the learner's draft before speaking.
+    /// ✏ 작문 노트: the learner's draft before speaking.
     pub draft: String,
-    /// Offline: the built-in question being practised (its English text).
+    /// Offline: the built-in question being practised (its Japanese text).
     pub offline_pick: Option<String>,
     /// Offline: feedback worked out on the device (words, speed, useful phrases used).
     pub local: Option<LocalFeedback>,
@@ -73,23 +73,14 @@ pub struct RoleplayState {
     pub free_cat: usize,
 }
 
-/// Splits a paragraph into sentences for read-aloud drills.
+/// Splits a paragraph into sentences for read-aloud drills; a very short one ("はい。") joins
+/// the sentence before it.
 pub fn split_sentences(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut cur = String::new();
-    for c in text.chars() {
-        cur.push(c);
-        if matches!(c, '.' | '?' | '!') && cur.trim().split_whitespace().count() >= 3 {
-            out.push(cur.trim().to_string());
-            cur.clear();
-        }
-    }
-    if !cur.trim().is_empty() {
-        if cur.trim().split_whitespace().count() < 3 && !out.is_empty() {
-            let last = out.pop().unwrap();
-            out.push(format!("{last} {}", cur.trim()));
-        } else {
-            out.push(cur.trim().to_string());
+    let mut out: Vec<String> = Vec::new();
+    for s in crate::voice::sentences(text) {
+        match out.last_mut() {
+            Some(last) if crate::ja::char_count(&s) < 4 || crate::ja::char_count(last) < 4 => last.push_str(&s),
+            _ => out.push(s),
         }
     }
     out
@@ -119,7 +110,7 @@ impl App {
             }
         }
 
-        page_title(ui, "💬 자기 표현 · 영작해서 말하기", "질문에 대한 내 답을 영어로 만들어(영작) 30~60초 동안 말해요. 완벽하지 않아도 괜찮아요 — 말한 뒤 더 자연스러운 표현으로 다시 읽습니다.");
+        page_title(ui, "💬 자기 표현 · 작문해서 말하기", "질문에 대한 내 답을 일본어로 만들어(작문) 30~60초 동안 말해요. 완벽하지 않아도 괜찮아요 — 말한 뒤 더 자연스러운 표현으로 다시 읽습니다.");
         ui.add_space(8.0);
         if offline {
             let mut other = false;
@@ -150,20 +141,20 @@ impl App {
             });
         });
         ui.add_space(8.0);
-        // 📝 영작 설계도: answer → details → wrap-up, with the useful phrases as building blocks.
+        // 📝 작문 설계도: answer → details → wrap-up, with the useful phrases as building blocks.
         let target = crate::offline_talk::target_words(self.store.profile.level);
         let mut insert: Option<String> = None;
         let focus = self.focus_words();
         card(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("📝 영작 설계도").size(18.0).strong());
-                ui.label(RichText::new(format!("이 순서로 내 답을 영어로 만들어 보세요 · 목표 약 {target}단어 ({}) · 30~60초", cefr_of(self.store.profile.level))).color(muted()));
+                ui.label(RichText::new("📝 작문 설계도").size(18.0).strong());
+                ui.label(RichText::new(format!("이 순서로 내 답을 일본어로 만들어 보세요 · 목표 약 {target}자 ({}) · 30~60초", cefr_of(self.store.profile.level))).color(muted()));
             });
             ui.add_space(6.0);
             let steps: [(&str, &str, &[&str]); 3] = [
-                ("① 답하기", "질문에 한 문장으로 바로 답해요", &["I …", "Yes, I …", "My answer is …"]),
-                ("② 이유·예시", "왜 그런지, 예를 들어 2문장", &["Because …", "For example, …", "Also, …"]),
-                ("③ 마무리", "한 문장으로 정리해요", &["So, …", "That's why …", "Anyway, …"]),
+                ("① 답하기", "질문에 한 문장으로 바로 답해요", &["わたしは…", "はい、…", "そうですね、…"]),
+                ("② 이유·예시", "왜 그런지, 예를 들어 2문장", &["…からです。", "たとえば、…", "それに、…"]),
+                ("③ 마무리", "한 문장으로 정리해요", &["だから、…", "それで、…", "とにかく、…"]),
             ];
             ui.columns(3, |cols| {
                 for (i, (title, desc, frames)) in steps.iter().enumerate() {
@@ -176,7 +167,7 @@ impl App {
                         // The lesson's useful phrase for this step first, then general frames.
                         let phrase = se.useful_phrases.get(i);
                         if let Some(p) = phrase {
-                            let r = ui.add(egui::Label::new(RichText::new(&p.text).strong()).sense(egui::Sense::click())).on_hover_text(format!("{} · 누르면 영작 노트에 넣어요", p.ko));
+                            let r = ui.add(egui::Label::new(RichText::new(&p.text).strong()).sense(egui::Sense::click())).on_hover_text(format!("{} · 누르면 작문 노트에 넣어요", p.ko));
                             if r.clicked() {
                                 insert = Some(p.text.clone());
                             }
@@ -184,7 +175,7 @@ impl App {
                         }
                         ui.horizontal_wrapped(|ui| {
                             for f in frames.iter() {
-                                if ui.add(egui::Button::new(RichText::new(*f).small()).small()).on_hover_text("누르면 영작 노트에 넣어요").clicked() {
+                                if ui.add(egui::Button::new(RichText::new(*f).small()).small()).on_hover_text("누르면 작문 노트에 넣어요").clicked() {
                                     insert = Some(f.to_string());
                                 }
                             }
@@ -193,21 +184,21 @@ impl App {
                 }
             });
             ui.add_space(8.0);
-            // ✏ 영작 노트: write first (optional), then say it looking at it.
+            // ✏ 작문 노트: write first (optional), then say it looking at it.
             ui.horizontal(|ui| {
-                ui.label(RichText::new("✏ 영작 노트 (선택)").strong());
-                let n = self.selfx.draft.split_whitespace().count();
-                ui.label(RichText::new(format!("{n} / {target}단어")).color(if n >= target { GOOD } else { muted() }));
+                ui.label(RichText::new("✏ 작문 노트 (선택)").strong());
+                let n = crate::ja::char_count(&self.selfx.draft);
+                ui.label(RichText::new(format!("{n} / {target}자")).color(if n >= target { GOOD } else { muted() }));
             });
             ui.add(
                 egui::TextEdit::multiline(&mut self.selfx.draft)
                     .desired_rows(3)
                     .desired_width(f32::INFINITY)
                     .font(egui::FontId::proportional(17.0))
-                    .hint_text("말하기 전에 키워드나 문장을 영어로 적어 보세요. 말할 때 보면서 말해도 좋아요."),
+                    .hint_text("말하기 전에 키워드나 문장을 일본어로 적어 보세요. 말할 때 보면서 말해도 좋아요."),
             );
             ui.horizontal(|ui| {
-                if !self.selfx.draft.trim().is_empty() && ui.button("🔊 내 영작 들어보기").clicked() {
+                if !self.selfx.draft.trim().is_empty() && ui.button("🔊 내 작문 들어보기").clicked() {
                     self.voice.say(&self.selfx.draft);
                 }
                 ui.checkbox(&mut self.selfx.show_model, "모범 답안 보기");
@@ -221,12 +212,12 @@ impl App {
                 let examples: Vec<LessonWord> = focus.iter().filter(|w| !w.example.is_empty()).take(3).cloned().collect();
                 if !examples.is_empty() {
                     ui.add_space(6.0);
-                    ui.label(RichText::new(format!("💡 오늘 단어가 들어간 문장 {}개 · 누르면 영작 노트에 넣어요", examples.len())).color(warn()).strong());
+                    ui.label(RichText::new(format!("💡 오늘 단어가 들어간 문장 {}개 · 누르면 작문 노트에 넣어요", examples.len())).color(warn()).strong());
                     for w in &examples {
                         ui.horizontal_wrapped(|ui| {
                             speaker_button(ui, &mut self.voice, &w.example);
                             chip(ui, &format!("💬 {}", w.word), ACCENT);
-                            let r = ui.add(egui::Label::new(RichText::new(&w.example).size(16.0)).sense(egui::Sense::click())).on_hover_text("누르면 영작 노트에 넣어요");
+                            let r = ui.add(egui::Label::new(RichText::new(&w.example).size(16.0)).sense(egui::Sense::click())).on_hover_text("누르면 작문 노트에 넣어요");
                             if r.clicked() {
                                 insert = Some(w.example.clone());
                             }
@@ -239,11 +230,8 @@ impl App {
             }
         });
         if let Some(t) = insert {
-            let d = &mut self.selfx.draft;
-            if !d.is_empty() && !d.ends_with(' ') {
-                d.push(' ');
-            }
-            d.push_str(&t);
+            // Japanese is written without spaces between sentences or phrases.
+            self.selfx.draft.push_str(&t);
         }
         ui.add_space(6.0);
         self.focus_words_hint(ui);
@@ -261,7 +249,7 @@ impl App {
                         self.selfx = SelfExprState { offline_pick: pick, ..Default::default() };
                     }
                 } else if let Some(t) = {
-                    ui.label(RichText::new("🎤 영작한 내 답을 말해요 (30~60초)").size(17.0).strong());
+                    ui.label(RichText::new("🎤 작문한 내 답을 말해요 (30~60초)").size(17.0).strong());
                     self.selfx.capture.ui(ui, &mut self.voice, 90.0)
                 } {
                     self.selfx.answer = Some(t.clone());
@@ -276,8 +264,8 @@ impl App {
                         None => {
                             // Offline: what can be measured on the device.
                             self.store.log_attempt("self-expression", &se.question, &t, 0.0);
-                            let said = format!(" {} ", normalize_words(&t));
-                            let words = t.split_whitespace().count();
+                            let said = t.clone();
+                            let words = crate::ja::char_count(&t);
                             let secs = self.selfx.capture.last_secs.max(0.5);
                             let used = se.useful_phrases.iter().filter(|p| key_words_used(&said, &p.text)).map(|p| p.text.clone()).collect();
                             self.selfx.local = Some(LocalFeedback { words, wpm: words as f32 * 60.0 / secs, used });
@@ -285,8 +273,8 @@ impl App {
                     }
                 }
                 if let Some(a) = &self.selfx.answer {
-                    let n = a.split_whitespace().count();
-                    ui.label(RichText::new(format!("내가 한 말 ({n}단어 / 목표 {target}): \"{a}\"")).color(if n >= target { GOOD } else { muted() }));
+                    let n = crate::ja::char_count(a);
+                    ui.label(RichText::new(format!("내가 한 말 ({n}자 / 목표 {target}자): \"{a}\"")).color(if n >= target { GOOD } else { muted() }));
                 }
                 if let Some(e) = &self.selfx.error {
                     error_label(ui, e);
@@ -337,8 +325,8 @@ impl App {
             card(ui, |ui| {
                 ui.horizontal(|ui| {
                     for (label, v, good) in [
-                        ("말한 단어", format!("{}", lf.words), lf.words >= target),
-                        ("말하기 속도", format!("{:.0} WPM", lf.wpm), lf.wpm >= 80.0),
+                        ("말한 글자", format!("{}", lf.words), lf.words >= target),
+                        ("말하기 속도", format!("{:.0}자/분", lf.wpm), lf.wpm >= 150.0),
                         ("쓴 표현", format!("{}/{}", lf.used.len(), se.useful_phrases.len()), !lf.used.is_empty()),
                     ] {
                         ui.vertical(|ui| {
@@ -351,7 +339,7 @@ impl App {
                 ui.label(RichText::new(if lf.words >= target {
                     "👏 충분히 길게 말했어요! 모범 답안과 비교해 보고, 아래 이어지는 질문에도 답해 보세요.".to_string()
                 } else {
-                    format!("조금 더 길게 말해 봐요 (이 레벨 목표 약 {target}단어). '쓸 수 있는 표현'을 넣어 이유나 예를 덧붙이면 쉬워요.")
+                    format!("조금 더 길게 말해 봐요 (이 레벨 목표 약 {target}자). '쓸 수 있는 표현'을 넣어 이유나 예를 덧붙이면 쉬워요.")
                 }));
                 ui.add_space(6.0);
                 ui.label(RichText::new("모범 답안").color(ACCENT));
@@ -494,27 +482,27 @@ impl App {
             return crate::offline_talk::pick_scenario(self.store.profile.level, |_| false, day).map(|s| s.to_business()).unwrap_or(lesson);
         }
         if self.roleplay.mode == 2 {
-            let (title, ko, ai, usr) = crate::content::ROLEPLAYS[self.roleplay.collection.min(crate::content::ROLEPLAYS.len() - 1)];
+            let (title, ko, ai, usr) = crate::content::roleplays()[self.roleplay.collection.min(crate::content::roleplays().len() - 1)];
             return BusinessScenario { title: title.into(), scenario_ko: ko.into(), ai_role: ai.into(), user_role: usr.into(), ..Default::default() };
         }
         if self.roleplay.mode == 3 {
             let (sit, ai, usr) = &self.roleplay.custom;
             return BusinessScenario {
-                title: "My scene".into(),
+                title: "わたしの場面".into(),
                 scenario_ko: sit.clone(),
-                ai_role: if ai.trim().is_empty() { "a conversation partner".into() } else { ai.clone() },
-                user_role: if usr.trim().is_empty() { "myself".into() } else { usr.clone() },
+                ai_role: if ai.trim().is_empty() { "대화 상대".into() } else { ai.clone() },
+                user_role: if usr.trim().is_empty() { "나 자신".into() } else { usr.clone() },
                 ..Default::default()
             };
         }
         if self.roleplay.mode == 1 {
             let wk = curriculum::week(curriculum::week_number(&self.store.profile));
             BusinessScenario {
-                title: format!("Free talk: {}", wk.theme),
-                scenario_ko: format!("'{}' 주제로 원어민 친구와 자유롭게 대화합니다.", wk.theme_ko),
-                ai_role: "Alex, a friendly native English-speaking friend".into(),
-                user_role: "themselves".into(),
-                opening_line: format!("Hey! Good to see you. So, I wanted to ask you — {}?", wk.theme.to_lowercase()),
+                title: format!("フリートーク: {}", wk.theme_ko),
+                scenario_ko: format!("'{}' 주제로 일본인 친구와 자유롭게 대화합니다.", wk.theme_ko),
+                ai_role: "유키, 친절한 일본인 친구 (편한 말투)".into(),
+                user_role: "나 자신".into(),
+                opening_line: format!("やあ、久しぶり！ねえ、今日は「{}」の話をしようよ。", wk.theme_ko),
                 key_phrases: Vec::new(),
                 guide: Vec::new(),
             }
@@ -525,13 +513,13 @@ impl App {
 
     /// ☕ 자유 회화: category tabs, then the category's 50 scenarios (coloured by finished
     /// conversations, easy ones first); a click starts the conversation — the app asks, the
-    /// learner answers in English.
+    /// learner answers in Japanese.
     fn free_talk_picker(&mut self, ui: &mut Ui) {
         let cats = crate::freetalk::CATEGORIES;
         let done_in = |cat: &str, me: &Self| crate::freetalk::by_category(cat).iter().filter(|s| me.store.word_stat(&Self::scene_key(&s.title)).passes > 0).count();
         ui.add_space(6.0);
         card(ui, |ui| {
-            ui.label(RichText::new("☕ 자유 회화 · 상황을 고르면 상대가 질문하고, 나는 영어로 대답해요").size(18.0).strong());
+            ui.label(RichText::new("☕ 자유 회화 · 상황을 고르면 상대가 질문하고, 나는 일본어로 대답해요").size(18.0).strong());
             ui.label(RichText::new("카테고리마다 50개 상황 · 질문 5개씩 · 쉬움 → 보통 → 도전 순서").color(muted()));
             ui.add_space(6.0);
             ui.horizontal_wrapped(|ui| {
@@ -689,7 +677,7 @@ impl App {
         }
         let offline = self.talk_offline();
 
-        page_title(ui, "💼 회화 · 비즈니스 영어", "");
+        page_title(ui, "💼 회화 · 비즈니스 일본어", "");
         ui.horizontal_wrapped(|ui| {
             let was = self.roleplay.mode;
             ui.selectable_value(&mut self.roleplay.mode, 0, "💼 오늘의 비즈니스");
@@ -721,7 +709,7 @@ impl App {
             let scenes: Vec<(String, String)> = if offline {
                 crate::offline_talk::scenarios(self.store.profile.level).iter().map(|s| (s.title.clone(), s.scenario_ko.clone())).collect()
             } else {
-                crate::content::ROLEPLAYS.iter().map(|r| (r.0.to_string(), r.1.to_string())).collect()
+                crate::content::roleplays().iter().map(|r| (r.0.to_string(), r.1.to_string())).collect()
             };
             card(ui, |ui| {
                 let counts: Vec<u32> = scenes.iter().map(|r| self.store.word_stat(&Self::scene_key(&r.0)).passes).collect();
@@ -759,7 +747,7 @@ impl App {
         }
         if !self.roleplay.started && self.roleplay.mode == 3 {
             card(ui, |ui| {
-                ui.label("연습하고 싶은 상황을 적어 주세요 (한국어/영어 모두 가능)");
+                ui.label("연습하고 싶은 상황을 적어 주세요 (한국어/일본어 모두 가능)");
                 ui.add(egui::TextEdit::singleline(&mut self.roleplay.custom.0).hint_text("예: 해외 출장 중 호텔 예약이 누락되어 항의하기").desired_width(f32::INFINITY));
                 ui.horizontal(|ui| {
                     ui.label("상대 역할");
@@ -904,10 +892,8 @@ impl App {
                 spinner_label(ui, "상대가 답하는 중…");
             } else if let Some(t) = self.roleplay.capture.ui(ui, &mut self.voice, 45.0) {
                 // A key phrase used in the conversation counts as practice too.
-                let said = normalize_words(&t);
                 for p in &sc.key_phrases {
-                    let phrase = normalize_words(&p.text);
-                    if !phrase.is_empty() && format!(" {said} ").contains(&format!(" {phrase} ")) {
+                    if key_words_used(&t, &p.text) {
                         self.store.record_word_practice(&p.text, true);
                     }
                 }
@@ -956,32 +942,31 @@ impl App {
     }
 }
 
-/// Lower-case words without punctuation, single-spaced ("We're on track." → "we're on track").
-fn normalize_words(t: &str) -> String {
-    t.to_lowercase()
-        .replace('’', "'")
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '\'' { c } else { ' ' })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn splits_paragraph() {
-        let s = split_sentences("I work at a bank. I love it! Do you? Yes.");
-        assert_eq!(s, vec!["I work at a bank.", "I love it!", "Do you? Yes."]);
+        let s = split_sentences("銀行で働いています。仕事が好きです！あなたは？はい。");
+        assert_eq!(s, vec!["銀行で働いています。", "仕事が好きです！", "あなたは？はい。"]);
+    }
+
+    #[test]
+    fn phrase_frames_are_found_in_speech() {
+        assert!(key_words_used("わたしはキムです。よろしくお願いします", "わたしは…です。"));
+        assert!(key_words_used("週末はいつも映画を見ます", "いつも…"));
+        assert!(!key_words_used("こんにちは", "…と呼んでください。"));
     }
 }
 
-/// The content words of a phrase (frames like "I usually ..." → "i usually") all appear in what
-/// was said.
+/// The pieces of a phrase around its "…" slots (frames like "わたしは…です。") all appear in
+/// what was said (by sound, so kana/kanji differences don't matter).
 fn key_words_used(said: &str, phrase: &str) -> bool {
-    let words: Vec<String> = normalize_words(phrase).split(' ').filter(|w| w.len() > 1 && !w.contains("...")).map(|w| w.to_string()).collect();
-    !words.is_empty() && words.iter().all(|w| said.contains(&format!(" {w} ")))
+    let parts: Vec<String> = phrase
+        .split(['…', '～', '〜'])
+        .map(|p| p.chars().filter(|c| c.is_alphanumeric()).collect::<String>())
+        .filter(|p| p.chars().count() >= 2)
+        .collect();
+    !parts.is_empty() && parts.iter().all(|p| crate::dictionary::sentence_uses(said, p))
 }

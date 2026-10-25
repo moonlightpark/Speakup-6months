@@ -1,7 +1,7 @@
 //! A picture of the situation for a sentence (받아쓰기): Claude turns the sentence into a short
 //! image search ("coffee cup on a cafe table"), and the first matching photo on Wikimedia
 //! Commons (free licences, no key) is downloaded once into `scenes/` in the data folder.
-//! Without Claude, the sentence's content words are searched.
+//! Without Claude, the sentence's nouns are searched.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -19,20 +19,15 @@ pub struct SceneImage {
     pub artist: String,
 }
 
-/// Words that say nothing about the picture.
-const STOP: &[&str] = &[
-    "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "its", "our", "their", "a", "an", "the", "is", "am", "are", "was",
-    "were", "be", "been", "do", "does", "did", "have", "has", "had", "will", "would", "can", "could", "should", "to", "of", "in", "on", "at", "for", "with", "and", "or",
-    "but", "so", "not", "this", "that", "what", "where", "when", "how", "why", "who", "there", "here", "very", "just", "really", "some", "any", "about", "up", "out",
-    "get", "got", "go", "going", "let", "like", "if", "too", "all",
-];
+/// Nouns that say nothing about the picture.
+const STOP: &[&str] = &["こと", "もの", "ところ", "とき", "時", "人", "方", "今日", "明日", "昨日", "今", "私", "わたし", "あなた", "これ", "それ", "あれ", "ここ", "そこ", "何", "なに"];
 
-/// The sentence's content words, for searching without Claude.
+/// The sentence's nouns, for searching without Claude (Commons describes many photos in Japanese too).
 pub fn fallback_query(sentence: &str) -> String {
-    sentence
-        .split(|c: char| !c.is_ascii_alphabetic() && c != '\'')
-        .map(|w| w.trim_matches('\'').to_lowercase())
-        .filter(|w| w.len() > 2 && !w.contains('\'') && !STOP.contains(&w.as_str()))
+    crate::ja::tokenize(sentence)
+        .into_iter()
+        .filter(|t| t.pos == "名詞" && !matches!(t.pos1.as_str(), "代名詞" | "非自立" | "数" | "接尾" | "副詞可能" | "形容動詞語幹") && !STOP.contains(&t.surface.as_str()))
+        .map(|t| t.surface)
         .take(3)
         .collect::<Vec<_>>()
         .join(" ")
@@ -69,7 +64,7 @@ pub fn fetch(query: &str, dir: &Path) -> Result<SceneImage> {
     if query.trim().is_empty() || cfg!(test) {
         return Ok(img);
     }
-    let client = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(30)).user_agent("SpeakUp6M/1.0 (English learning app)").build()?;
+    let client = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(30)).user_agent("SpeakUp6M/2.0 (Japanese learning app)").build()?;
     let search = format!("{query} filetype:bitmap");
     let v: serde_json::Value = client
         .get("https://commons.wikimedia.org/w/api.php")
@@ -122,9 +117,9 @@ pub fn load(path: &PathBuf) -> Option<egui::ColorImage> {
 mod tests {
     #[test]
     fn content_words_without_claude() {
-        assert_eq!(super::fallback_query("I like coffee."), "coffee");
-        assert_eq!(super::fallback_query("We had a math test today."), "math test today");
-        assert_eq!(super::fallback_query("Where were you born?"), "born");
+        assert_eq!(super::fallback_query("コーヒーが好きです。"), "コーヒー");
+        assert_eq!(super::fallback_query("今日は数学のテストがありました。"), "数学 テスト");
+        assert_eq!(super::fallback_query("駅の近くに大きい公園があります。"), "駅 公園");
         assert_eq!(super::file_name("coffee"), super::file_name("coffee"));
     }
 }

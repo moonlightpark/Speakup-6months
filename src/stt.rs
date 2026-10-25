@@ -33,7 +33,8 @@ enum Job {
     Load(PathBuf),
     /// Load now (the mic was just pressed) so recognition is instant afterwards.
     Warm,
-    Transcribe(Vec<f32>, Sender<Result<String>>),
+    /// Audio, its language ("ja", "ko"), where to send the text.
+    Transcribe(Vec<f32>, &'static str, Sender<Result<String>>),
 }
 
 pub struct Stt {
@@ -44,6 +45,8 @@ pub struct Stt {
     pub total: Arc<AtomicU64>,
     tx: Sender<Job>,
     script: Option<crate::audio::Script>,
+    /// Language this handle recognizes; handles made with `with_language` share one model.
+    language: &'static str,
 }
 
 pub fn model_path(models_dir: &Path, model: &str) -> PathBuf {
@@ -57,8 +60,21 @@ impl Stt {
         let status = Arc::new(Mutex::new(SttStatus::Missing));
         let loaded: Arc<std::sync::atomic::AtomicBool> = Arc::default();
         let (st, ld) = (status.clone(), loaded.clone());
-        std::thread::spawn(move || worker(rx, st, ld, language));
-        Self { status, loaded, downloaded: Arc::default(), total: Arc::default(), tx, script: None }
+        std::thread::spawn(move || worker(rx, st, ld));
+        Self { status, loaded, downloaded: Arc::default(), total: Arc::default(), tx, script: None, language }
+    }
+
+    /// Another handle on the same model (one copy in memory) that recognizes `language`.
+    pub fn with_language(&self, language: &'static str) -> Self {
+        Self {
+            status: self.status.clone(),
+            loaded: self.loaded.clone(),
+            downloaded: self.downloaded.clone(),
+            total: self.total.clone(),
+            tx: self.tx.clone(),
+            script: self.script.clone(),
+            language,
+        }
     }
 
     /// A recognizer that returns scripted text instead of running whisper (automated tests).
@@ -72,6 +88,7 @@ impl Stt {
             total: Arc::default(),
             tx,
             script: Some(script),
+            language: "ja",
         }
     }
 
@@ -131,13 +148,13 @@ impl Stt {
         } else if !self.is_ready() {
             let _ = tx.send(Err(anyhow!("음성 인식 모델이 아직 준비되지 않았습니다 (설정 확인).")));
         } else {
-            let _ = self.tx.send(Job::Transcribe(audio, tx));
+            let _ = self.tx.send(Job::Transcribe(audio, self.language, tx));
         }
         rx
     }
 }
 
-fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::sync::atomic::AtomicBool>, language: &'static str) {
+fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::sync::atomic::AtomicBool>) {
     let mut path: Option<PathBuf> = None;
     let mut ctx: Option<WhisperContext> = None;
     let threads = std::thread::available_parallelism().map(|n| n.get().min(8) as i32).unwrap_or(4);
@@ -181,7 +198,7 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::syn
                     *status.lock().unwrap() = SttStatus::Error(format!("{e:#}"));
                 }
             }
-            Job::Transcribe(mut audio, reply) => {
+            Job::Transcribe(mut audio, language, reply) => {
                 let t0 = std::time::Instant::now();
                 let secs = audio.len() as f32 / STT_RATE as f32;
                 let result = (|| -> Result<String> {
@@ -262,13 +279,13 @@ mod tests {
     use super::*;
 
     /// End-to-end check with a real whisper model and real speech:
-    /// SPEAKUP_TEST_MODEL=.../ggml-base.en.bin SPEAKUP_TEST_AUDIO=dir cargo test -- --ignored --nocapture
+    /// SPEAKUP_TEST_MODEL=.../ggml-small.bin SPEAKUP_TEST_AUDIO=dir cargo test -- --ignored --nocapture
     #[test]
     #[ignore]
     fn transcribes_and_scores_real_speech() {
         let model = std::env::var("SPEAKUP_TEST_MODEL").expect("SPEAKUP_TEST_MODEL");
         let dir = PathBuf::from(std::env::var("SPEAKUP_TEST_AUDIO").expect("SPEAKUP_TEST_AUDIO"));
-        let stt = Stt::new("en");
+        let stt = Stt::new("ja");
         stt.load(model.into());
         let t0 = std::time::Instant::now();
         while stt.status() != SttStatus::Ready {
@@ -282,7 +299,7 @@ mod tests {
             let s: Vec<f32> = r.samples::<i16>().map(|x| x.unwrap() as f32 / 32768.0).collect();
             crate::audio::resample(&s, spec.sample_rate, STT_RATE)
         };
-        let target = "Could I get a glass of water, please?";
+        let target = "すみません、お水を一杯いただけますか。";
         let cases = [("good.wav", target, true), ("partial.wav", target, false)];
         for (file, target, should_pass) in cases {
             let audio = read(file);
@@ -292,14 +309,15 @@ mod tests {
             println!("{file}: heard {heard:?} -> {:.0} ({} ms)", r.score, t.elapsed().as_millis());
             assert_eq!(r.score >= 80.0, should_pass, "{file}");
         }
-        // 1.5x speed: recognition should still work, and WPM must come out higher.
+        // 1.5x speed: recognition should still work, and the speed (자/분) must come out higher.
         let normal = read("good.wav");
         let fast = read("fast.wav");
         let (s_norm, s_fast) = (crate::audio::voiced_seconds(&normal, STT_RATE), crate::audio::voiced_seconds(&fast, STT_RATE));
         let heard = stt.transcribe(fast).recv().unwrap().unwrap();
         let r = crate::scoring::score(target, &heard);
-        let ok = r.marks.iter().filter(|m| m.ok).count();
-        println!("fast.wav: {heard:?} -> {:.0}%, {:.0} WPM ({s_fast:.2}s) vs normal {:.0} WPM ({s_norm:.2}s)", r.score, crate::audio::wpm(ok, s_fast), crate::audio::wpm(8, s_norm));
+        let ok = r.heard_chars();
+        let all = crate::ja::char_count(target);
+        println!("fast.wav: {heard:?} -> {:.0}%, {:.0}자/분 ({s_fast:.2}s) vs normal {:.0}자/분 ({s_norm:.2}s)", r.score, crate::audio::wpm(ok, s_fast), crate::audio::wpm(all, s_norm));
         assert!(r.score >= 80.0);
         assert!(s_fast < s_norm * 0.8);
         // silence is rejected before reaching whisper

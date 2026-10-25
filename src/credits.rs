@@ -12,9 +12,9 @@ pub const LIBRARIES: &[Credit] = &[
     ("wry", "Apache-2.0 OR MIT", "앱 안 웹 화면 (리스닝 랩 영상)", "https://github.com/tauri-apps/wry"),
     ("whisper.cpp", "MIT", "음성 인식 엔진", "https://github.com/ggerganov/whisper.cpp"),
     ("whisper-rs", "Unlicense", "whisper.cpp 연결", "https://codeberg.org/tazz4843/whisper-rs"),
-    ("sherpa-onnx", "Apache-2.0", "AI 원어민 음성 엔진", "https://github.com/k2-fsa/sherpa-onnx"),
-    ("sherpa-rs", "MIT", "sherpa-onnx 연결", "https://github.com/thewh1teagle/sherpa-rs"),
-    ("tts", "MIT", "시스템 음성 (예비)", "https://github.com/ndarilek/tts-rs"),
+    ("lindera", "MIT", "일본어 형태소 분석 (후리가나 · 발음 채점 · 단어 찾기)", "https://github.com/lindera/lindera"),
+    ("IPADIC (mecab-ipadic)", "IPADIC 라이선스 (BSD 계열)", "lindera에 들어 있는 일본어 사전", "https://github.com/lindera/lindera"),
+    ("tts", "MIT", "일본어 음성 (운영체제 음성)", "https://github.com/ndarilek/tts-rs"),
     ("cpal", "Apache-2.0", "마이크 · 스피커", "https://github.com/rustaudio/cpal"),
     ("rodio", "MIT OR Apache-2.0", "소리 재생", "https://github.com/RustAudio/rodio"),
     ("reqwest", "MIT OR Apache-2.0", "인터넷 연결 (Claude, 사진, 모델 받기)", "https://github.com/seanmonstar/reqwest"),
@@ -24,14 +24,14 @@ pub const LIBRARIES: &[Credit] = &[
     ("rand", "MIT OR Apache-2.0", "문제 섞기", "https://github.com/rust-random/rand"),
     ("directories", "MIT OR Apache-2.0", "데이터 폴더 위치", "https://github.com/soc/directories-rs"),
     ("open", "MIT", "브라우저 · 폴더 열기", "https://github.com/Byron/open-rs"),
-    ("bzip2 / tar", "MIT OR Apache-2.0", "음성 모델 압축 풀기", "https://github.com/trifectatechfoundation/bzip2-rs"),
+    ("zip / encoding_rs", "MIT · MIT OR Apache-2.0", "아오조라 문고 책 풀기 (Shift_JIS)", "https://github.com/zip-rs/zip2"),
     ("anyhow", "MIT OR Apache-2.0", "오류 처리", "https://github.com/dtolnay/anyhow"),
 ];
 
 pub const MODELS_FONTS: &[Credit] = &[
     ("Whisper 음성 인식 모델 (OpenAI)", "MIT", "내 말을 글자로 (ggml 형식, Hugging Face에서 받기)", "https://huggingface.co/ggerganov/whisper.cpp"),
-    ("Kokoro-82M 음성 모델", "Apache-2.0", "AI 원어민 목소리 (sherpa-onnx 배포본)", "https://huggingface.co/hexgrad/Kokoro-82M"),
-    ("Pretendard 글꼴 (길형진)", "SIL OFL 1.1", "한글 · 영어 글꼴", "https://github.com/orioncactus/pretendard"),
+    ("Pretendard 글꼴 (길형진)", "SIL OFL 1.1", "한글 · 라틴 글꼴", "https://github.com/orioncactus/pretendard"),
+    ("Noto Sans JP 글꼴 (Google · Adobe)", "SIL OFL 1.1", "일본어 (가나 · 한자) 글꼴", "https://github.com/notofonts/noto-cjk"),
     ("Ubuntu · Hack · Noto Emoji 글꼴", "Ubuntu Font Licence · MIT · SIL OFL 1.1", "egui 기본 글꼴 · 이모지", "https://github.com/emilk/egui/tree/master/crates/epaint_default_fonts"),
 ];
 
@@ -39,7 +39,7 @@ pub const SITES: &[Credit] = &[
     ("YouGlish", "서비스 이용약관", "리스닝 랩 🎬 오늘 문장 영상 · 🔤 오늘 단어 발음 (영상 검색 · 플레이어)", "https://youglish.com"),
     ("YouTube", "각 영상 제작자 소유", "YouGlish가 보여 주는 원본 영상", "https://www.youtube.com"),
     ("Wikimedia Commons", "사진마다 CC BY · CC BY-SA · CC0 등", "받아쓰기 상황 사진 (작가 · 라이선스는 사진 아래 표시)", "https://commons.wikimedia.org"),
-    ("Project Gutenberg", "퍼블릭 도메인", "리딩 라이브러리의 책", "https://www.gutenberg.org"),
+    ("青空文庫 (아오조라 문고)", "퍼블릭 도메인 (저작권 만료 작품)", "리딩 라이브러리의 책", "https://www.aozora.gr.jp"),
     ("Anthropic Claude API", "유료 서비스 (오픈소스 아님)", "레슨 · 문장 · 피드백 · 사진 검색어 만들기", "https://www.anthropic.com"),
 ];
 

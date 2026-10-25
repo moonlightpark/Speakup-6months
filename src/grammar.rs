@@ -1,5 +1,5 @@
-//! Grammatical-role colours (주어 · 동사 · 목적어 · 보어 · 대명사 …) for 직독직해 chunks and
-//! Korean passages. Important roles (subject, verb) are vivid; the less a word matters to the
+//! Grammatical-role colours (주어 · 동사 · 목적어 · 보어 · 대명사 …) for 직독직해 chunks (Japanese
+//! 문절) and Korean passages. Important roles (subject, verb) are vivid; the less a word matters to the
 //! sentence, the closer its colour is to grey.
 //!
 //! Korean passages are annotated by Claude in small batches in the background and cached in
@@ -22,9 +22,9 @@ pub const ROLES: &[(&str, &str, Color32)] = &[
     ("complement", "보어", Color32::from_rgb(56, 214, 120)),
     ("pronoun", "대명사", Color32::from_rgb(255, 120, 196)),
     ("noun", "명사", Color32::from_rgb(110, 200, 190)),
-    ("determiner", "관사·수", Color32::from_rgb(255, 160, 64)),
+    ("determiner", "지시어·수", Color32::from_rgb(255, 160, 64)),
     ("modifier", "수식어", Color32::from_rgb(196, 184, 150)),
-    ("connector", "전치사·접속사", Color32::from_rgb(140, 148, 164)),
+    ("connector", "접속어", Color32::from_rgb(140, 148, 164)),
     ("other", "기타", Color32::from_rgb(120, 126, 140)),
 ];
 
@@ -39,11 +39,11 @@ pub fn color(role: &str) -> Option<Color32> {
 
 /// Prompt text that defines the roles (shared by the 직독직해 and Korean requests).
 pub const ROLE_RULE: &str = "role is the grammatical function of that piece in its sentence, one of: \
-     subject (the subject, including subject pronouns: I, she, 나는, 그녀가), verb (the predicate verb with its auxiliaries/endings: am, have been working, 이다, 일어난다), \
-     object (direct/indirect object, including object pronouns), complement (subject/object complement: a boy in \"I am a boy\", 소년), \
-     pronoun (any other pronoun or possessive: my, it, 내, 그것의), noun (any other noun, e.g. inside a prepositional phrase), \
-     determiner (articles, numbers, demonstratives before a noun: a, the, this, 한, 그), modifier (adjectives and adverbs), \
-     connector (prepositions, conjunctions, particles that only link: in, and, because, 그리고), other (interjections, fillers, punctuation-only pieces).";
+     subject (the subject with は/が, including pronouns: 私は, 田中さんが, 나는, 그녀가), verb (the predicate: a verb or adjective with its endings: 行きました, 食べたい, 高いです, 이다, 일어난다), \
+     object (the object with を, or the thing wanted/liked with が: コーヒーを, 本が(好き), 커피를), complement (a noun + です/だ predicate: 学生です in \"私は学生です\", 소년이다), \
+     pronoun (any other pronoun or possessive: 私の, これ, 내, 그것의), noun (any other noun, e.g. with に/で/へ/と/から: 駅で, 友達と), \
+     determiner (demonstratives and numbers before a noun: この, その, 三つの, 한, 그), modifier (adjectives and adverbs modifying something: 新しい, とても, ゆっくり), \
+     connector (conjunctions and linking words: そして, でも, から (because), けど, 그리고), other (interjections, aizuchi, fillers, punctuation-only pieces: ええと, あの).";
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct KoSeg {
@@ -224,6 +224,6 @@ mod tests {
         assert!(segments_match("나는 소년이다.", &segs));
         assert!(!segments_match("나는 소년이다", &segs));
         assert!(!segments_match("나는", &[]));
-        assert!(wants_roles("나는 소년이다.") && !wants_roles("일정") && !wants_roles("I am a boy."));
+        assert!(wants_roles("나는 소년이다.") && !wants_roles("일정") && !wants_roles("私は学生です。"));
     }
 }

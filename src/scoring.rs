@@ -1,5 +1,7 @@
 //! Compares what the learner said (speech-recognition transcript) with the target text.
-//! Word-level alignment (Levenshtein over words) gives a per-word hit/miss map and a 0..100 score.
+//! Japanese has no spaces and the recognizer may write a word in kanji or kana (今日 / きょう),
+//! so both are turned into pronunciation kana (ja.rs) and aligned character by character
+//! (Levenshtein); each word of the target is OK when most of its sounds were heard.
 
 #[derive(Clone, Debug)]
 pub struct WordMark {
@@ -13,96 +15,9 @@ pub struct ScoreResult {
     pub marks: Vec<WordMark>,
 }
 
-const CONTRACTIONS: &[(&str, &str)] = &[
-    ("i'm", "i am"), ("you're", "you are"), ("we're", "we are"), ("they're", "they are"),
-    ("he's", "he is"), ("she's", "she is"), ("it's", "it is"), ("that's", "that is"),
-    ("there's", "there is"), ("what's", "what is"), ("let's", "let us"), ("i've", "i have"),
-    ("you've", "you have"), ("we've", "we have"), ("they've", "they have"), ("i'll", "i will"),
-    ("you'll", "you will"), ("we'll", "we will"), ("they'll", "they will"), ("it'll", "it will"),
-    ("i'd", "i would"), ("you'd", "you would"), ("we'd", "we would"), ("they'd", "they would"),
-    ("don't", "do not"), ("doesn't", "does not"), ("didn't", "did not"), ("can't", "can not"),
-    ("cannot", "can not"), ("won't", "will not"), ("isn't", "is not"), ("aren't", "are not"),
-    ("wasn't", "was not"), ("weren't", "were not"), ("haven't", "have not"), ("hasn't", "has not"),
-    ("couldn't", "could not"), ("shouldn't", "should not"), ("wouldn't", "would not"),
-    ("gonna", "going to"), ("wanna", "want to"),
-];
-
-const NUMBERS: &[&str] = &[
-    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
-    "nineteen", "twenty",
-];
-
-fn normalize_token(raw: &str) -> String {
-    raw.chars()
-        .map(|c| if c == '’' { '\'' } else { c })
-        .filter(|c| c.is_alphanumeric() || *c == '\'')
-        .collect::<String>()
-        .trim_matches('\'')
-        .to_lowercase()
-}
-
-/// Lower-cases, strips punctuation, expands contractions and small numbers so that
-/// "I'm 5." and "I am five" compare equal.
-pub fn normalize(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    for raw in text.split(|c: char| c.is_whitespace() || c == '-' || c == '—' || c == '/') {
-        let t = normalize_token(raw);
-        if t.is_empty() {
-            continue;
-        }
-        if let Some((_, full)) = CONTRACTIONS.iter().find(|(c, _)| *c == t) {
-            out.extend(full.split(' ').map(String::from));
-        } else if let Ok(n) = t.parse::<usize>() {
-            match NUMBERS.get(n) {
-                Some(w) => out.push(w.to_string()),
-                None => out.push(t),
-            }
-        } else {
-            out.push(t);
-        }
-    }
-    out
-}
-
-fn char_similarity(a: &str, b: &str) -> f32 {
-    let a: Vec<char> = a.chars().collect();
-    let b: Vec<char> = b.chars().collect();
-    let (n, m) = (a.len(), b.len());
-    if n == 0 || m == 0 {
-        return if n == m { 1.0 } else { 0.0 };
-    }
-    let mut prev: Vec<usize> = (0..=m).collect();
-    let mut cur = vec![0; m + 1];
-    for i in 1..=n {
-        cur[0] = i;
-        for j in 1..=m {
-            let cost = usize::from(a[i - 1] != b[j - 1]);
-            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + cost);
-        }
-        std::mem::swap(&mut prev, &mut cur);
-    }
-    1.0 - prev[m] as f32 / n.max(m) as f32
-}
-
-fn words_match(a: &str, b: &str) -> bool {
-    if a == b {
-        return true;
-    }
-    // Tolerate spelling variants from the recognizer (colour/color, okay/ok) on longer words.
-    a.chars().count() >= 4 && char_similarity(a, b) >= 0.75
-}
-
-/// Scores how well `spoken` reproduces `target`.
-pub fn score(target: &str, spoken: &str) -> ScoreResult {
-    let display: Vec<&str> = target.split_whitespace().collect();
-    let t = normalize(target);
-    let s = normalize(spoken);
-    if t.is_empty() {
-        return ScoreResult { score: 0.0, marks: Vec::new() };
-    }
+/// Edit-distance alignment of two character sequences: which characters of `t` were matched.
+fn align(t: &[char], s: &[char]) -> (Vec<bool>, usize) {
     let (n, m) = (t.len(), s.len());
-    // dp[i][j] = edit distance between t[..i] and s[..j]
     let mut dp = vec![vec![0usize; m + 1]; n + 1];
     for (i, row) in dp.iter_mut().enumerate() {
         row[0] = i;
@@ -112,15 +27,14 @@ pub fn score(target: &str, spoken: &str) -> ScoreResult {
     }
     for i in 1..=n {
         for j in 1..=m {
-            let sub = if words_match(&t[i - 1], &s[j - 1]) { 0 } else { 1 };
+            let sub = usize::from(t[i - 1] != s[j - 1]);
             dp[i][j] = (dp[i - 1][j] + 1).min(dp[i][j - 1] + 1).min(dp[i - 1][j - 1] + sub);
         }
     }
-    // Backtrack to find which target words were matched.
     let mut hit = vec![false; n];
     let (mut i, mut j, mut extra) = (n, m, 0);
     while i > 0 || j > 0 {
-        if i > 0 && j > 0 && words_match(&t[i - 1], &s[j - 1]) && dp[i][j] == dp[i - 1][j - 1] {
+        if i > 0 && j > 0 && t[i - 1] == s[j - 1] && dp[i][j] == dp[i - 1][j - 1] {
             hit[i - 1] = true;
             i -= 1;
             j -= 1;
@@ -134,35 +48,97 @@ pub fn score(target: &str, spoken: &str) -> ScoreResult {
             j -= 1;
         }
     }
+    (hit, extra)
+}
+
+/// Scores how well `spoken` reproduces `target` (0–100, one mark per word of the target; the
+/// marks' words put together give the target without whitespace).
+pub fn score(target: &str, spoken: &str) -> ScoreResult {
+    let tokens = crate::ja::tokenize(&crate::ja::digits_to_kanji(target));
+    // Marks show the target as written (digits stay digits), so map the tokens back onto it.
+    let display = display_words(target, &tokens);
+    let t = crate::ja::pron_chars(&tokens);
+    let s: Vec<char> = crate::ja::pron(spoken).chars().collect();
+    if t.is_empty() {
+        return ScoreResult { score: 0.0, marks: Vec::new() };
+    }
+    let tc: Vec<char> = t.iter().map(|x| x.0).collect();
+    let (hit, extra) = align(&tc, &s);
+    let n = tc.len();
     let matched = hit.iter().filter(|h| **h).count();
     let penalty = (extra as f32 * 0.5).min(n as f32 * 0.3);
     let score = ((matched as f32 - penalty).max(0.0) / n as f32 * 100.0).clamp(0.0, 100.0);
-
-    // Map normalized hits back onto the words as displayed. Contractions expand to several
-    // normalized tokens; a display word counts as OK only if all of its tokens were hit.
-    let mut marks = Vec::new();
-    let mut k = 0;
-    for w in display {
-        let cnt = normalize(w).len();
-        if cnt == 0 {
-            marks.push(WordMark { word: w.to_string(), ok: true });
-            continue;
-        }
-        let ok = (k..(k + cnt).min(n)).all(|x| hit[x]);
-        k += cnt;
-        marks.push(WordMark { word: w.to_string(), ok });
-    }
+    let marks = display
+        .into_iter()
+        .enumerate()
+        .map(|(i, word)| {
+            let sounds: Vec<bool> = t.iter().zip(&hit).filter(|((_, k), _)| *k == i).map(|(_, h)| *h).collect();
+            let got = sounds.iter().filter(|h| **h).count();
+            // Short words must be heard whole; longer ones may miss a sound (a recognizer slip).
+            let ok = sounds.is_empty() || got == sounds.len() || (sounds.len() >= 4 && got as f32 / sounds.len() as f32 >= 0.75);
+            WordMark { word, ok }
+        })
+        .collect();
     ScoreResult { score, marks }
 }
 
-/// Recall check: did the learner produce the target word/phrase somewhere in what they said?
+/// The target's words as written: token surfaces, except that numbers written in digits (which
+/// were spelled out in kanji for analysis) are shown as the learner saw them.
+fn display_words(target: &str, tokens: &[crate::ja::Token]) -> Vec<String> {
+    let compact: String = target.chars().filter(|c| !c.is_whitespace()).collect();
+    let joined: String = tokens.iter().map(|t| t.surface.as_str()).collect();
+    if joined == compact {
+        return tokens.iter().map(|t| t.surface.clone()).collect();
+    }
+    // Digits were converted: give each digit run to the first token that holds its kanji and
+    // the rest of the text to the tokens in order (falls back to one mark per token).
+    let mut out = Vec::new();
+    let mut rest = compact.as_str();
+    for t in tokens {
+        let surf = &t.surface;
+        if let Some(r) = rest.strip_prefix(surf.as_str()) {
+            out.push(surf.clone());
+            rest = r;
+        } else {
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit() || ('０'..='９').contains(c)).collect();
+            if !digits.is_empty() && surf.chars().all(|c| "〇一二三四五六七八九十百千万億".contains(c)) {
+                out.push(digits.clone());
+                rest = &rest[digits.len()..];
+            } else if surf.chars().all(|c| "〇一二三四五六七八九十百千万億".contains(c)) {
+                out.push(String::new());
+            } else {
+                return tokens.iter().map(|t| t.surface.clone()).collect();
+            }
+        }
+    }
+    if let Some(last) = out.last_mut() {
+        last.push_str(rest);
+    }
+    out
+}
+
+impl ScoreResult {
+    /// Characters of the words that were heard (for speaking speed in 자/분).
+    pub fn heard_chars(&self) -> usize {
+        self.marks.iter().filter(|m| m.ok).map(|m| crate::ja::char_count(&m.word)).sum()
+    }
+}
+
+/// Recall check: did the learner say the target word/phrase somewhere in what they said?
+/// (By sound, so kanji/kana differences and a slip of one sound in a long word don't matter.)
 pub fn contains_phrase(spoken: &str, phrase: &str) -> bool {
-    let s = normalize(spoken);
-    let p = normalize(phrase);
+    let s: Vec<char> = crate::ja::pron(spoken).chars().collect();
+    let p: Vec<char> = crate::ja::pron(phrase).chars().collect();
     if p.is_empty() || s.len() < p.len() {
         return false;
     }
-    s.windows(p.len()).any(|w| w.iter().zip(&p).all(|(a, b)| words_match(a, b)))
+    let allowed = if p.len() >= 5 { 1 } else { 0 };
+    s.windows(p.len()).any(|w| w.iter().zip(&p).filter(|(a, b)| a != b).count() <= allowed)
+        || (p.len() >= 3 && s.windows(p.len() - 1).any(|w| {
+            // A dropped long-vowel sound (きょお → きょ).
+            let (hit, _) = align(&p, w);
+            hit.iter().filter(|h| !**h).count() <= 1 && p.len() >= 5
+        }))
 }
 
 #[cfg(test)]
@@ -170,40 +146,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn perfect_match_ignores_case_and_punctuation() {
-        let r = score("Nice to meet you!", "nice to meet you");
+    fn perfect_match_ignores_punctuation_and_script() {
+        let r = score("今日はいい天気ですね。", "きょうはいいてんきですね");
         assert_eq!(r.score, 100.0);
         assert!(r.marks.iter().all(|m| m.ok));
+        assert_eq!(score("コーヒーをください。", "珈琲を下さい").score, 100.0);
     }
 
     #[test]
-    fn contractions_and_numbers_are_equivalent() {
-        assert_eq!(score("I'm five years old.", "I am 5 years old").score, 100.0);
-        assert_eq!(score("I do not know", "I don't know").score, 100.0);
+    fn numbers_in_digits_or_kanji_are_equivalent() {
+        assert_eq!(score("七時に起きます。", "7時に起きます").score, 100.0);
+        let r = score("3時に会いましょう。", "三時に会いましょう");
+        assert_eq!(r.score, 100.0);
+        assert_eq!(r.marks.iter().map(|m| m.word.as_str()).collect::<String>(), "3時に会いましょう。");
     }
 
     #[test]
     fn missing_word_is_marked() {
-        let r = score("I would like a cup of coffee", "I would like cup of coffee");
-        assert!(r.score > 80.0 && r.score < 100.0);
+        let r = score("昨日、友達と映画を見ました。", "昨日、映画を見ました");
+        assert!(r.score > 60.0 && r.score < 100.0, "{}", r.score);
         let missing: Vec<_> = r.marks.iter().filter(|m| !m.ok).map(|m| m.word.as_str()).collect();
-        assert_eq!(missing, vec!["a"]);
+        assert_eq!(missing, vec!["友達", "と"]);
+    }
+
+    #[test]
+    fn marks_spell_the_target() {
+        let target = "すみません、駅はどこですか？";
+        let r = score(target, "すみません駅はどこですか");
+        assert_eq!(r.marks.iter().map(|m| m.word.as_str()).collect::<String>(), target);
     }
 
     #[test]
     fn unrelated_speech_scores_low() {
-        assert!(score("Could you send me the report by Friday?", "the weather is nice").score < 30.0);
-    }
-
-    #[test]
-    fn spelling_variants_tolerated() {
-        assert_eq!(score("My favourite colour", "my favorite color").score, 100.0);
+        assert!(score("金曜日までに資料を送っていただけますか。", "今日は暑いですね").score < 30.0);
     }
 
     #[test]
     fn recall_contains() {
-        assert!(contains_phrase("I think it's an opportunity.", "opportunity"));
-        assert!(contains_phrase("we should follow up tomorrow", "follow up"));
-        assert!(!contains_phrase("no idea", "deadline"));
+        assert!(contains_phrase("明日は会議があります。", "会議"));
+        assert!(contains_phrase("きのうともだちとあった", "友達"));
+        assert!(!contains_phrase("わかりません", "締め切り"));
     }
 }

@@ -85,14 +85,14 @@ pub fn word_mark(passes: u32) -> (Color32, String) {
     (word_color(passes), label)
 }
 
-/// Korean shown, English said from memory (once) — retrieval practice at the end of a set.
+/// Korean shown, Japanese said from memory (once) — retrieval practice at the end of a set.
 fn recall_spec(target: &str, ko: &str) -> Spec {
     Spec {
         item_id: None,
         new_item: None,
         target: target.to_string(),
         ko: ko.to_string(),
-        tip: "💡 한국어만 보고 영어로 말해 보세요".into(),
+        tip: "💡 한국어만 보고 일본어로 말해 보세요".into(),
         reps: 1,
         recall: true,
         is_word: false,
@@ -298,7 +298,7 @@ impl App {
                             finished = Some(i);
                         }
                     }
-                    // Months 5-6: English only; the Korean is a hover away.
+                    // Months 5-6: Japanese only; the Korean is a hover away.
                     if support_stage(ui.ctx()) < 2 {
                         crate::grammar::ko_label(ui, ko, 16.0, muted());
                     } else {
@@ -357,7 +357,7 @@ impl App {
         let (start, picked, finished) = self.intro_card(
             ui,
             "📚 오늘의 덩어리 표현 · 새 단어",
-            &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 시제 3문장(현재 ~할까 생각 중이에요 · 과거 ~했어요 · 미래 ~할 거예요)을 3번씩 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
+            &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 시제 3문장(현재 ～しようと思っています · 과거 ～しようと思っていました · 미래 ～するつもりです)을 3번씩 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
             &rows,
             "words",
             &marks,
@@ -413,9 +413,9 @@ impl App {
                     .iter()
                     .map(|(w, k)| DayRow {
                         label: match k {
-                            WordKind::Chunk => format!("🔗 {}", w.word),
-                            WordKind::Expression => format!("💬 {}", w.word),
-                            WordKind::Word => w.word.clone(),
+                            WordKind::Chunk => format!("🔗 {}", word_label(w)),
+                            WordKind::Expression => format!("💬 {}", word_label(w)),
+                            WordKind::Word => word_label(w),
                         },
                         ko: w.meaning_ko.clone(),
                         specs: self.entry_specs(w, *k, reps, true),
@@ -522,7 +522,7 @@ impl App {
             word: w.word.clone(),
             meaning_ko: w.meaning_ko.clone(),
             week: Some((format!("{n}주차 · {} ({}) · 문법: {}", wk.theme_ko, wk.theme, wk.grammar), wk.theme.to_string(), wk.grammar.to_string())),
-            starters: crate::curriculum::STARTERS[(n.clamp(1, 26) - 1) as usize].iter().map(|s| s.to_string()).collect(),
+            starters: crate::curriculum::starters(n).iter().map(|s| s.to_string()).collect(),
             already_passed: false,
         };
         let ev = self.mission_ui(ui, &mut m, &spec);
@@ -611,9 +611,9 @@ impl App {
                             ui.horizontal_wrapped(|ui| {
                                 speaker_button(ui, &mut self.voice, &w.word);
                                 let label = match kind {
-                                    WordKind::Chunk => format!("🔗 {}", w.word),
-                                    WordKind::Expression => format!("💬 {}", w.word),
-                                    WordKind::Word => w.word.clone(),
+                                    WordKind::Chunk => format!("🔗 {}", word_label(w)),
+                                    WordKind::Expression => format!("💬 {}", word_label(w)),
+                                    WordKind::Word => word_label(w),
                                 };
                                 let r = ui.add(egui::Label::new(RichText::new(label).size(self.store.settings.list_size()).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
                                 if r.hovered() {
@@ -709,27 +709,27 @@ impl App {
                 let mut left: Vec<(String, String, Spec)> = idioms
                     .iter()
                     .filter_map(|n| crate::idioms::by_no(*n))
-                    .filter(|i| !in_deck(&i.en))
+                    .filter(|i| !in_deck(&i.ja))
                     .map(|i| {
                         let spec = Spec {
                             item_id: None,
                             new_item: Some(StudyItem {
                                 kind: ItemKind::Sentence,
-                                text: i.en.clone(),
+                                text: i.ja.clone(),
                                 meaning_ko: i.ko.clone(),
                                 example: i.also.first().cloned().unwrap_or_default(),
                                 category: "idiom".into(),
                                 ..Default::default()
                             }),
-                            target: i.en.clone(),
+                            target: i.ja.clone(),
                             ko: i.ko.clone(),
-                            tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 숙어 문장".into()),
+                            tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 회화 문장".into()),
                             reps,
                             recall: false,
                             is_word: false,
                             chunks: Vec::new(),
                         };
-                        (format!("💬 {}", i.en), i.ko.clone(), spec)
+                        (format!("💬 {}", i.ja), i.ko.clone(), spec)
                     })
                     .collect();
                 if let Some(l) = lessons.iter().find(|l| l.date == Some(d)) {
@@ -913,7 +913,7 @@ impl App {
             let id = srs::make_id(ItemKind::Sentence, t);
             self.store.items.iter().any(|i| i.id == id)
         };
-        let mut sentences: Vec<String> = idioms.iter().map(|i| i.en.clone()).chain(lesson.sentences.iter().map(|s| s.text.clone())).filter(|t| !in_deck(t)).collect();
+        let mut sentences: Vec<String> = idioms.iter().map(|i| i.ja.clone()).chain(lesson.sentences.iter().map(|s| s.text.clone())).filter(|t| !in_deck(t)).collect();
         let reps = self.store.settings.reps_new;
         sentences.extend(self.past_reading_unfinished(reps).into_iter().flat_map(|(_, v)| v.into_iter().map(|(_, _, spec)| spec.target)));
         (words, sentences)
@@ -991,23 +991,23 @@ impl App {
             let id = srs::make_id(ItemKind::Sentence, t);
             self.store.items.iter().any(|i| i.id == id)
         };
-        let known_texts: Vec<String> = idioms.iter().map(|i| i.en.clone()).chain(lesson.sentences.iter().map(|s| s.text.clone())).filter(|t| is_known(t)).collect();
+        let known_texts: Vec<String> = idioms.iter().map(|i| i.ja.clone()).chain(lesson.sentences.iter().map(|s| s.text.clone())).filter(|t| is_known(t)).collect();
         let known = |t: &str| known_texts.iter().any(|k| k == t);
         let rows: Vec<(String, String)> = idioms
             .iter()
-            .map(|i| (format!("💬 {}", i.en), i.ko.clone()))
+            .map(|i| (format!("💬 {}", i.ja), i.ko.clone()))
             .chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone())))
             .collect();
         // Practice so far, like the 새 단어 list: red → orange → green.
         let marks: Vec<(Color32, String)> = idioms
             .iter()
-            .map(|i| i.en.as_str())
+            .map(|i| i.ja.as_str())
             .chain(lesson.sentences.iter().map(|s| s.text.as_str()))
             .map(|t| word_mark(self.store.word_stat(t).passes))
             .collect();
         let reps = self.store.settings.reps_new;
         // Claude rewrites today's sentences in three tenses once a day (where they can change).
-        let today_sentences: Vec<(String, String)> = idioms.iter().map(|i| (i.en.clone(), i.ko.clone())).chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone()))).collect();
+        let today_sentences: Vec<(String, String)> = idioms.iter().map(|i| (i.ja.clone(), i.ko.clone())).chain(lesson.sentences.iter().map(|s| (s.text.clone(), s.ko.clone()))).collect();
         self.ensure_sentence_tenses(&today_sentences);
         // One drill per row (same order as `rows`). Idioms once each in the day's run; a sentence
         // passed before (e.g. before a restart) once, without counting as a new review.
@@ -1016,17 +1016,17 @@ impl App {
             .map(|i| Spec {
                 item_id: None,
                 // Saved once; afterwards spaced repetition brings it back.
-                new_item: (!known(&i.en)).then(|| StudyItem {
+                new_item: (!known(&i.ja)).then(|| StudyItem {
                     kind: ItemKind::Sentence,
-                    text: i.en.clone(),
+                    text: i.ja.clone(),
                     meaning_ko: i.ko.clone(),
                     example: i.also.first().cloned().unwrap_or_default(),
                     category: "idiom".into(),
                     ..Default::default()
                 }),
-                target: i.en.clone(),
+                target: i.ja.clone(),
                 ko: i.ko.clone(),
-                tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 오늘의 숙어 문장".into()),
+                tip: i.also.first().map(|a| format!("💬 이렇게도 말해요: {a}")).unwrap_or_else(|| "💬 오늘의 회화 문장".into()),
                 reps: 1,
                 recall: false,
                 is_word: false,
@@ -1057,7 +1057,7 @@ impl App {
             ui,
             "📖 문장 소리 내어 읽기 (쉐도잉)",
             &format!(
-                "💬 오늘의 숙어 문장 {}개를 한 번씩 소리 내어 읽고, 이어서 읽기 쉬운 긴 문장을 원어민처럼 따라 읽어요(각 {reps}번 통과). 시제를 바꿀 수 있는 문장은 이어서 🕐 현재·과거·미래로 2번씩 말해요. 문장을 클릭하면 그 문장만 바로 연습해요.",
+                "💬 오늘의 회화 문장 {}개를 한 번씩 소리 내어 읽고, 이어서 읽기 쉬운 긴 문장을 원어민처럼 따라 읽어요(각 {reps}번 통과). 시제를 바꿀 수 있는 문장은 이어서 🕐 현재·과거·미래로 2번씩 말해요. 문장을 클릭하면 그 문장만 바로 연습해요.",
                 idioms.len()
             ),
             &rows,
@@ -1119,7 +1119,7 @@ impl App {
         let Some(t) = self.store.sentence_tenses.get(&text.trim().to_lowercase()).filter(|t| t.is_complete()) else {
             return Vec::new();
         };
-        let same = |a: &str| a.trim().trim_end_matches(['.', '!', '?']).eq_ignore_ascii_case(text.trim().trim_end_matches(['.', '!', '?']));
+        let same = |a: &str| a.trim().trim_end_matches(['.', '!', '?', '。', '！', '？']) == text.trim().trim_end_matches(['.', '!', '?', '。', '！', '？']);
         [(&t.present, &t.present_ko), (&t.past, &t.past_ko), (&t.future, &t.future_ko)]
             .into_iter()
             .zip(crate::tenses::SENTENCE_TENSES)
@@ -1142,7 +1142,7 @@ impl App {
         if self.run_queue_ui(ui) {
             return;
         }
-        page_title(ui, "🔁 복습", "한국어 뜻을 보고 영어로 먼저 말해 본 뒤(기억해 내기), 정답을 한 번 소리 내어 따라 합니다. 첫 시도 점수로 다음 복습일이 정해져요.");
+        page_title(ui, "🔁 복습", "한국어 뜻을 보고 일본어로 먼저 말해 본 뒤(기억해 내기), 정답을 한 번 소리 내어 따라 합니다. 첫 시도 점수로 다음 복습일이 정해져요.");
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.wordle.tab, 0, RichText::new("🔁 복습 카드").size(16.0));
@@ -1234,4 +1234,10 @@ pub struct DayRow {
     pub label: String,
     pub ko: String,
     pub specs: Vec<Spec>,
+}
+
+/// A word as listed: with its reading when it has kanji ("食べる · たべる").
+fn word_label(w: &LessonWord) -> String {
+    let reading = if w.reading.is_empty() && crate::ja::has_kanji(&w.word) { crate::ja::reading(&w.word) } else { w.reading.clone() };
+    if crate::ja::has_kanji(&w.word) && !reading.is_empty() && reading != w.word { format!("{} · {reading}", w.word) } else { w.word.clone() }
 }

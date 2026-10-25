@@ -10,7 +10,7 @@ pub fn today() -> NaiveDate {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct Settings {
-    /// Target language code (see language.rs). Only "en" for now.
+    /// Target language code (see language.rs): "ja".
     pub target_language: String,
     pub api_key: String,
     pub model: String,
@@ -25,24 +25,24 @@ pub struct Settings {
     /// Microphone / speaker names; empty = system default.
     pub input_device: String,
     pub output_device: String,
-    /// Speak with the natural neural voice (Kokoro) when its model is installed.
-    pub neural_tts: bool,
-    pub neural_voice: String,
-    /// Multilingual whisper model for Korean speech (translator): "small" or "base".
+    /// Multilingual whisper model for Korean speech (translator): "small" or "base". When it is
+    /// the same file as `whisper_model`, one model in memory serves both languages.
     pub korean_model: String,
     /// Colour Korean passages by grammatical role (주어·동사·…). 직독직해 keeps its colours.
     pub ko_role_colors: bool,
+    /// Readings (furigana) above kanji (설정 > 후리가나).
+    pub furigana: bool,
     /// The 30 → 60 minute default change has been applied (missing in older settings files).
     #[serde(default)]
     pub goal_60_applied: bool,
     /// Light screen theme (설정 > 테마); dark by default.
     #[serde(default)]
     pub light_theme: bool,
-    /// The learner's own 6-month goal (CEFR of a level band: "A2" … "C1").
+    /// The learner's own 6-month goal (JLPT grade of a level band: "N4" … "N1").
     pub goal_cefr: String,
     /// From month 3 the Korean colours were switched off once (the learner may turn them back on).
     pub ko_colors_faded: bool,
-    /// Size of the English words and sentences in the 새 단어 / 문장 읽기 lists (설정 > 글자 크기),
+    /// Size of the Japanese words and sentences in the 새 단어 / 문장 읽기 lists (설정 > 글자 크기),
     /// big enough to copy into a notebook.
     pub list_text_size: f32,
     /// Minutes between notifications (top right); 0 = off.
@@ -62,12 +62,12 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            target_language: "en".into(),
+            target_language: "ja".into(),
             api_key: String::new(),
             model: "claude-opus-5-5".into(),
             tts_rate: 1.0,
             tts_voice_id: String::new(),
-            whisper_model: "base.en".into(),
+            whisper_model: "small".into(),
             pass_score: 80.0,
             reps_new: 3,
             reps_weak: 5,
@@ -76,13 +76,12 @@ impl Default for Settings {
             daily_goal_minutes: 60,
             input_device: String::new(),
             output_device: String::new(),
-            neural_tts: true,
-            neural_voice: "af_heart".into(),
             korean_model: "small".into(),
             ko_role_colors: true,
+            furigana: true,
             goal_60_applied: true,
             light_theme: false,
-            goal_cefr: "B1".into(),
+            goal_cefr: "N3".into(),
             ko_colors_faded: false,
             list_text_size: 17.0,
             notify_minutes: 5,
@@ -179,7 +178,7 @@ pub struct Profile {
     pub weekly_recordings: Vec<WeeklyRecording>,
     /// Days with a lesson from a human tutor (e.g. italki), logged by the learner.
     pub tutor_sessions: Vec<NaiveDate>,
-    /// Mock OPIc / TOEIC Speaking results, logged by the learner every two weeks.
+    /// Mock JLPT / JPT / OPIc 일본어 results, logged by the learner every two weeks.
     pub external_tests: Vec<ExternalTest>,
 }
 
@@ -199,9 +198,9 @@ pub struct WeeklyRecording {
 #[serde(default)]
 pub struct ExternalTest {
     pub date: Option<NaiveDate>,
-    /// "OPIc" or "TOEIC Speaking"
+    /// "JLPT", "JPT" or "OPIc 일본어"
     pub test: String,
-    /// Grade or score as the learner got it (e.g. "IM2", "130").
+    /// Grade or score as the learner got it (e.g. "N3 합격", "650", "IM2").
     pub result: String,
 }
 
@@ -229,17 +228,17 @@ impl Default for Profile {
 }
 
 /// Level names used in the UI (the same 6-step ladder Learna uses).
-/// One table for every level label so the Korean name, CEFR grade and vocabulary target
-/// always agree: (upper bound of the 1–10 score, name, CEFR, words a learner at this level
-/// is expected to know — commonly cited CEFR vocabulary sizes).
+/// One table for every level label so the Korean name, JLPT grade and vocabulary target
+/// always agree: (upper bound of the 1–10 score, name, JLPT, words a learner at this level
+/// is expected to know — commonly cited JLPT vocabulary sizes; "+" = between two grades).
 pub const LEVEL_BANDS: &[(f32, &str, &str, u32)] = &[
-    (2.0, "초급", "A1", 500),
-    (3.5, "초중급", "A2", 1000),
-    (5.0, "중급", "B1", 2000),
-    (6.5, "중상급", "B1+", 3000),
-    (8.0, "고급", "B2", 4000),
-    (9.0, "고급+", "B2+", 5000),
-    (f32::MAX, "능숙", "C1", 8000),
+    (2.0, "초급", "N5", 800),
+    (3.5, "초중급", "N4", 1500),
+    (5.0, "중급", "N3", 3000),
+    (6.5, "중상급", "N3+", 4500),
+    (8.0, "고급", "N2", 6000),
+    (9.0, "고급+", "N2+", 8000),
+    (f32::MAX, "능숙", "N1", 10000),
 ];
 
 fn band(level: f32) -> &'static (f32, &'static str, &'static str, u32) {
@@ -325,35 +324,26 @@ pub struct CorrectionRecord {
     pub practiced: bool,
 }
 
-/// Place and person names are not vocabulary: "Seoul", "Daegu", "Minji", "New York".
-/// Lesson and dictionary words are stored in lower case, so a capitalized entry is a name
-/// (except "I"); well-known places are also caught in any case, and so are Korean meanings
-/// that say it's a name.
+/// Place and person names are not vocabulary: "ソウル", "大邱", "田中", "東京". The analyser
+/// marks them 固有名詞; well-known places are also caught, and so are Korean meanings that
+/// say it's a name.
 pub fn is_proper_noun(text: &str, meaning_ko: &str) -> bool {
     const PLACES: &[&str] = &[
-        "seoul", "busan", "daegu", "incheon", "gwangju", "daejeon", "ulsan", "sejong", "jeju", "suwon", "pohang", "gyeongju", "jeonju", "gangnam",
-        "gyeonggi", "gangwon", "korea", "japan", "tokyo", "osaka", "china", "beijing", "shanghai", "america", "usa", "london", "paris",
-        "new york", "los angeles", "california", "canada", "australia", "england", "france", "germany", "vietnam", "thailand",
+        "ソウル", "釜山", "プサン", "大邱", "テグ", "仁川", "済州", "韓国", "日本", "東京", "大阪", "京都", "北海道", "沖縄", "福岡", "名古屋", "横浜",
+        "中国", "アメリカ", "ニューヨーク", "ロンドン", "パリ",
     ];
     const NAME_MARKS: &[&str] = &["지명", "인명", "고유명사", "도시 이름", "나라 이름", "사람 이름", "(도시)", "(나라)", "(국가)", "(이름)", "(지역)", "(도시명)"];
     let t = text.trim();
     if t.is_empty() {
         return false;
     }
-    let lower = t.to_lowercase();
-    if PLACES.contains(&lower.as_str()) || NAME_MARKS.iter().any(|m| meaning_ko.contains(m)) {
+    if PLACES.contains(&t) || NAME_MARKS.iter().any(|m| meaning_ko.contains(m)) {
         return true;
     }
-    // Every word capitalized ("Daegu", "New York", "Bank of America"); a phrase that just
-    // starts with a capital ("My bad", "Netflix and chill") is an expression.
-    let small = ["of", "the", "and", "de"];
-    let words: Vec<&str> = t.split_whitespace().filter(|w| !small.contains(w)).collect();
-    words.iter().all(|w| {
-        let capitalized = w.chars().next().is_some_and(|c| c.is_uppercase());
-        // "IT", "CEO": acronyms are words; "I", "I'm" are not names.
-        let acronym = w.chars().filter(|c| c.is_alphabetic()).all(|c| c.is_uppercase());
-        capitalized && !acronym && *w != "I" && !w.starts_with("I'")
-    }) && !words.is_empty()
+    // One word that the dictionary knows as a name (地域 / 人名 / 組織).
+    let tokens = crate::ja::tokenize(t);
+    let content: Vec<&crate::ja::Token> = tokens.iter().filter(|w| !w.is_punct() && w.surface != "さん").collect();
+    !content.is_empty() && content.iter().all(|w| w.pos1 == "固有名詞")
 }
 
 impl StudyItem {
@@ -368,9 +358,10 @@ impl StudyItem {
     }
 }
 
-/// Estimated cumulative study hours to reach each band (Cambridge-style guided learning
-/// hours; a rough guide, people differ a lot), same order as `LEVEL_BANDS`.
-pub const CUM_HOURS: [(u32, u32); 7] = [(90, 100), (180, 200), (350, 400), (450, 500), (500, 600), (600, 700), (700, 800)];
+/// Estimated cumulative study hours to reach each band (commonly cited JLPT figures for learners
+/// who already read kanji, as Korean speakers largely do; a rough guide, people differ a lot),
+/// same order as `LEVEL_BANDS`.
+pub const CUM_HOURS: [(u32, u32); 7] = [(60, 100), (150, 200), (300, 350), (380, 450), (450, 550), (550, 650), (700, 900)];
 
 /// What a goal level means in practice.
 pub const GOAL_DESC: [&str; 7] = [
@@ -384,7 +375,7 @@ pub const GOAL_DESC: [&str; 7] = [
 ];
 
 /// Speech speed that suits a level (× the normal voice speed): slower for beginners, natural
-/// from about B2 — level 1 → 0.72, level 3 → 0.80, level 5 → 0.88, level 8+ → 1.0.
+/// from about N2 — level 1 → 0.72, level 3 → 0.80, level 5 → 0.88, level 8+ → 1.0.
 pub fn level_speech_rate(level: f32) -> f32 {
     (0.68 + 0.04 * level).clamp(0.72, 1.0)
 }
@@ -398,7 +389,7 @@ pub fn dictation_rate(level: f32, setting: usize) -> f32 {
     level_speech_rate(level) * DICTATION_SPEEDS[setting.min(DICTATION_SPEEDS.len() - 1)].1
 }
 
-/// Index in `LEVEL_BANDS` of a level score, or of a CEFR name.
+/// Index in `LEVEL_BANDS` of a level score, or of a JLPT name.
 pub fn band_index(level: f32) -> usize {
     LEVEL_BANDS.iter().position(|b| level < b.0).unwrap_or(LEVEL_BANDS.len() - 1)
 }
@@ -526,15 +517,19 @@ impl Homework {
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct LessonWord {
     pub word: String,
+    /// Reading in hiragana (shown as furigana; empty = worked out by the analyser).
+    #[serde(default)]
+    pub reading: String,
     pub meaning_ko: String,
     pub example: String,
     pub example_ko: String,
 }
 
-/// One unit of 직독직해 (direct reading): English in sentence order with its Korean meaning.
+/// One unit of 직독직해 (direct reading): a Japanese 문절 in sentence order with its Korean
+/// meaning (Japanese and Korean share word order, so the meanings read as a Korean sentence).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Chunk {
-    pub en: String,
+    pub ja: String,
     pub ko: String,
     /// Grammatical role (`grammar::ROLES`) for colouring; empty in glosses saved before roles.
     #[serde(default)]

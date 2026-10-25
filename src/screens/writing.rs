@@ -1,4 +1,4 @@
-//! ✏ Writing (20% of the daily plan): dictation of learned sentences, Korean → English
+//! ✏ Writing (20% of the daily plan): dictation of learned sentences, Korean → Japanese
 //! translation, and a short diary that Claude corrects — the corrected text is then read aloud,
 //! so writing feeds back into speaking.
 
@@ -12,64 +12,64 @@ use egui::{RichText, Stroke, Ui, Vec2};
 /// Exercises in one daily writing set (dictation + translation; the diary is a bonus).
 pub const WRITING_GOAL: u32 = 6;
 
-/// Easy diary sentences (elementary-school level) shown as examples to A2–B1 learners.
+/// Easy diary sentences (beginner level) shown as examples to N5–N3 learners.
 pub const DIARY_EXAMPLES: &[(&str, &str)] = &[
-    ("I got up at seven o'clock this morning.", "나는 오늘 아침 7시에 일어났다."),
-    ("I washed my face and brushed my teeth.", "세수를 하고 이를 닦았다."),
-    ("I had toast and milk for breakfast.", "아침으로 토스트와 우유를 먹었다."),
-    ("The weather was sunny and warm.", "날씨가 맑고 따뜻했다."),
-    ("It rained all day, so I stayed home.", "하루 종일 비가 와서 집에 있었다."),
-    ("I went to school with my friend.", "친구와 함께 학교에 갔다."),
-    ("We had a math test today.", "오늘 수학 시험을 봤다."),
-    ("The test was easier than I thought.", "시험은 생각보다 쉬웠다."),
-    ("I ate lunch with my classmates.", "반 친구들과 점심을 먹었다."),
-    ("My favorite food is fried chicken.", "내가 제일 좋아하는 음식은 치킨이다."),
-    ("After school, I played soccer in the park.", "방과 후에 공원에서 축구를 했다."),
-    ("I was very tired, but I was happy.", "아주 피곤했지만 행복했다."),
-    ("I helped my mom clean the kitchen.", "엄마를 도와 부엌을 청소했다."),
-    ("My dad cooked dinner for us.", "아빠가 우리에게 저녁을 해 주셨다."),
-    ("We ate spaghetti together.", "우리는 함께 스파게티를 먹었다."),
-    ("I did my homework before dinner.", "저녁 먹기 전에 숙제를 했다."),
-    ("I read a book about animals.", "동물에 관한 책을 읽었다."),
-    ("I learned that dolphins are very smart.", "돌고래가 아주 똑똑하다는 것을 알게 되었다."),
-    ("My little brother and I watched a movie.", "남동생과 영화를 봤다."),
-    ("The movie was funny and exciting.", "영화는 재미있고 신났다."),
-    ("I called my grandma on the phone.", "할머니께 전화를 드렸다."),
-    ("She was glad to hear my voice.", "할머니는 내 목소리를 듣고 기뻐하셨다."),
-    ("I went shopping with my sister.", "언니(누나)와 쇼핑을 갔다."),
-    ("I bought a new pencil case.", "새 필통을 샀다."),
-    ("I took my dog for a walk.", "강아지를 산책시켰다."),
-    ("He ran around and wagged his tail.", "강아지는 뛰어다니며 꼬리를 흔들었다."),
-    ("I rode my bike along the river.", "강을 따라 자전거를 탔다."),
-    ("I saw many beautiful flowers.", "예쁜 꽃을 많이 봤다."),
-    ("I felt a little sad today.", "오늘은 조금 슬펐다."),
-    ("My best friend moved to another city.", "제일 친한 친구가 다른 도시로 이사를 갔다."),
-    ("I will write a letter to her.", "그 친구에게 편지를 쓸 것이다."),
-    ("Today was my birthday!", "오늘은 내 생일이었다!"),
-    ("My family gave me a big cake.", "가족이 큰 케이크를 주었다."),
-    ("I made a wish and blew out the candles.", "소원을 빌고 촛불을 껐다."),
-    ("I practiced the piano for thirty minutes.", "피아노를 30분 동안 연습했다."),
-    ("I want to play better next time.", "다음에는 더 잘 치고 싶다."),
-    ("I took a warm bath before bed.", "자기 전에 따뜻한 물로 목욕했다."),
-    ("I went to bed at ten o'clock.", "10시에 잠자리에 들었다."),
-    ("Tomorrow I will get up early.", "내일은 일찍 일어날 것이다."),
-    ("It was a good day.", "좋은 하루였다."),
+    ("今朝は七時に起きました。", "오늘 아침 7시에 일어났다."),
+    ("顔を洗って、歯をみがきました。", "세수를 하고 이를 닦았다."),
+    ("朝ごはんにパンと牛乳を食べました。", "아침으로 빵과 우유를 먹었다."),
+    ("天気は晴れで、暖かかったです。", "날씨가 맑고 따뜻했다."),
+    ("一日中雨だったので、家にいました。", "하루 종일 비가 와서 집에 있었다."),
+    ("友達と一緒に会社に行きました。", "친구와 함께 회사에 갔다."),
+    ("今日は日本語のテストがありました。", "오늘 일본어 시험이 있었다."),
+    ("テストは思ったより簡単でした。", "시험은 생각보다 쉬웠다."),
+    ("同僚と一緒に昼ごはんを食べました。", "동료와 함께 점심을 먹었다."),
+    ("いちばん好きな食べ物はラーメンです。", "제일 좋아하는 음식은 라멘이다."),
+    ("仕事のあと、公園を散歩しました。", "퇴근 후에 공원을 산책했다."),
+    ("とても疲れましたが、楽しかったです。", "아주 피곤했지만 즐거웠다."),
+    ("母と一緒に台所を掃除しました。", "엄마와 함께 부엌을 청소했다."),
+    ("父が晩ごはんを作ってくれました。", "아빠가 저녁을 만들어 주셨다."),
+    ("みんなでカレーを食べました。", "다 같이 카레를 먹었다."),
+    ("晩ごはんの前に宿題をしました。", "저녁 먹기 전에 숙제를 했다."),
+    ("動物の本を読みました。", "동물에 관한 책을 읽었다."),
+    ("イルカはとても頭がいいそうです。", "돌고래는 아주 똑똑하다고 한다."),
+    ("弟と映画を見ました。", "남동생과 영화를 봤다."),
+    ("映画はおもしろくて、どきどきしました。", "영화는 재미있고 두근거렸다."),
+    ("おばあちゃんに電話をかけました。", "할머니께 전화를 드렸다."),
+    ("おばあちゃんはとても喜んでいました。", "할머니는 아주 기뻐하셨다."),
+    ("姉と買い物に行きました。", "언니(누나)와 쇼핑하러 갔다."),
+    ("新しい手帳を買いました。", "새 수첩을 샀다."),
+    ("犬の散歩に行きました。", "강아지 산책을 시켰다."),
+    ("犬はうれしそうに走っていました。", "강아지는 신나게 뛰어다녔다."),
+    ("川沿いを自転車で走りました。", "강을 따라 자전거를 탔다."),
+    ("きれいな花がたくさん咲いていました。", "예쁜 꽃이 많이 피어 있었다."),
+    ("今日は少しさびしかったです。", "오늘은 조금 쓸쓸했다."),
+    ("親友がほかの町に引っ越しました。", "제일 친한 친구가 다른 동네로 이사했다."),
+    ("彼女に手紙を書くつもりです。", "그 친구에게 편지를 쓸 생각이다."),
+    ("今日はわたしの誕生日でした！", "오늘은 내 생일이었다!"),
+    ("家族が大きいケーキをくれました。", "가족이 큰 케이크를 주었다."),
+    ("願い事をして、ろうそくを消しました。", "소원을 빌고 촛불을 껐다."),
+    ("ピアノを三十分練習しました。", "피아노를 30분 동안 연습했다."),
+    ("次はもっと上手にひきたいです。", "다음에는 더 잘 치고 싶다."),
+    ("寝る前にお風呂に入りました。", "자기 전에 목욕을 했다."),
+    ("十時に寝ました。", "10시에 잤다."),
+    ("明日は早く起きるつもりです。", "내일은 일찍 일어날 생각이다."),
+    ("いい一日でした。", "좋은 하루였다."),
 ];
 
 const DIARY_PROMPTS: &[(&str, &str)] = &[
-    ("What did you do today? Write 3-5 sentences.", "오늘 무엇을 했나요?"),
-    ("Describe your favorite place to relax.", "가장 좋아하는 휴식 장소를 소개해 보세요."),
-    ("Write a short message inviting a friend to dinner.", "친구를 저녁 식사에 초대하는 짧은 메시지를 써 보세요."),
-    ("What's something you want to get better at this year, and why?", "올해 더 잘하고 싶은 것과 그 이유는?"),
-    ("Write an email to a coworker asking to move a meeting.", "동료에게 회의 시간을 바꾸자는 이메일을 써 보세요."),
-    ("Tell me about a movie or show you enjoyed recently.", "최근 재미있게 본 영화나 드라마를 소개해 보세요."),
-    ("What does your perfect weekend look like?", "완벽한 주말은 어떤 모습인가요?"),
+    ("今日は何をしましたか。三〜五文で書いてください。", "오늘 무엇을 했나요?"),
+    ("ゆっくり休める好きな場所を紹介してください。", "가장 좋아하는 휴식 장소를 소개해 보세요."),
+    ("友達を晩ごはんに誘う短いメッセージを書いてください。", "친구를 저녁 식사에 초대하는 짧은 메시지를 써 보세요."),
+    ("今年もっと上手になりたいことは何ですか。どうしてですか。", "올해 더 잘하고 싶은 것과 그 이유는?"),
+    ("会議の時間を変えたいと同僚にメールを書いてください。", "동료에게 회의 시간을 바꾸자는 이메일을 써 보세요."),
+    ("最近おもしろかった映画やドラマを紹介してください。", "최근 재미있게 본 영화나 드라마를 소개해 보세요."),
+    ("理想の週末はどんな週末ですか。", "완벽한 주말은 어떤 모습인가요?"),
 ];
 
 #[derive(Default)]
 pub struct WritingState {
     pub mode: usize,
-    /// (English, Korean) practice sentences for dictation / translation.
+    /// (Japanese, Korean) practice sentences for dictation / translation.
     queue: Vec<(String, String)>,
     idx: usize,
     pub input: String,
@@ -106,8 +106,8 @@ impl App {
     fn writing_sentences(&self) -> Vec<(String, String)> {
         let mut v: Vec<(String, String)> = Vec::new();
         let mut push = |en: &str, ko: &str| {
-            let words = en.split_whitespace().count();
-            if !ko.is_empty() && (3..=16).contains(&words) && !v.iter().any(|x| x.0 == en) {
+            let chars = crate::ja::char_count(en);
+            if !ko.is_empty() && (5..=40).contains(&chars) && !v.iter().any(|x| x.0 == en) {
                 v.push((en.to_string(), ko.to_string()));
             }
         };
@@ -180,11 +180,11 @@ impl App {
     }
 
     pub fn writing_ui(&mut self, ui: &mut Ui) {
-        page_title(ui, "✏ 쓰기", "들은 문장 받아쓰기 · 한국어를 영어로 쓰기 · 짧은 영어 일기 (Claude 교정 후 소리 내어 읽기)");
+        page_title(ui, "✏ 쓰기", "들은 문장 받아쓰기 · 한국어를 일본어로 쓰기 · 짧은 일본어 일기 (Claude 교정 후 소리 내어 읽기)");
         let done = self.store.profile.today.writings_done;
         ui.horizontal_wrapped(|ui| {
             chip(ui, &format!("오늘 {done}/{WRITING_GOAL}개"), if done >= WRITING_GOAL { GOOD } else { ACCENT });
-            for (i, label) in ["🎧 받아쓰기", "🔁 한→영 작문", "📝 영어 일기", "📅 일기장"].iter().enumerate() {
+            for (i, label) in ["🎧 받아쓰기", "🔁 한→일 작문", "📝 일본어 일기", "📅 일기장"].iter().enumerate() {
                 if ui.selectable_label(self.writing.mode == i, *label).clicked() && self.writing.mode != i {
                     self.writing.mode = i;
                     // Today's diary, if already saved, comes back to keep writing.
@@ -259,11 +259,11 @@ impl App {
                     ui.label(RichText::new(format!("힌트: {}", ko)).color(muted()).small());
                 });
             } else {
-                ui.label(RichText::new("영어로 써 보세요.").color(muted()));
+                ui.label(RichText::new("일본어로 써 보세요.").color(muted()));
                 crate::grammar::ko_label(ui, &ko, 22.0, gloss());
             }
             ui.add_space(4.0);
-            let resp = ui.add(egui::TextEdit::singleline(&mut st.input).desired_width(f32::INFINITY).font(egui::FontId::proportional(19.0)).hint_text("여기에 영어로 입력"));
+            let resp = ui.add(egui::TextEdit::singleline(&mut st.input).desired_width(f32::INFINITY).font(egui::FontId::proportional(19.0)).hint_text("여기에 일본어로 입력"));
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if st.checked.is_none() {
                 if (ui.add_enabled(!st.input.trim().is_empty(), egui::Button::new(RichText::new("확인").strong()).fill(ACCENT)).clicked() || enter) && !st.input.trim().is_empty() {
@@ -366,7 +366,7 @@ impl App {
         card(ui, |ui| {
             ui.label(RichText::new(prompt).size(19.0).strong());
             crate::grammar::ko_label(ui, prompt_ko, 16.0, muted());
-            ui.add(egui::TextEdit::multiline(&mut st.input).desired_rows(6).desired_width(f32::INFINITY).font(egui::FontId::proportional(18.0)).hint_text("영어로 3~5문장 써 보세요. 틀려도 괜찮아요!"));
+            ui.add(egui::TextEdit::multiline(&mut st.input).desired_rows(6).desired_width(f32::INFINITY).font(egui::FontId::proportional(18.0)).hint_text("일본어로 3~5문장 써 보세요. 틀려도 괜찮아요!"));
             ui.horizontal_wrapped(|ui| {
                 // Saved by date (writing.json) with or without Claude; see 📅 일기장.
                 if ui.add_enabled(!st.input.trim().is_empty(), egui::Button::new(RichText::new("💾 일기 저장").strong())).clicked() {
@@ -374,12 +374,12 @@ impl App {
                 }
                 match &claude {
                     None => {
-                        ui.label(RichText::new("영어 일기 교정은 Claude API 키가 필요합니다 (설정).").color(warn()));
+                        ui.label(RichText::new("일본어 일기 교정은 Claude API 키가 필요합니다 (설정).").color(warn()));
                     }
                     Some(c) => {
                         if st.diary.running() {
                             spinner_label(ui, "Claude가 교정하고 있어요…");
-                        } else if ui.add_enabled(st.input.split_whitespace().count() >= 3, egui::Button::new(RichText::new("✨ Claude 교정 받기").strong()).fill(ACCENT)).clicked() {
+                        } else if ui.add_enabled(crate::ja::char_count(&st.input) >= 8, egui::Button::new(RichText::new("✨ Claude 교정 받기").strong()).fill(ACCENT)).clicked() {
                             let (c, p, t) = (c.clone(), prompt.to_string(), st.input.clone());
                             st.diary_result = None;
                             st.diary.spawn(move || c.writing_feedback(&p, &t, level));

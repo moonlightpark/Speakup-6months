@@ -407,10 +407,10 @@ pub fn onboarding_hero(ui: &mut Ui) {
     let b = Rect::from_min_size(pos2(rect.right() - 290.0, rect.top() + 26.0), vec2(96.0, 40.0));
     p.rect_filled(b, 14.0, Color32::WHITE);
     p.add(Shape::convex_polygon(vec![b.right_bottom() - vec2(26.0, 2.0), b.right_bottom() + vec2(4.0, 12.0), b.right_bottom() - vec2(10.0, 2.0)], Color32::WHITE, Stroke::NONE));
-    p.text(b.center(), egui::Align2::CENTER_CENTER, "Hi there!", egui::FontId::proportional(17.0), INDIGO_DEEP);
+    p.text(b.center(), egui::Align2::CENTER_CENTER, "こんにちは！", egui::FontId::proportional(17.0), INDIGO_DEEP);
     let left = rect.left() + 34.0;
     p.text(pos2(left, rect.top() + 58.0), egui::Align2::LEFT_CENTER, "말하고, 연습하고, 활용하세요.", egui::FontId::proportional(32.0), Color32::WHITE);
-    p.text(pos2(left, rect.top() + 100.0), egui::Align2::LEFT_CENTER, "6개월 뒤 영어로 듣고 말하는 것만을 목표로 하는 음성 학습 앱", egui::FontId::proportional(16.0), Color32::from_rgb(220, 226, 255));
+    p.text(pos2(left, rect.top() + 100.0), egui::Align2::LEFT_CENTER, "6개월 뒤 일본어로 듣고 말하는 것만을 목표로 하는 음성 학습 앱", egui::FontId::proportional(16.0), Color32::from_rgb(220, 226, 255));
     let mut x = left;
     for (txt, col) in [("🎧 듣기", CYAN), ("🎤 말하기", PINK), ("🔁 반복", GOOD), ("⚡ 스피드", warn())] {
         let galley = p.layout_no_wrap(txt.to_string(), egui::FontId::proportional(15.0), Color32::WHITE);

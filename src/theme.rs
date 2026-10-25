@@ -1,17 +1,25 @@
-//! Dark (default) and light themes in the spirit of Speak, with the Pretendard font built in (SIL Open Font
-//! License, assets/fonts) so Hangul and symbols look the same on macOS and Windows.
+//! Dark (default) and light themes in the spirit of Speak, with the Pretendard (Hangul) and Noto Sans JP
+//! (kana and kanji) fonts built in (SIL Open Font License, assets/fonts) so text looks the same on
+//! macOS and Windows.
 
 use egui::{Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 use std::sync::Arc;
 
 const PRETENDARD: &[u8] = include_bytes!("../assets/fonts/Pretendard-Regular.ttf");
+const NOTO_JP: &[u8] = include_bytes!("../assets/fonts/NotoSansJP-Regular.otf");
 
 pub fn apply(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     fonts.font_data.insert("pretendard".into(), Arc::new(FontData::from_static(PRETENDARD)));
-    // Pretendard first for text; egui's own fonts stay behind it for emoji and icons.
-    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "pretendard".into());
-    fonts.families.entry(FontFamily::Monospace).or_default().push("pretendard".into());
+    fonts.font_data.insert("noto-jp".into(), Arc::new(FontData::from_static(NOTO_JP)));
+    // Pretendard first for Hangul and Latin, Noto Sans JP for Japanese; egui's own fonts stay
+    // behind them for emoji and icons.
+    let prop = fonts.families.entry(FontFamily::Proportional).or_default();
+    prop.insert(0, "pretendard".into());
+    prop.insert(1, "noto-jp".into());
+    let mono = fonts.families.entry(FontFamily::Monospace).or_default();
+    mono.push("pretendard".into());
+    mono.push("noto-jp".into());
     // Optional extra fallback for scripts Pretendard lacks.
     if let Some(bytes) = std::env::var("SPEAKUP_FONT").ok().and_then(|p| std::fs::read(p).ok()) {
         fonts.font_data.insert("custom".into(), Arc::new(FontData::from_owned(bytes)));

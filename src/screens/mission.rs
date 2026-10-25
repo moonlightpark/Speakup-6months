@@ -111,7 +111,7 @@ impl App {
                 } else if let Some(said) = m.capture.ui(ui, &mut self.voice, 30.0) {
                     self.store.log_attempt(if spec.week.is_some() { "sentence-mission" } else { "homework" }, &word, &said, 0.0);
                     let used = crate::dictionary::sentence_uses(&said, &word);
-                    let long_enough = said.split_whitespace().count() >= 4;
+                    let long_enough = crate::ja::char_count(&said) >= 6;
                     m.said = Some((said.clone(), used && long_enough));
                     m.error = None;
                     m.result = None;
@@ -141,20 +141,21 @@ impl App {
                     ui.add_space(6.0);
                     ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new("내 문장:").color(muted()));
-                        for t in said.split_whitespace() {
-                            if word.split_whitespace().any(|w| crate::dictionary::same_word(t, w)) {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        for t in crate::ja::tokenize(&said) {
+                            if crate::dictionary::same_word(&t.surface, &word) || (crate::ja::char_count(&word) > 1 && word.contains(&t.surface) && t.is_content()) {
                                 egui::Frame::new().fill(GOOD.gamma_multiply(0.3)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(4, 0)).show(ui, |ui| {
-                                    ui.label(RichText::new(t).size(18.0).strong().color(GOOD));
+                                    ui.label(RichText::new(&t.surface).size(18.0).strong().color(GOOD));
                                 });
                             } else {
-                                ui.label(RichText::new(t).size(18.0));
+                                ui.label(RichText::new(&t.surface).size(18.0));
                             }
                         }
                     });
                     if !crate::dictionary::sentence_uses(&said, &word) {
                         error_label(ui, &format!("✖ '{word}'이(가) 빠졌어요 — 녹음만 하지 말고, '{word}'을(를) 넣은 내 문장을 만들어 다시 말해 보세요."));
                     } else if !ok {
-                        error_label(ui, "✖ 단어만 말했어요 — 4단어 이상의 문장으로 말해 보세요. (예: 주어 + 동사 + 단어 + 이야기)");
+                        error_label(ui, "✖ 단어만 말했어요 — 문장으로 말해 보세요. (예: 주어 + 단어 + 이야기 + です/ます)");
                     } else {
                         ui.label(RichText::new(format!("✓ '{word}'을(를) 넣어 문장을 만들었어요")).color(GOOD).strong());
                     }

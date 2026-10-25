@@ -155,14 +155,14 @@ impl App {
     }
 }
 
-/// 영어 실력 레벨 7단계: the whole ladder, with the learner's step and the 6-month goal marked.
+/// 일본어 실력 레벨 7단계: the whole ladder, with the learner's step and the 6-month goal marked.
 fn level_bands_table(ui: &mut Ui, level: f32, goal: usize) {
-    ui.label(RichText::new(format!("📶 영어 실력 레벨 {}단계", LEVEL_BANDS.len())).size(17.0).strong());
+    ui.label(RichText::new(format!("📶 일본어 실력 레벨 {}단계", LEVEL_BANDS.len())).size(17.0).strong());
     ui.label(RichText::new("레벨 점수(1~10)로 단계가 정해지고, 레벨 테스트·주차 평가 결과로 올라가요. 단계에 맞춰 단어·지문·대화 난이도가 바뀝니다.").color(muted()).small());
     ui.add_space(4.0);
     let current = LEVEL_BANDS.iter().position(|b| level < b.0).unwrap_or(LEVEL_BANDS.len() - 1);
     egui::Grid::new("level_bands").num_columns(6).spacing([22.0, 6.0]).striped(true).show(ui, |ui| {
-        for h in ["단계", "이름", "CEFR", "레벨 점수", "목표 어휘", ""] {
+        for h in ["단계", "이름", "JLPT", "레벨 점수", "목표 어휘", ""] {
             ui.label(RichText::new(h).strong().color(muted()));
         }
         ui.end_row();
@@ -212,7 +212,7 @@ fn goal_consulting(ui: &mut Ui, p: &Profile, goal: usize, words: usize) -> Optio
     let base_h = (clo + chi) as f32 / 2.0;
     let (glo, ghi) = CUM_HOURS[goal];
     let at_end = |daily_min: f32| base_h + studied_h + daily_min * left_days / 60.0;
-    let reached = |h: f32| CUM_HOURS.iter().rposition(|(lo, _)| h >= *lo as f32).map(|i| LEVEL_BANDS[i].2).unwrap_or("A1");
+    let reached = |h: f32| CUM_HOURS.iter().rposition(|(lo, _)| h >= *lo as f32).map(|i| LEVEL_BANDS[i].2).unwrap_or("N5");
     let verdict = |h: f32| {
         if goal <= cur {
             ("이미 도달", GOOD)
@@ -242,7 +242,7 @@ fn goal_consulting(ui: &mut Ui, p: &Profile, goal: usize, words: usize) -> Optio
         ui.add_space(6.0);
 
         // 1. Hours to each level (reference).
-        ui.label(RichText::new("레벨별 누적 학습 시간 (케임브리지 영어 등의 추정치 · 수업+연습 합계, 개인차가 큰 참고값)").strong());
+        ui.label(RichText::new("레벨별 누적 학습 시간 (한국인 등 한자권 학습자의 JLPT 대비 추정치 · 수업+연습 합계, 개인차가 큰 참고값)").strong());
         egui::Grid::new("cum_hours").num_columns(3).spacing([24.0, 4.0]).striped(true).show(ui, |ui| {
             for (i, (lo, hi)) in CUM_HOURS.iter().enumerate().skip(1) {
                 let mark = if i == cur { "◀ 지금" } else if i == goal { "🎯 목표" } else { "" };
@@ -348,12 +348,12 @@ fn level_chart(ui: &mut Ui, history: &[LevelRecord], start: chrono::NaiveDate) {
     p.rect_filled(rect, 8.0, themed(Color32::from_rgb(16, 21, 34), Color32::from_rgb(246, 248, 252)));
     let x_of = |d: chrono::NaiveDate| rect.left() + 30.0 + (rect.width() - 40.0) * ((d - start).num_days() as f32 / TOTAL_DAYS as f32).clamp(0.0, 1.0);
     let y_of = |l: f32| rect.bottom() - 16.0 - (rect.height() - 30.0) * ((l - 1.0) / 9.0);
-    for (l, name) in [(2.0, "A2"), (3.5, "B1"), (6.5, "B2"), (9.0, "C1")] {
+    for (l, name) in [(2.0, "N4"), (3.5, "N3"), (6.5, "N2"), (9.0, "N1")] {
         let y = y_of(l);
         p.line_segment([Pos2::new(rect.left() + 28.0, y), Pos2::new(rect.right() - 8.0, y)], Stroke::new(1.0_f32, themed(Color32::from_rgb(40, 48, 70), Color32::from_rgb(222, 227, 238))));
         p.text(Pos2::new(rect.left() + 4.0, y), egui::Align2::LEFT_CENTER, name, egui::FontId::proportional(11.0), muted());
     }
-    // Pace line toward B2 by the end of the program.
+    // Pace line toward N2 by the end of the program.
     if let Some(first) = history.first() {
         let goal = curriculum::target_level_for_day(TOTAL_DAYS, first.level);
         p.line_segment(
