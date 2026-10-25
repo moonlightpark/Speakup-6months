@@ -35,6 +35,11 @@ pub const ROUND: usize = 10;
 /// 한자 cards to answer every day (required, shown in the card and on the home checklist).
 pub const KANJI_PER_DAY: u32 = 20;
 
+/// Seconds a right answer stays on screen while its sound plays, before the next card.
+const KANA_HOLD: f64 = 1.2;
+/// Kanji: the example word is longer.
+const KANJI_HOLD: f64 = 2.0;
+
 /// Rows of KANA that are 탁음·반탁음 (shown under the 50음 in the chart).
 const BASIC_ROWS: usize = 11;
 
@@ -156,12 +161,17 @@ pub struct KanaQuiz {
     pub right: usize,
     /// "✓ 정답! 日 = 날 일" for the card just answered right (the next one comes at once).
     pub last_ok: Option<String>,
+    /// After a right answer the card stays (green) until this egui time, so the sound heard
+    /// matches the character on screen; then the next card comes by itself.
+    pub advance_at: Option<f64>,
+    /// Card whose sound was synthesized ahead (VOICEVOX), so it plays the moment it's answered.
+    pub prefetched: Option<usize>,
 }
 
 impl KanaQuiz {
     pub fn new(cards: Vec<usize>, deck: Deck) -> Self {
         let choices = cards.first().map(|&a| choices(deck, a)).unwrap_or_default();
-        Self { deck, cards, idx: 0, choices, picked: None, right: 0, last_ok: None }
+        Self { deck, cards, idx: 0, choices, picked: None, right: 0, last_ok: None, advance_at: None, prefetched: None }
     }
 }
 
@@ -368,6 +378,18 @@ impl App {
         ui.label(RichText::new(q.last_ok.as_deref().unwrap_or(" ")).size(16.0).color(GOOD));
         ui.add_space(4.0);
         let mut next = false;
+        if q.prefetched != Some(q.idx) {
+            q.prefetched = Some(q.idx);
+            self.voice.speaker.prefetch(&deck.speak(answer), self.voice.base_rate);
+        }
+        let now = ui.input(|i| i.time);
+        if let Some(t) = q.advance_at {
+            if now >= t {
+                next = true;
+            } else {
+                ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64(t - now));
+            }
+        }
         card(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label(RichText::new(g).size(120.0).strong().color(text_strong()));
@@ -395,7 +417,7 @@ impl App {
                         if ok {
                             // Right: straight on to the next card (time saved); wrong: stay and show the answer.
                             q.right += 1;
-                            next = true;
+                            q.advance_at = Some(now + if let Deck::Kanji(_) = deck { KANJI_HOLD } else { KANA_HOLD });
                         }
                         if let Deck::Kanji(_) = deck {
                             self.store.profile.today.kanji_cards += 1;
@@ -431,6 +453,7 @@ impl App {
             close = ui.button("그만하기").clicked();
         });
         if next {
+            q.advance_at = None;
             q.last_ok = (q.picked == Some(answer)).then(|| match deck {
                 Deck::Kanji(_) => {
                     let k = &crate::kanji::all()[answer];
