@@ -51,6 +51,8 @@ pub struct Settings {
     pub list_text_size: f32,
     /// Minutes between notifications (top right); 0 = off.
     pub notify_minutes: u32,
+    /// "오늘은 그만보기" pressed on this day: no more notifications until tomorrow.
+    pub notify_off_date: Option<NaiveDate>,
     /// 받아쓰기 reading speed: index in `DICTATION_SPEEDS` (0 느리게, 1 보통, 2 빠르게).
     pub dictation_speed: usize,
 }
@@ -91,6 +93,7 @@ impl Default for Settings {
             ko_colors_faded: false,
             list_text_size: 17.0,
             notify_minutes: 5,
+            notify_off_date: None,
             dictation_speed: 1,
         }
     }

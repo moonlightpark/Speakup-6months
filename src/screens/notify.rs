@@ -159,7 +159,7 @@ impl App {
     pub fn notifications_ui(&mut self, ctx: &egui::Context) {
         let minutes = self.store.settings.notify_minutes;
         let now = Instant::now();
-        let quiet = minutes == 0 || !self.store.profile.placement_done || matches!(self.screen, Screen::Onboarding | Screen::LevelTest) || self.voice.recorder.is_recording();
+        let quiet = minutes == 0 || self.store.settings.notify_off_date == Some(today()) || !self.store.profile.placement_done || matches!(self.screen, Screen::Onboarding | Screen::LevelTest) || self.voice.recorder.is_recording();
         if self.notifier.shown.is_none() && now >= self.notifier.next_at {
             if quiet {
                 // Not while speaking or testing: try again shortly.
@@ -175,6 +175,7 @@ impl App {
         ctx.request_repaint_after(Duration::from_secs(1));
         let Some((n, at)) = &mut self.notifier.shown else { return };
         let mut close = false;
+        let mut off_today = false;
         let mut open: Option<Screen> = None;
         // Slides in from the right.
         let t = (at.elapsed().as_secs_f32() / 0.35).min(1.0);
@@ -208,13 +209,22 @@ impl App {
                             open = Some(screen);
                         }
                     }
+                    ui.add_space(6.0);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        off_today = ui.add(egui::Button::new(RichText::new("오늘은 그만보기").size(13.0).color(muted())).frame(false)).on_hover_text("내일까지 알림을 띄우지 않아요").clicked();
+                    });
                 });
         });
         // Stays while the mouse is on it.
         if resp.response.contains_pointer() {
             *at = Instant::now() - Duration::from_secs(1);
         }
-        if close || open.is_some() || at.elapsed() > SHOW_FOR {
+        if off_today {
+            crate::applog!("notify: 오늘은 그만보기");
+            self.store.settings.notify_off_date = Some(today());
+            self.store.save_settings();
+        }
+        if close || off_today || open.is_some() || at.elapsed() > SHOW_FOR {
             self.notifier.shown = None;
         }
         if let Some(s) = open {

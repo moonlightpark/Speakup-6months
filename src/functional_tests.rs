@@ -2061,6 +2061,19 @@ fn ft59_notifications_at_the_top_right_take_turns() {
     show(&mut t, 2);
     t.click("✖");
     assert!(t.app().notifier.shown.is_none());
+    // 오늘은 그만보기: nothing more today, back tomorrow.
+    show(&mut t, 2);
+    t.click("오늘은 그만보기");
+    assert!(t.app().notifier.shown.is_none());
+    assert_eq!(t.app().store.settings.notify_off_date, Some(today()));
+    t.app_mut().notifier.next_at = std::time::Instant::now();
+    t.steps(2);
+    assert!(t.app().notifier.shown.is_none(), "not again today");
+    t.app_mut().store.settings.notify_off_date = Some(today() - chrono::Duration::days(1));
+    t.app_mut().notifier.next_at = std::time::Instant::now();
+    t.steps(2);
+    assert!(t.app().notifier.shown.is_some(), "back the next day");
+    t.app_mut().notifier.shown = None;
     // Off in settings: nothing comes.
     t.app_mut().store.settings.notify_minutes = 0;
     t.app_mut().notifier.next_at = std::time::Instant::now();
