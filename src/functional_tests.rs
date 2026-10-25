@@ -222,6 +222,10 @@ fn temp_dir(name: &str) -> PathBuf {
 static THEME_LOCK: Mutex<()> = Mutex::new(());
 
 fn launch_at(dir: PathBuf, with_key: bool, prepare: impl FnOnce(&mut Store)) -> T {
+    launch_sized(dir, with_key, egui::vec2(1280.0, 2400.0), prepare)
+}
+
+fn launch_sized(dir: PathBuf, with_key: bool, size: egui::Vec2, prepare: impl FnOnce(&mut Store)) -> T {
     let mut store = Store::open_at(dir.clone()).unwrap();
     store.settings.api_key = if with_key { "test-key".into() } else { String::new() };
     prepare(&mut store);
@@ -239,7 +243,7 @@ fn launch_at(dir: PathBuf, with_key: bool, prepare: impl FnOnce(&mut Store)) -> 
     let url = mock.url.clone();
     // Launching sets the process-wide theme from the settings: not while ft42 switches it.
     let theme_guard = THEME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let h = Harness::builder().with_size(egui::vec2(1280.0, 2400.0)).build_eframe(move |cc| {
+    let h = Harness::builder().with_size(size).build_eframe(move |cc| {
         let mut app = App::new_with(cc, store, voice);
         app.api_url = url;
         app
@@ -285,6 +289,27 @@ impl T {
     }
     fn has(&self, text: &str) -> bool {
         self.h.query_all(By::new().label_contains(text).include_labels()).next().is_some()
+    }
+    /// A few frames with short pauses, so background work (mock Claude replies) shows up.
+    fn settle(&mut self) {
+        for _ in 0..8 {
+            self.steps(1);
+            std::thread::sleep(Duration::from_millis(40));
+        }
+    }
+    /// Labels of the widgets that reach past `x` (the phone layout test names what's too wide).
+    fn past_edge(&self, x: f64) -> String {
+        let mut out: Vec<String> = Vec::new();
+        for n in self.h.query_all(By::new().include_labels()) {
+            let Some(b) = n.raw_bounds() else { continue };
+            let label = n.label().unwrap_or_default();
+            let label = if label.is_empty() { n.value().unwrap_or_default() } else { label };
+            if b.x1 > x + 0.5 {
+                out.push(format!("[{:?} {label} {:.0}-{:.0}]", n.role(), b.x0, b.x1));
+            }
+        }
+        out.truncate(8);
+        out.join(" ")
     }
     fn has_exact(&self, text: &str) -> bool {
         self.h.query_all(By::new().label(text).include_labels()).next().is_some()
@@ -2244,4 +2269,108 @@ fn ft67_print_a_days_words_on_one_a4_page() {
     t.nav("📖  문장 읽기");
     t.click_contains("2일차 (0/");
     assert!(!t.has("📄 인쇄"));
+}
+
+#[test]
+fn ft_phone_layout_fits_every_screen() {
+    // A phone held upright (339 × 752 points: a Galaxy S20 at its default display size): the menu folds into ☰ and no page is wider than the screen.
+    let mut t = launch_sized(temp_dir("phone"), true, egui::vec2(339.0, 752.0), |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.record_level(1.5, "test setup");
+        s.profile.today = no_idioms_today(mock_word_set());
+    });
+    assert!(t.has("☰ 메뉴") && !t.has_exact("📚  새 단어"), "no side bar on a phone");
+    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
+    let mut wide = Vec::new();
+    for s in screens {
+        t.click("☰ 메뉴");
+        t.nav(s);
+        t.steps(4);
+        assert!(!t.app().nav_open, "picking a screen closes the menu");
+        if let Some(o) = t.app_mut().overflow.take() {
+            wide.push(format!("{:?} {:.0}: {}", o.0, o.1, t.past_edge(327.0)));
+        }
+    }
+    // Inside the practice screens too: the card quizzes and the drills.
+    let mut check = |t: &mut T, what: &str| {
+        t.steps(4);
+        if let Some(o) = t.app_mut().overflow.take() {
+            wide.push(format!("{what} {:.0}: {}", o.1, t.past_edge(327.0)));
+        }
+        t.app_mut().overflow = None;
+    };
+    t.click("☰ 메뉴");
+    t.nav("📚  새 단어");
+    t.h.get_all_by_label("▶ 시작하기").next().unwrap().click();
+    check(&mut t, "word drill");
+    t.click("☰ 메뉴");
+    t.nav("🔁  복습");
+    t.h.get_by_label_contains("낱말 맞추기").click();
+    check(&mut t, "wordle");
+    assert!(wide.is_empty(), "wider than the phone: {wide:?}");
+}
+
+/// Phone layout, two levels deeper: on each screen every button is pressed once (from a fresh
+/// visit), then each new button on the page it opened, and every page must still fit 339 points.
+/// Slow (about a minute): `cargo test phone_explore -- --ignored`.
+#[test]
+#[ignore]
+fn phone_explore_every_button() {
+    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
+    // Buttons that leave the app (browser, Finder) or only switch screens.
+    let skip = |l: &str| l.is_empty() || l.contains("폴더") || l.contains("받기") || l.contains("다운로드") || l.contains("브라우저") || l.contains("유튜브") || l.contains("YouTube") || l.contains("메뉴") || l.contains("닫기") || l.contains("홈으로") || screens.contains(&l);
+    let mut wide = Vec::new();
+    for s in screens {
+        let mut t = launch_sized(temp_dir("phone_explore"), true, egui::vec2(339.0, 752.0), |st| {
+            st.profile.placement_done = true;
+            st.profile.start_date = today();
+            st.record_level(1.5, "test setup");
+            st.profile.today = no_idioms_today(mock_word_set());
+        });
+        t.click("☰ 메뉴");
+        t.nav(s);
+        t.steps(4);
+        let labels: Vec<String> = t.h.query_all(By::new().role(egui::accesskit::Role::Button)).filter_map(|n| n.label()).filter(|l| !skip(l)).collect();
+        let mut seen = std::collections::HashSet::new();
+        let labels: Vec<String> = labels.into_iter().filter(|l| seen.insert(l.clone())).take(25).collect();
+        for l in labels {
+            // Back to a fresh page each time.
+            t.app_mut().queue = None;
+            t.app_mut().word_mission = None;
+            t.click("☰ 메뉴");
+            t.nav(s);
+            t.steps(3);
+            t.app_mut().overflow = None;
+            let Some(n) = t.h.query_all(By::new().role(egui::accesskit::Role::Button).label(&l)).next() else { continue };
+            n.click();
+            t.settle();
+            if let Some(o) = t.app_mut().overflow.take() {
+                wide.push(format!("{s} › {l} → {:?} {:.0}: {}", o.0, o.1, t.past_edge(327.0)));
+            }
+            // One more level: each new button on the page that opened (a drill, a dialog …).
+            {
+                let before: std::collections::HashSet<String> = seen.clone();
+                let next: Vec<String> = t.h.query_all(By::new().role(egui::accesskit::Role::Button)).filter_map(|n| n.label()).filter(|l2| !skip(l2) && !before.contains(l2)).take(12).collect();
+                for l2 in next {
+                    let Some(n) = t.h.query_all(By::new().role(egui::accesskit::Role::Button).label(&l2)).next() else { continue };
+                    n.click();
+                    t.settle();
+                    if let Some(o) = t.app_mut().overflow.take() {
+                        wide.push(format!("{s} › {l} › {l2} → {:?} {:.0}: {}", o.0, o.1, t.past_edge(327.0)));
+                    }
+                    if t.app().nav_open {
+                        t.click("✖ 닫기");
+                    }
+                }
+            }
+            if t.app().nav_open {
+                t.click("✖ 닫기");
+            }
+        }
+    }
+    for w in &wide {
+        eprintln!("WIDE {w}");
+    }
+    assert!(wide.is_empty(), "{} pages wider than the phone", wide.len());
 }

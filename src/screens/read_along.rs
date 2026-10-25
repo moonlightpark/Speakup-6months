@@ -79,7 +79,7 @@ impl App {
         let mut go: Option<usize> = None;
         let mut next = false;
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("따라 읽기").size(18.0).strong().color(ACCENT));
                 ui.label(RichText::new(format!("{}/{n} 문장 · 통과 {}", i + 1, ra.done())).color(muted()));
             });
@@ -103,7 +103,7 @@ impl App {
                 let ok = r.score >= pass;
                 ui.label(RichText::new(format!("{} {:.0}점 — \"{t}\"", if ok { "✅" } else { "🔁" }, r.score)).color(if ok { GOOD } else { warn() }));
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(i > 0, egui::Button::new("◀ 이전 문장").min_size(ACTION_BUTTON)).clicked() {
                     go = Some(i - 1);
                 }

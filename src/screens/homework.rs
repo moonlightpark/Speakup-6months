@@ -43,7 +43,7 @@ impl App {
             card(ui, |ui| {
                 ui.label(RichText::new(format!("{} 숙제 · {done}/{total}", hw.assigned)).size(18.0).strong());
                 for (ti, t) in hw.tasks.iter().enumerate() {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(if t.done { "✅" } else { "⬜" });
                         let icon = if t.kind == TaskKind::UseWord { "✏ 문장 만들기" } else { "🔊 읽기" };
                         ui.label(RichText::new(icon).small().color(if t.kind == TaskKind::UseWord { warn() } else { ACCENT }));

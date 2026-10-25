@@ -1,26 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- SpeakUp 6M, Android tablet trial: a NativeActivity that loads libspeakup.so, plus one small
-     Java class (java/…/WebPane.java) for the listening lab's web view. -->
+<!-- SpeakUp 6M for Android (phones and tablets): a NativeActivity that loads libspeakup.so,
+     plus one small Java class (java/…/WebPane.java) for the listening lab's web view. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.speakup.sixmonths">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
-    <!-- Tablets only: the desktop layout needs a large screen. -->
-    <supports-screens android:smallScreens="false" android:normalScreens="false"
+    <!-- Phones get a ☰ menu instead of the side bar (app.rs, COMPACT_WIDTH). -->
+    <supports-screens android:smallScreens="true" android:normalScreens="true"
         android:largeScreens="true" android:xlargeScreens="true" />
 
     <application
         android:label="SpeakUp 6M"
         android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
-        android:extractNativeLibs="true"
-        android:debuggable="true">
+        android:extractNativeLibs="true">
         <activity
             android:name="android.app.NativeActivity"
             android:exported="true"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="fullUser"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|density|uiMode">
             <meta-data android:name="android.app.lib_name" android:value="speakup" />

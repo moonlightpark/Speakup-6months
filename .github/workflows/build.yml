@@ -98,8 +98,44 @@ jobs:
           name: SpeakUp6M-${{ matrix.name }}
           path: dist/*
 
+  # Android APK (phones and tablets). Signed with the app's release key from the secrets
+  # ANDROID_KEYSTORE_B64 / ANDROID_KEYSTORE_PASS, so installed apps update; skipped without them.
+  android:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.KEYSTORE_B64 != ''
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.KEYSTORE_B64 != ''
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        if: env.KEYSTORE_B64 != ''
+        with:
+          key: android-arm64
+
+      - name: Build APK
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          cargo install cargo-ndk --locked
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          SHERPA_CACHE="$HOME/.cache/sherpa-rs" ANDROID_KEYSTORE="$RUNNER_TEMP/release.jks" ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" JOBS=4 sh scripts/build_android.sh
+          mkdir -p dist && cp target/android/SpeakUp6M-android-arm64.apk dist/
+
+      - uses: actions/upload-artifact@v4
+        if: env.KEYSTORE_B64 != ''
+        with:
+          name: SpeakUp6M-android-arm64
+          path: dist/*
+
   release:
-    needs: build
+    needs: [build, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

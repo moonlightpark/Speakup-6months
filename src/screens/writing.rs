@@ -248,7 +248,7 @@ impl App {
                     st.played = true;
                     self.voice.say_at(&en, rate);
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("🔊 다시 듣기").clicked() {
                         self.voice.say_at(&en, rate);
                     }
@@ -283,7 +283,7 @@ impl App {
                 if r.score >= 80.0 {
                     crate::art::cheer_strip(ui, t_check, if r.score >= 95.0 { "🎉 완벽해요! 정답이에요!" } else { "👏 잘했어요!" });
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("{:.0}점", r.score)).size(22.0).strong().color(if r.score >= 80.0 { GOOD } else { warn() }));
                     ui.label(RichText::new(if dictation { "정답과 비교 (초록 = 맞음, 빨강 = 다름)" } else { "모범 답안과 비교" }).color(muted()));
                 });
@@ -302,7 +302,7 @@ impl App {
                         Err(e) => error_label(ui, e),
                     }
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("🔊 정답 듣기").clicked() {
                         self.voice.say(&en);
                     }
@@ -421,7 +421,7 @@ impl App {
         if let Some(r) = &st.diary_result {
             card(ui, |ui| match r {
                 Ok(f) => {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new(format!("{}점", f.score)).size(24.0).strong().color(if f.score >= 80 { GOOD } else { warn() }));
                         ui.label(&f.feedback_ko);
                     });
@@ -504,7 +504,7 @@ impl App {
         let mut go = None;
         let mut picked = None;
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("◀").clicked() {
                     go = Some(prev_month);
                 }
@@ -519,8 +519,12 @@ impl App {
                 ui.label(RichText::new(format!("지금까지 쓴 일기 {total}편 · 📝 표시된 날을 클릭하면 그날 일기를 다시 봐요")).color(muted()).small());
             });
             ui.add_space(6.0);
-            let cell = Vec2::new(64.0, 44.0);
-            egui::Grid::new("diary_calendar").spacing(Vec2::splat(4.0)).show(ui, |ui| {
+            // Seven columns: narrower days on a phone.
+            let cell = Vec2::new(((ui.available_width() - 6.0 * 4.0) / 7.0).min(64.0), 44.0);
+            egui::Grid::new("diary_calendar").spacing(Vec2::splat(4.0)).min_col_width(cell.x).max_col_width(cell.x).show(ui, |ui| {
+                // Buttons no wider than a day cell (they're at least 40 wide by default).
+                ui.spacing_mut().interact_size.x = cell.x;
+                ui.spacing_mut().button_padding.x = 2.0;
                 for (i, d) in ["일", "월", "화", "수", "목", "금", "토"].iter().enumerate() {
                     let c = match i {
                         0 => BAD,
@@ -582,7 +586,7 @@ impl App {
             }
             if !w.corrected.is_empty() {
                 ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new("✨ Claude 교정본").strong());
                     if w.score > 0.0 {
                         ui.label(RichText::new(format!("{:.0}점", w.score)).color(if w.score >= 80.0 { GOOD } else { warn() }));

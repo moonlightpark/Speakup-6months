@@ -71,7 +71,7 @@ impl App {
                     ui.add_space(4.0);
                 }
                 // The sentence template: ____ ( word ) ____ .
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     let blank = RichText::new("＿＿＿＿").size(28.0).color(muted());
                     let w = ui.fonts(|f| f.layout_no_wrap(word.clone(), egui::FontId::proportional(32.0), Color32::WHITE).size().x) + 230.0;
                     ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));

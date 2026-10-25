@@ -49,6 +49,15 @@ pub const AD_NOTICE: &str = "※ 영상(YouGlish · YouTube)에 나오는 광고
 fn section(ui: &mut Ui, title: &str, rows: &[Credit]) {
     ui.add_space(6.0);
     ui.label(RichText::new(title).strong().color(text_strong()));
+    if ui.available_width() < 600.0 {
+        // A phone: name, then licence · what on the next line.
+        for (name, licence, what, url) in rows {
+            ui.hyperlink_to(*name, *url);
+            ui.label(RichText::new(format!("{licence} · {what}")).color(muted()).small());
+            ui.add_space(2.0);
+        }
+        return;
+    }
     egui::Grid::new(title).num_columns(3).spacing([14.0, 4.0]).striped(true).show(ui, |ui| {
         for (name, licence, what, url) in rows {
             ui.hyperlink_to(*name, *url).on_hover_text(*url);

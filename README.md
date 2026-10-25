@@ -18,6 +18,9 @@
 |---|---|---|
 | macOS (Apple Silicon) | `SpeakUp6M-macos-arm64.zip` | 압축을 풀고 `SpeakUp 6M.app` 실행. 처음에 "확인되지 않은 개발자" 경고가 뜨면 앱을 **우클릭 → 열기** |
 | Windows | `SpeakUp6M-windows-x64.zip` | 압축을 푼 폴더에서 `speakup.exe` 실행 (같은 폴더의 `.dll` 파일을 지우지 마세요) |
+| Android (폰·태블릿, 64비트) | `SpeakUp6M-android-arm64.apk` | 폰에서 받아 열고 **출처를 알 수 없는 앱 설치 허용** → 설치. Android 9 이상 |
+
+Android: 폰에서는 왼쪽 메뉴 대신 위쪽 **☰ 메뉴**를 눌러 화면을 고릅니다(태블릿 가로 화면은 PC와 같은 배치). 음성 인식 모델은 Wi-Fi에서 받으세요. iOS는 준비 중입니다.
 
 ---
 

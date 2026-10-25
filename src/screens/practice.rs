@@ -135,7 +135,7 @@ impl App {
             }
             ui.add_space(8.0);
             let (mut close, mut go_next) = (false, false);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.add(egui::Button::new(RichText::new("🏠 홈으로").size(16.0)).fill(ACCENT).min_size(crate::widgets::ACTION_BUTTON)).clicked() {
                     close = true;
                     self.screen = crate::app::Screen::Home;
@@ -166,7 +166,7 @@ impl App {
             return true;
         }
 
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(&q.title).size(20.0).strong());
             ui.label(RichText::new(format!("{} / {}", q.idx + 1, q.specs.len())).color(muted()));
         });
@@ -179,7 +179,7 @@ impl App {
         }
         let Some(q) = self.queue.as_mut() else { return true };
         let mut stop = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button("건너뛰기").clicked() {
                 q.idx += 1;
                 if let Some(s) = q.specs.get(q.idx) {
@@ -247,7 +247,7 @@ impl App {
         let label = if done_today { "↻ 다시 연습하기" } else { "▶ 시작하기" };
         let start_button = |ui: &mut Ui| ui.add(egui::Button::new(RichText::new(label).size(17.0)).fill(ACCENT).min_size(crate::widgets::BIG_BUTTON)).clicked();
         // The start button above the list too, so a long list need not be scrolled through first.
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             start |= start_button(ui);
             if done_today {
                 ui.label(RichText::new("✅ 오늘 완료했어요").color(GOOD));
@@ -308,7 +308,7 @@ impl App {
             }
             if pages > 1 {
                 ui.add_space(8.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.add_enabled(page > 0, egui::Button::new("◀ 이전")).clicked() {
                         page -= 1;
                     }
@@ -839,7 +839,7 @@ impl App {
             let Some((d, rows)) = days.iter().find(|(d, _)| Some(*d) == sel) else { return };
             ui.add_space(6.0);
             let day_title = format!("{}일차 · {} — {}개", (*d - start).num_days() + 1, d.format("%m월 %d일"), rows.len());
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(&day_title).strong());
                 // 단어 / 뜻 on one A4 page (the browser's print dialog).
                 if key == "words" && ui.button("📄 인쇄").on_hover_text("A4 한 장에 단어 / 뜻을 인쇄해요").clicked() {
@@ -1144,7 +1144,7 @@ impl App {
         }
         page_title(ui, "🔁 복습", "한국어 뜻을 보고 영어로 먼저 말해 본 뒤(기억해 내기), 정답을 한 번 소리 내어 따라 합니다. 첫 시도 점수로 다음 복습일이 정해져요.");
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.selectable_value(&mut self.wordle.tab, 0, RichText::new("🔁 복습 카드").size(16.0));
             ui.selectable_value(&mut self.wordle.tab, 1, RichText::new("🔠 낱말 맞추기").size(16.0));
         });

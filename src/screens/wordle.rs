@@ -419,7 +419,7 @@ impl App {
         for (ri, keys) in rows.iter().enumerate() {
             let extra = if ri == 2 { 2.0 * (64.0 + 5.0) } else { 0.0 };
             let w = keys.len() as f32 * (key_w + 5.0) - 5.0 + extra;
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 5.0;
                 ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
                 if ri == 2 && ui.add(egui::Button::new(RichText::new("입력").size(15.0).strong()).min_size(Vec2::new(64.0, key_h))).clicked() {

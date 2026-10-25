@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the Android tablet trial APK: target/android/SpeakUp6M-android-arm64.apk.
+# Builds the Android APK (phones and tablets): target/android/SpeakUp6M-android-arm64.apk.
 # Needs the Android SDK + NDK (ANDROID_HOME), `rustup target add aarch64-linux-android` and
 # `cargo install cargo-ndk`. Install on a device/emulator with: adb install -r <apk>
 set -e
@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 BT="$SDK/build-tools/$(ls "$SDK/build-tools" | sort -V | tail -1)"
 PLATFORM="$SDK/platforms/android-34/android.jar"
+[ -f "$PLATFORM" ] || PLATFORM="$(ls -d "$SDK"/platforms/android-*/android.jar | sort -V | tail -1)"
 NDK="${ANDROID_NDK_HOME:-$SDK/ndk/$(ls "$SDK/ndk" | sort -V | tail -1)}"
 OUT=target/android
 APK="$OUT/SpeakUp6M-android-arm64.apk"
@@ -43,7 +44,11 @@ cp assets/icon/icon_256.png "$OUT/res/mipmap/ic_launcher.png"
   "$OUT/res.zip"
 (cd "$OUT/stage" && zip -qr ../base.apk lib classes.dex)
 "$BT/zipalign" -f -p 4 "$OUT/base.apk" "$OUT/aligned.apk"
-"$BT/apksigner" sign --ks "$HOME/.android/debug.keystore" --ks-pass pass:android --key-pass pass:android \
+# Release key (the same one every time, so an installed app updates): ANDROID_KEYSTORE and
+# ANDROID_KEYSTORE_PASS (CI: from secrets); without them the local debug key.
+KS="${ANDROID_KEYSTORE:-$HOME/.android/debug.keystore}"
+PASS="${ANDROID_KEYSTORE_PASS:-android}"
+"$BT/apksigner" sign --ks "$KS" --ks-pass "pass:$PASS" --key-pass "pass:$PASS" \
   --out "$APK" "$OUT/aligned.apk"
 rm -f "$OUT/base.apk" "$OUT/aligned.apk" "$OUT/res.zip"
 ls -lh "$APK"

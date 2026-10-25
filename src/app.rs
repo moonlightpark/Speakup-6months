@@ -45,6 +45,10 @@ pub const CONTENT_WIDTH: f32 = 900.0;
 /// Sidebar width.
 pub const SIDEBAR_WIDTH: f32 = 232.0;
 
+/// Narrower than this (a phone, or a tablet held upright) the menu folds into a ☰ top bar and
+/// the page takes the whole width.
+pub const COMPACT_WIDTH: f32 = 760.0;
+
 pub const STEPS: &[(&str, &str, Screen)] = &[
     ("homework", "📝 숙제 확인", Screen::Homework),
     ("review", "🔁 복습 (배운 단어·문장)", Screen::Review),
@@ -101,6 +105,11 @@ pub struct App {
     pub sentence_tense_tried: Option<chrono::NaiveDate>,
     /// 오늘의 문장 만들기 in progress: (word, mission).
     pub word_mission: Option<(String, crate::screens::mission::Mission)>,
+    /// Phone-sized screens: the menu is shown instead of the page (☰ in the top bar).
+    pub nav_open: bool,
+    /// Phone layout: a page that came out wider than the screen (screen, width) — logged once,
+    /// and checked by the phone layout test.
+    pub overflow: Option<(Screen, f32)>,
     pub selfx: SelfExprState,
     pub roleplay: RoleplayState,
     pub listening: ListeningState,
@@ -207,6 +216,8 @@ impl App {
             queue: None,
             homework: HomeworkState::default(),
             word_mission: None,
+            nav_open: false,
+            overflow: None,
             tense_job: Pending::default(),
             tense_tried: None,
             days_filled: None,
@@ -699,12 +710,13 @@ impl App {
     fn activity_progress_card(&self, ui: &mut egui::Ui) {
         let colors = [crate::art::PINK, crate::art::CYAN, warn(), GOOD, Color32::from_rgb(190, 140, 255), Color32::from_rgb(110, 220, 200), Color32::from_rgb(255, 160, 64)];
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("📊 진척율").size(17.0).strong());
                 ui.label(RichText::new(format!("새 단어·문장 읽기는 배운 개수, 나머지는 마친 날 / 6개월 {TOTAL_DAYS}일")).color(muted()));
             });
             ui.add_space(4.0);
-            egui::Grid::new("activity_progress").num_columns(3).spacing([14.0, 6.0]).show(ui, |ui| {
+            let narrow = ui.available_width() < 600.0;
+            egui::Grid::new("activity_progress").num_columns(if narrow { 1 } else { 3 }).spacing([14.0, 6.0]).show(ui, |ui| {
                 for (i, key) in PROGRESS_ACTIVITIES.iter().enumerate() {
                     let Some((_, label, _)) = STEPS.iter().find(|s| s.0 == *key) else { continue };
                     let today_mark = if self.step_done(key) { " · 오늘 ✓" } else { "" };
@@ -716,9 +728,20 @@ impl App {
                             (n as f32 / TOTAL_DAYS as f32, format!("{n}/{TOTAL_DAYS}일"))
                         }
                     };
-                    ui.label(RichText::new(*label).strong());
-                    ui.add(egui::ProgressBar::new(frac.min(1.0)).desired_width(320.0).desired_height(10.0).corner_radius(5.0).fill(colors[i % colors.len()]));
-                    ui.label(RichText::new(format!("{:.1}%  ({detail}){today_mark}", frac * 100.0)).color(muted()));
+                    let bar = egui::ProgressBar::new(frac.min(1.0)).desired_height(10.0).corner_radius(5.0).fill(colors[i % colors.len()]);
+                    let detail = RichText::new(format!("{:.1}%  ({detail}){today_mark}", frac * 100.0)).color(muted());
+                    if narrow {
+                        // A phone: name and numbers, then the bar the whole width.
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new(*label).strong());
+                            ui.label(detail.small());
+                            ui.add(bar.desired_width(ui.available_width()));
+                        });
+                    } else {
+                        ui.label(RichText::new(*label).strong());
+                        ui.add(bar.desired_width(320.0));
+                        ui.label(detail);
+                    }
                     ui.end_row();
                 }
             });
@@ -910,7 +933,7 @@ impl App {
             }
             if let Some(e) = self.lesson_error.clone() {
                 error_label(ui, &e);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("다시 시도").clicked() {
                         self.lesson_error = None;
                         self.ensure_lesson();
@@ -946,7 +969,7 @@ impl App {
         let clip = ui.clip_rect();
         ui.set_clip_rect(egui::Rect::from_x_y_ranges(clip.left() - 14.0..=clip.right() + 14.0, clip.y_range()));
         ui.add_space(18.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let (r, _) = ui.allocate_exact_size(Vec2::splat(44.0), egui::Sense::hover());
             crate::art::gradient_rect(ui.painter(), r, 13.0, ACCENT, crate::art::VIOLET);
             let t = ui.input(|i| i.time) as f32;
@@ -1001,6 +1024,7 @@ impl App {
                 }
                 if resp.clicked() {
                     self.go(*s);
+                    self.nav_open = false;
                 }
             }
             ui.add_space(12.0);
@@ -1055,9 +1079,12 @@ impl App {
             .inner_margin(24.0)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.horizontal(|ui| {
+                // A phone: the text the whole width, the ring under it.
+                let narrow = ui.available_width() < 420.0;
+                let layout = if narrow { egui::Layout::top_down(egui::Align::Min) } else { egui::Layout::left_to_right(egui::Align::Min).with_main_wrap(true) };
+                ui.with_layout(layout, |ui| {
                     ui.vertical(|ui| {
-                        ui.set_width((ui.available_width() - 150.0).max(200.0));
+                        ui.set_width(if narrow { ui.available_width() } else { (ui.available_width() - 150.0).max(140.0) });
                         let hello = if p.name.is_empty() { "오늘도 영어로 말해 볼까요?".to_string() } else { format!("{}님, 오늘도 영어로 말해 볼까요?", p.name) };
                         ui.label(RichText::new(hello).size(26.0).strong().color(Color32::WHITE));
                         ui.label(RichText::new(format!("Day {day} / {TOTAL_DAYS}  ·  {week}주차  ·  {}", phase.name_ko)).size(15.0).color(Color32::from_rgb(200, 214, 255)));
@@ -1066,7 +1093,7 @@ impl App {
                         ui.add_space(6.0);
                         ui.label(RichText::new(format!("🎯 {}", phase.goal_ko)).color(Color32::from_rgb(200, 214, 255)));
                         ui.add_space(10.0);
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             if let Some((n, label, s)) = self.next_step() {
                                 let what = if done == 0 { "▶  오늘의 학습 시작" } else { "▶  오늘의 학습 이어하기" };
                                 if primary_button(ui, &format!("{what} · {n}. {label}")).on_hover_text("왼쪽 메뉴의 번호 태그 순서대로 하면 돼요").clicked() {
@@ -1080,18 +1107,26 @@ impl App {
                             }
                         });
                     });
-                    ui.vertical(|ui| {
+                    let ring_and_mascot = |ui: &mut egui::Ui| {
                         let all_done = done == steps.len();
                         crate::art::mascot_widget(ui, 54.0, if all_done { crate::art::Mood::Cheer } else { crate::art::Mood::Talking });
                         ring(ui, done as f32 / steps.len().max(1) as f32, &format!("{done}/{}", steps.len()), 120.0);
-                    });
+                    };
+                    if narrow {
+                        ui.add_space(8.0);
+                        ui.horizontal(ring_and_mascot);
+                    } else {
+                        ui.vertical(ring_and_mascot);
+                    }
                 });
             });
         {
             let r = hero.response.rect;
             let art = egui::Rect::from_min_max(egui::pos2(r.left() + r.width() * 0.40, r.top() + r.height() * 0.42), egui::pos2(r.right() - 190.0, r.bottom()));
             let bg = crate::art::gradient_rect_shape(r, 22.0, Color32::from_rgb(40, 70, 190), Color32::from_rgb(98, 52, 170));
-            ui.painter().set(hero_bg, egui::Shape::Vec(vec![bg, crate::art::journey(art, day as f32 / TOTAL_DAYS as f32)]));
+            // The journey drawing needs the room beside the ring (not on a phone).
+            let shapes = if r.width() < 470.0 { vec![bg] } else { vec![bg, crate::art::journey(art, day as f32 / TOTAL_DAYS as f32)] };
+            ui.painter().set(hero_bg, egui::Shape::Vec(shapes));
         }
         if curriculum::program_finished(&p) {
             ui.add_space(8.0);
@@ -1111,11 +1146,13 @@ impl App {
         let sentences = self.store.items.iter().filter(|i| i.kind == ItemKind::Sentence).count() - chunks;
         let level_words = level_words(p.level);
         let mut retest = false;
-        ui.horizontal_top(|ui| {
+        ui.horizontal_wrapped(|ui| {
             use crate::screens::history::{stat_card, stat_card_centered};
             let gap = ui.spacing().item_spacing.x;
-            // Five cards across the content column (each adds 32 px of margin + 2 px of border).
-            let w = ((ui.available_width().min(CONTENT_WIDTH) - gap * 4.0) / 5.0 - 34.0).max(100.0);
+            // Five cards across the content column (each adds 32 px of margin + 2 px of border);
+            // two per row on a phone.
+            let per_row = if ui.available_width() < 380.0 { 1.0 } else if ui.available_width() < 600.0 { 2.0 } else { 5.0 };
+            let w = ((ui.available_width().min(CONTENT_WIDTH) - gap * (per_row - 1.0)) / per_row - 34.0).max(100.0);
             stat_card_centered(ui, w, &format!("🔥 {}일", p.streak), "연속 학습", warn());
             stat_card(ui, w, &fmt_minutes(total_mins), &format!("6개월 목표 {}분", thousands(program_mins)), themed(Color32::from_rgb(110, 220, 200), Color32::from_rgb(15, 140, 125)), |ui| {
                 let frac = total_mins as f32 / program_mins.max(1) as f32;
@@ -1142,7 +1179,7 @@ impl App {
 
         // Skill balance: 말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15 of the daily goal.
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("오늘의 학습 비중").size(17.0).strong());
                 ui.label(RichText::new("말하기 40 · 듣기 30 · 읽기 15 · 쓰기 15 — 말은 들은 만큼 나와요").color(muted()));
             });
@@ -1157,15 +1194,19 @@ impl App {
             let t = &p.today;
             let secs = [t.speaking_seconds, t.listening_seconds, t.reading_seconds, t.writing_seconds];
             let colors = [crate::art::PINK, GOOD, crate::art::CYAN, warn()];
-            ui.columns(4, |cols| {
-                for (i, col) in cols.iter_mut().enumerate() {
-                    let (label, w) = SKILL_WEIGHTS[i];
-                    let target = (goal as f32 * w).round().max(1.0);
-                    let mins = secs[i] as f32 / 60.0;
-                    col.label(RichText::new(format!("{label}  {:.0} / {target:.0}분", mins.floor())).strong());
-                    col.add(egui::ProgressBar::new((mins / target).min(1.0)).desired_height(10.0).corner_radius(5.0).fill(colors[i]));
-                }
-            });
+            // Four across, or two rows of two on a phone.
+            let per_row = if ui.available_width() < 600.0 { 2 } else { 4 };
+            for row in (0..4).collect::<Vec<_>>().chunks(per_row) {
+                ui.columns(per_row, |cols| {
+                    for (col, &i) in cols.iter_mut().zip(row) {
+                        let (label, w) = SKILL_WEIGHTS[i];
+                        let target = (goal as f32 * w).round().max(1.0);
+                        let mins = secs[i] as f32 / 60.0;
+                        col.label(RichText::new(format!("{label}  {:.0} / {target:.0}분", mins.floor())).strong());
+                        col.add(egui::ProgressBar::new((mins / target).min(1.0)).desired_height(10.0).corner_radius(5.0).fill(colors[i]));
+                    }
+                });
+            }
         });
         ui.add_space(12.0);
 
@@ -1174,7 +1215,7 @@ impl App {
         // Today's routine
         let mut next: Option<Screen> = None;
         card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("오늘의 루틴").size(19.0).strong());
                 chip(ui, &format!("{} · {}", wk.theme_ko, wk.theme), ACCENT);
             });
@@ -1196,12 +1237,12 @@ impl App {
                     .inner_margin(egui::Margin::symmetric(14, 10))
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.label(RichText::new(*label).size(16.5).color(if is_done { muted() } else { text_strong() }));
                             if !extra.is_empty() {
                                 ui.label(RichText::new(extra).color(muted()));
                             }
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            at_right(ui, 90.0, |ui| {
                                 if is_done {
                                     chip(ui, "✓ 완료", GOOD);
                                 } else {
@@ -1258,7 +1299,7 @@ impl App {
         card(ui, |ui| {
             ui.label(RichText::new("1. 이름 (선택)").strong());
             if has_name && !self.edit_name {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("✅ {}", self.store.profile.name)).color(GOOD));
                     if ui.button("변경").clicked() {
                         self.edit_name = true;
@@ -1270,7 +1311,7 @@ impl App {
             ui.add_space(8.0);
             ui.label(RichText::new("2. Claude API 키").strong());
             if has_key && !self.edit_key {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     let from_env = self.store.settings.api_key.trim().is_empty();
                     ui.label(RichText::new(if from_env { "✅ 환경변수 ANTHROPIC_API_KEY 사용" } else { "✅ 저장됨" }).color(GOOD));
                     if ui.button("변경").clicked() {
@@ -1347,10 +1388,10 @@ impl App {
         }
         let mut warm: Option<String> = None;
         if n.is_ready() {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 changed |= ui.checkbox(&mut self.store.settings.neural_tts, "AI 음성 사용").changed();
                 let current = neural_tts::voice_label(&self.store.settings.neural_voice);
-                egui::ComboBox::from_id_salt("neural_voice").width(240.0).selected_text(current).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("neural_voice").width(ui.available_width().min(240.0)).selected_text(current).show_ui(ui, |ui| {
                     for (_, id, label) in VOICES {
                         if ui.selectable_label(self.store.settings.neural_voice == *id, *label).clicked() {
                             self.store.settings.neural_voice = id.to_string();
@@ -1400,7 +1441,7 @@ impl App {
 
     pub fn stt_setup_ui(&mut self, ui: &mut egui::Ui) {
         let models = self.lang.whisper_models;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             for (id, label) in models {
                 ui.radio_value(&mut self.store.settings.whisper_model, id.to_string(), format!("{id} ({label})"));
             }
@@ -1441,7 +1482,7 @@ impl App {
         // Screen theme: applied at once and remembered in settings.json.
         card(ui, |ui| {
             ui.label(RichText::new("🎨 테마").strong());
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let mut light = self.store.settings.light_theme;
                 ui.radio_value(&mut light, false, "🌙 다크");
                 ui.radio_value(&mut light, true, "☀ 라이트");
@@ -1457,7 +1498,7 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("🔔 알림").strong());
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.notify_minutes, 0..=30).text("분마다 알림 (0 = 끄기)")).changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.notify_minutes, 0..=30), "분마다 알림 (0 = 끄기)").changed();
             ui.label(RichText::new("화면 오른쪽 위에 못 끝낸 단어·문장, 진행 중인 주차와 진척, 배운 내용, 다음 레벨을 앞당기는 방법을 번갈아 알려 줘요. 말하는 중에는 뜨지 않아요.").color(muted()).small());
         });
         // English in the 새 단어 / 문장 읽기 lists, big enough to copy into a notebook.
@@ -1465,7 +1506,7 @@ impl App {
             ui.label(RichText::new("🔠 단어·문장 리스트 글자 크기").strong());
             let range = crate::models::Settings::LIST_TEXT_SIZES;
             let size = &mut self.store.settings.list_text_size;
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(*size > *range.start(), egui::Button::new("가 −")).clicked() {
                     *size = (*size - 2.0).max(*range.start());
                     changed = true;
@@ -1489,8 +1530,8 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("Claude API").strong());
-            ui.horizontal(|ui| {
-                changed |= ui.add(egui::TextEdit::singleline(&mut self.store.settings.api_key).password(!self.show_key).desired_width(360.0).hint_text("sk-ant-...")).changed();
+            ui.horizontal_wrapped(|ui| {
+                changed |= ui.add(egui::TextEdit::singleline(&mut self.store.settings.api_key).password(!self.show_key).desired_width(ui.available_width().min(360.0)).hint_text("sk-ant-...")).changed();
                 ui.checkbox(&mut self.show_key, "표시");
             });
             ui.label(RichText::new("키는 이 컴퓨터의 settings.json 에만 저장됩니다. 비워두면 ANTHROPIC_API_KEY 환경변수를 사용합니다.").color(muted()).small());
@@ -1522,7 +1563,7 @@ impl App {
                     }
                 }
             });
-            if ui.add(egui::Slider::new(&mut self.store.settings.tts_rate, 0.6..=1.4).text("말하기 속도")).changed() {
+            if named_slider(ui, egui::Slider::new(&mut self.store.settings.tts_rate, 0.6..=1.4), "말하기 속도").changed() {
                 self.voice.base_rate = self.store.settings.tts_rate;
                 changed = true;
             }
@@ -1533,7 +1574,7 @@ impl App {
             // 받아쓰기: the level's pace, a little faster by default so it isn't too easy.
             let level = self.store.profile.level;
             ui.label(RichText::new(format!("✏ 받아쓰기 읽기 속도 (내 레벨 {} 기준)", cefr_of(level))).color(text_strong()));
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let extra = ["레벨 속도", "레벨 속도 +3%", "레벨 속도 +15%"];
                 for (i, (name, _)) in DICTATION_SPEEDS.iter().enumerate() {
                     if ui.radio_value(&mut self.store.settings.dictation_speed, i, *name).on_hover_text(extra[i]).changed() {
@@ -1556,14 +1597,14 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("학습").strong());
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.daily_goal_minutes, 10..=120).text("일일 목표 학습 시간(분)")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.pass_score, 60.0..=95.0).text("통과 점수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_new, 1..=6).text("새 항목 반복 횟수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10).text("약점 항목 반복 횟수")).changed();
-            changed |= ui.add(egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=50).text("하루 새 단어 (0 = 35개)")).changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.daily_goal_minutes, 10..=120), "일일 목표 학습 시간(분)").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.pass_score, 60.0..=95.0), "통과 점수").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.reps_new, 1..=6), "새 항목 반복 횟수").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.reps_weak, 2..=10), "약점 항목 반복 횟수").changed();
+            changed |= named_slider(ui, egui::Slider::new(&mut self.store.settings.new_words_per_day, 0..=50), "하루 새 단어 (0 = 35개)").changed();
             changed |= ui.checkbox(&mut self.store.settings.ko_role_colors, "한글 지문에 문장 성분 색상 표시 (주어·동사·목적어…)").changed();
             ui.label(RichText::new("눈이 피로하면 끄세요. 직독직해 색상은 📖 직독직해 버튼으로 따로 켜고 끕니다.").color(muted()).small());
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label("학습 언어:");
                 for l in language::LANGUAGES {
                     let _ = ui.radio(self.lang.code == l.code, l.name_ko);
@@ -1573,9 +1614,9 @@ impl App {
         });
         card(ui, |ui| {
             ui.label(RichText::new("데이터").strong());
-            ui.label(format!("저장 위치: {}", self.store.dir.display()));
+            ui.add(egui::Label::new(format!("저장 위치: {}", self.store.dir.display())).wrap_mode(egui::TextWrapMode::Wrap));
             ui.label(RichText::new("profile.json(레벨·기록), level_log.csv, items.json(단어·문장), homework.json(숙제), attempts.jsonl(발화 기록)").color(muted()).small());
-            if ui.button("📂 폴더 열기").clicked() {
+            if !cfg!(target_os = "android") && ui.button("📂 폴더 열기").clicked() {
                 let _ = open::that(&self.store.dir);
             }
         });
@@ -1650,7 +1691,29 @@ impl eframe::App for App {
         // Keep a slow heartbeat so background results show up even without input.
         ctx.request_repaint_after(Duration::from_millis(500));
 
-        if !matches!(self.screen, Screen::Onboarding | Screen::LevelTest) {
+        let compact = ctx.screen_rect().width() < COMPACT_WIDTH;
+        let with_nav = !matches!(self.screen, Screen::Onboarding | Screen::LevelTest);
+        if compact && with_nav {
+            // Phone: a top bar with the menu button and where we are.
+            // Android draws the app under the status bar: leave it room.
+            let top = if cfg!(target_os = "android") { 30 } else { 6 };
+            egui::TopBottomPanel::top("phone_bar").frame(egui::Frame::new().fill(sidebar()).inner_margin(egui::Margin { left: 10, right: 10, top, bottom: 6 })).show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    let label = if self.nav_open { "✖ 닫기" } else { "☰ 메뉴" };
+                    if ui.add(egui::Button::new(RichText::new(label).size(16.0)).min_size(Vec2::new(84.0, 40.0))).clicked() {
+                        self.nav_open = !self.nav_open;
+                    }
+                    ui.label(RichText::new(format!("SpeakUp · {}", self.lang.name_ko)).size(15.0).strong().color(text_strong()));
+                });
+            });
+        } else {
+            self.nav_open = false;
+            if cfg!(target_os = "android") {
+                // Room for the status bar the app is drawn under.
+                egui::TopBottomPanel::top("status_bar_inset").exact_height(24.0).show_separator_line(false).frame(egui::Frame::new().fill(bg())).show(ctx, |_| {});
+            }
+        }
+        if !compact && with_nav {
             egui::SidePanel::left("nav")
                 .exact_width(SIDEBAR_WIDTH)
                 .resizable(false)
@@ -1672,14 +1735,30 @@ impl eframe::App for App {
                 ui.label(RichText::new(format!("🔇 시스템 오디오가 응답하지 않아 소리가 나지 않습니다. {fix}")).color(warn()).strong());
             });
         }
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 32, right: 24, top: 22, bottom: 10 })).show(ctx, |ui| {
+        let margin = if compact { egui::Margin { left: 12, right: 12, top: 12, bottom: if cfg!(target_os = "android") { 28 } else { 10 } } } else { egui::Margin { left: 32, right: 24, top: 22, bottom: 10 } };
+        if compact && self.nav_open {
+            // Phone menu: the whole page; picking a screen closes it.
+            egui::CentralPanel::default().frame(egui::Frame::new().fill(sidebar()).inner_margin(egui::Margin::symmetric(24, 0))).show(ctx, |ui| {
+                let view_h = ui.available_height();
+                egui::ScrollArea::vertical().id_salt("nav_scroll").auto_shrink([false, false]).show(ui, |ui| self.nav_ui(ui, view_h));
+            });
+            self.notifications_ui(ctx);
+            self.web.sync(frame, None, ctx, self.store.dir.join("webview"));
+            return;
+        }
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(bg()).inner_margin(margin)).show(ctx, |ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                // Content column of a fixed width, centered when the window is wider.
+                // Content column of a fixed width, centered when the window is wider; on a phone
+                // the whole width, never wider (rows that don't fit are clipped, not widening it).
                 let extra = ((ui.available_width() - CONTENT_WIDTH) / 2.0).max(0.0);
+                let width = ui.available_width().min(CONTENT_WIDTH);
                 ui.horizontal_top(|ui| {
                     ui.add_space(extra);
                     ui.vertical(|ui| {
-                        ui.set_max_width(CONTENT_WIDTH);
+                        ui.set_max_width(width);
+                        if compact {
+                            ui.set_clip_rect(ui.clip_rect().intersect(egui::Rect::everything_left_of(ui.max_rect().right() + 1.0)));
+                        }
                         match self.screen {
                             Screen::Onboarding => self.onboarding_ui(ui),
                             Screen::Home => self.home_ui(ui),
@@ -1700,6 +1779,11 @@ impl eframe::App for App {
                             Screen::Progress => self.progress_ui(ui),
                             Screen::LevelTest => self.level_test_ui(ui),
                             Screen::Settings => self.settings_ui(ui),
+                        }
+                        let used = ui.min_rect().width();
+                        if compact && used > width + 1.0 && self.overflow.map(|o| o.0) != Some(self.screen) {
+                            crate::applog!("layout: {:?} is {used:.0} wide on a {width:.0} screen", self.screen);
+                            self.overflow = Some((self.screen, used));
                         }
                     });
                 });

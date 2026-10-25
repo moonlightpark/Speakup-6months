@@ -172,7 +172,7 @@ impl App {
     /// YouGlish, showing only the video (16:9, as wide as the page), its control bar and the
     /// caption box under it.
     fn youglish_frame(&mut self, ui: &mut Ui, url: &str) {
-        let video_w = ui.available_width().max(320.0);
+        let video_w = ui.available_width();
         self.web_frame(ui, url, video_w, video_w * 9.0 / 16.0 + 190.0, 1.0, "YouGlish");
     }
 
@@ -220,7 +220,7 @@ impl App {
 
     pub fn listening_ui(&mut self, ui: &mut Ui) {
         page_title(ui, "🎧 리스닝 랩", "오늘 배운 문장과 단어를 실제 원어민이 말하는 영상으로 보고 듣고, 따라 말하세요.");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let before = self.listening.tab;
             ui.selectable_value(&mut self.listening.tab, 0, "🎬 오늘 문장 영상");
             ui.selectable_value(&mut self.listening.tab, 2, "🔤 오늘 단어 발음");

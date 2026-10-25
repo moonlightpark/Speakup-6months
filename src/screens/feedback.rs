@@ -19,7 +19,7 @@ impl App {
             return;
         }
         page_title(ui, "🔬 피드백 센터", "");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let open = self.store.mistakes.iter().filter(|m| m.fixed_streak < 3).count();
             let corr = self.store.corrections.iter().filter(|c| !c.practiced).count();
             ui.selectable_value(&mut self.feedback.tab, 0, format!("💬 내 발음 실수 ({open})"));

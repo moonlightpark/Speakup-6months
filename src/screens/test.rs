@@ -104,7 +104,7 @@ impl App {
             card(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.label(RichText::new("마지막: 자유롭게 말하기 (30초~1분)").color(muted()));
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         speaker_button(ui, &mut self.voice, q);
                         ui.label(RichText::new(q).size(20.0).strong());
                     });

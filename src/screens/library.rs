@@ -147,7 +147,7 @@ impl App {
             let prog = self.store.library.get(b.id).cloned().unwrap_or_default();
             let have = library::is_downloaded(&self.store.library_dir(), b);
             card(ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     let (rect, _) = ui.allocate_exact_size(Vec2::new(54.0, 72.0), Sense::hover());
                     let (a, c) = crate::art::badge_colors(b.id);
                     crate::art::gradient_rect(ui.painter(), rect, 8.0, a, c);
@@ -176,14 +176,14 @@ impl App {
                         ui.label(RichText::new(b.blurb_ko).color(muted()).small());
                         if prog.pages > 0 {
                             let frac = if prog.finished { 1.0 } else { prog.page as f32 / prog.pages as f32 };
-                            ui.add(egui::ProgressBar::new(frac).desired_width(260.0).desired_height(8.0).fill(GOOD).text(if prog.finished {
+                            ui.add(egui::ProgressBar::new(frac).desired_width(ui.available_width().min(260.0)).desired_height(8.0).fill(GOOD).text(if prog.finished {
                                 "다 읽었어요 ✓".to_string()
                             } else {
                                 format!("{}/{} 페이지", prog.page + 1, prog.pages)
                             }));
                         }
                     });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    at_right(ui, 120.0, |ui| {
                         if self.library.downloading == Some(b.id) {
                             ui.spinner();
                         } else if have {
@@ -240,7 +240,7 @@ impl App {
         }
 
         let mut close = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button("← 책장").clicked() {
                 close = true;
             }
@@ -440,11 +440,11 @@ impl App {
         // Page navigation
         let mut go: Option<usize> = None;
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if r.page > 0 && ui.button("◀ 이전 페이지").clicked() {
                 go = Some(r.page - 1);
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            at_right(ui, 180.0, |ui| {
                 let last = r.page + 1 >= n;
                 if primary_button(ui, if last { "✓ 다 읽었어요" } else { "다음 페이지 ▶" }).clicked() {
                     go = Some(r.page + 1);
