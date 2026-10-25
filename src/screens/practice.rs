@@ -47,6 +47,16 @@ impl DrillQueue {
     pub fn finished(&self) -> bool {
         self.idx >= self.specs.len()
     }
+
+    /// The next row of the list after this one (the celebration's 다음 ▶, or 건너뛰기).
+    pub fn next_row(self) -> Self {
+        let mut rest = self.then;
+        let (title, specs) = rest.remove(0);
+        crate::applog!("다음 항목: '{title}'");
+        let mut next = DrillQueue::new("", self.category, &title, specs);
+        next.then = rest;
+        next
+    }
 }
 
 /// What a 새 단어 entry is (decides how it is saved and drilled).
@@ -154,12 +164,7 @@ impl App {
                 self.queue = None;
             } else if go_next {
                 if let Some(q) = self.queue.take() {
-                    let mut rest = q.then;
-                    let (title, specs) = rest.remove(0);
-                    crate::applog!("다음 항목: '{title}'");
-                    let mut next = DrillQueue::new("", q.category, &title, specs);
-                    next.then = rest;
-                    self.queue = Some(next);
+                    self.queue = Some(q.next_row());
                 }
             }
             if !step.is_empty() && !self.step_done(step) {
@@ -180,18 +185,30 @@ impl App {
             self.store.put_gloss(&text, &chunks);
         }
         let Some(q) = self.queue.as_mut() else { return true };
-        let mut stop = false;
+        let (mut stop, mut skip) = (false, false);
         ui.horizontal_wrapped(|ui| {
-            if ui.button("건너뛰기").clicked() {
-                q.idx += 1;
-                if let Some(s) = q.specs.get(q.idx) {
-                    q.drill = make_drill(s);
-                }
-            }
+            skip = ui.button("건너뛰기").clicked();
             stop = ui.button("그만하기").clicked();
         });
         if stop {
             self.queue = None;
+            return true;
+        }
+        if skip {
+            // One sentence/word picked from the list: straight on to the next one in the list.
+            if !q.then.is_empty() {
+                if let Some(q) = self.queue.take() {
+                    self.queue = Some(q.next_row());
+                }
+                return true;
+            }
+            q.idx += 1;
+            if let Some(s) = q.specs.get(q.idx) {
+                q.drill = make_drill(s);
+            } else if q.results.is_empty() {
+                // Skipped everything: nothing to celebrate, back to the list.
+                self.queue = None;
+            }
             return true;
         }
         match event {
