@@ -1541,6 +1541,11 @@ fn ft39_reading_list_colours_click_and_home_progress() {
     let second = t.app_mut().idiom_set()[1].en.clone();
     t.click("다음 문장 ▶");
     assert!(t.has(&format!("문장 읽기 · {}", second.chars().take(30).collect::<String>())), "next sentence: {second}");
+    // 건너뛰기 skips to the sentence after it, not to the 잘했어요 screen.
+    let third = t.app_mut().idiom_set()[2].en.clone();
+    t.click("건너뛰기");
+    assert!(!t.has("잘했어요"), "no cheer for a skipped sentence");
+    assert!(t.has(&format!("문장 읽기 · {}", third.chars().take(30).collect::<String>())), "skipped to: {third}");
     t.click("그만하기");
     t.nav("🏠  홈");
     assert!(t.has("(1/1,300문장 · 기억 완료 0)"));
