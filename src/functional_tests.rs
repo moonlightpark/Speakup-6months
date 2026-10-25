@@ -2315,8 +2315,10 @@ fn ft_kana_cards_first_for_n5() {
             t.click(&sound(wrong));
             assert!(t.has(&format!("✗ 정답은 {}", sound(a))));
         } else {
+            // Right: the next card comes at once, the answer shown above it.
             t.click(&sound(a));
-            assert!(t.has("✓ 정답!"));
+            assert!(n == 9 || t.has(&format!("✓ 정답! {} = {}", KANA[a].0, sound(a))), "the last one ends the round");
+            continue;
         }
         t.click("다음 ▶");
     }
@@ -2341,13 +2343,13 @@ fn ft_kanji_cards_for_the_level() {
     assert!(t.has("🈶 한자 카드") && t.has("N4 필수 한자 245자") && t.has("오늘 0/20장 (필수)") && t.has("기억 완료 0/245"));
     t.click("▶ 한자 카드 10장");
     assert!(t.has("한자 카드") && t.has("1 / 10") && t.has("이 한자의 훈음·읽는 법·일본어 뜻은?"));
-    for _ in 0..10 {
+    for n in 0..10 {
         let q = t.app().kana_quiz.as_ref().unwrap();
         let a = q.cards[q.idx];
         assert_eq!(crate::kanji::all()[a].n, 5, "N5 kanji first");
         t.click(&crate::kanji::all()[a].card_label());
-        assert!(t.has("✓ 정답!") && t.has("읽기: 음") && t.has("일본어 뜻:"));
-        t.click("다음 ▶");
+        // Right: the next card comes at once, the answer shown above it.
+        assert!(n == 9 || t.has(&format!("✓ 정답! {} = {}", crate::kanji::all()[a].k, crate::kanji::all()[a].hun_eum())));
     }
     assert!(t.has("10장 중 10장 정답") && t.has("오늘 10/20장 — 10장 더 해야 해요"));
     assert_eq!(t.app().store.profile.today.kanji_cards, 10);

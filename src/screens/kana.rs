@@ -154,12 +154,14 @@ pub struct KanaQuiz {
     pub choices: Vec<usize>,
     pub picked: Option<usize>,
     pub right: usize,
+    /// "✓ 정답! 日 = 날 일" for the card just answered right (the next one comes at once).
+    pub last_ok: Option<String>,
 }
 
 impl KanaQuiz {
     pub fn new(cards: Vec<usize>, deck: Deck) -> Self {
         let choices = cards.first().map(|&a| choices(deck, a)).unwrap_or_default();
-        Self { deck, cards, idx: 0, choices, picked: None, right: 0 }
+        Self { deck, cards, idx: 0, choices, picked: None, right: 0, last_ok: None }
     }
 }
 
@@ -361,7 +363,10 @@ impl App {
             ui.label(RichText::new(format!("{} / {}", q.idx + 1, q.cards.len())).color(muted()));
         });
         ui.add(egui::ProgressBar::new(q.idx as f32 / q.cards.len() as f32).desired_height(6.0).fill(ACCENT));
-        ui.add_space(10.0);
+        ui.add_space(4.0);
+        // The last right answer, while the next card is already up.
+        ui.label(RichText::new(q.last_ok.as_deref().unwrap_or(" ")).size(16.0).color(GOOD));
+        ui.add_space(4.0);
         let mut next = false;
         card(ui, |ui| {
             ui.vertical_centered(|ui| {
@@ -388,7 +393,9 @@ impl App {
                         let st = map.entry(g.to_string()).or_insert(0);
                         *st = if ok { (*st + 1).min(KANA_DONE + 2) } else { 0 };
                         if ok {
+                            // Right: straight on to the next card (time saved); wrong: stay and show the answer.
                             q.right += 1;
+                            next = true;
                         }
                         if let Deck::Kanji(_) = deck {
                             self.store.profile.today.kanji_cards += 1;
@@ -416,7 +423,7 @@ impl App {
                     if ui.button("🔊").on_hover_text("듣기").clicked() {
                         self.voice.say(&deck.speak(answer));
                     }
-                    next = ui.add(egui::Button::new(RichText::new("다음 ▶").size(16.0)).fill(ACCENT).min_size(ACTION_BUTTON)).clicked();
+                    next |= ui.add(egui::Button::new(RichText::new("다음 ▶").size(16.0)).fill(ACCENT).min_size(ACTION_BUTTON)).clicked();
                 });
             }
         });
@@ -424,6 +431,13 @@ impl App {
             close = ui.button("그만하기").clicked();
         });
         if next {
+            q.last_ok = (q.picked == Some(answer)).then(|| match deck {
+                Deck::Kanji(_) => {
+                    let k = &crate::kanji::all()[answer];
+                    format!("✓ 정답! {g} = {} · {} · {}", k.hun_eum(), k.readings(), k.ja)
+                }
+                _ => format!("✓ 정답! {g} = {}", deck.answer(answer)),
+            });
             q.idx += 1;
             q.picked = None;
             if let Some(&a) = q.cards.get(q.idx) {
