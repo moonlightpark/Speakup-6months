@@ -2340,13 +2340,13 @@ fn ft_kanji_cards_for_the_level() {
     // Default level N4: N5 + N4 kanji are required, 20 cards a day.
     assert!(t.has("🈶 한자 카드") && t.has("N4 필수 한자 245자") && t.has("오늘 0/20장 (필수)") && t.has("기억 완료 0/245"));
     t.click("▶ 한자 카드 10장");
-    assert!(t.has("한자 카드") && t.has("1 / 10") && t.has("이 한자의 훈음(뜻·소리)은?"));
+    assert!(t.has("한자 카드") && t.has("1 / 10") && t.has("이 한자의 훈음·읽는 법·일본어 뜻은?"));
     for _ in 0..10 {
         let q = t.app().kana_quiz.as_ref().unwrap();
         let a = q.cards[q.idx];
         assert_eq!(crate::kanji::all()[a].n, 5, "N5 kanji first");
-        t.click(&crate::kanji::all()[a].hun_eum());
-        assert!(t.has("✓ 정답!") && t.has("음독"));
+        t.click(&crate::kanji::all()[a].card_label());
+        assert!(t.has("✓ 정답!") && t.has("읽기: 음") && t.has("일본어 뜻:"));
         t.click("다음 ▶");
     }
     assert!(t.has("10장 중 10장 정답") && t.has("오늘 10/20장 — 10장 더 해야 해요"));

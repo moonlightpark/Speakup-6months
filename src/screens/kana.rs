@@ -73,10 +73,10 @@ impl Deck {
             Deck::Kanji(_) => &crate::kanji::all()[i].k,
         }
     }
-    /// The right answer: "아 · a" / "날 일".
+    /// The right answer: "아 · a" / "날 일" + 読み方 + Japanese meaning.
     pub fn answer(self, i: usize) -> String {
         match self {
-            Deck::Kanji(_) => crate::kanji::all()[i].hun_eum(),
+            Deck::Kanji(_) => crate::kanji::all()[i].card_label(),
             _ => sound(i),
         }
     }
@@ -250,7 +250,7 @@ impl App {
                 let (c, t) = if today >= KANJI_PER_DAY { (GOOD, format!("✓ 오늘 {today}/{KANJI_PER_DAY}장")) } else { (warn(), format!("오늘 {today}/{KANJI_PER_DAY}장 (필수)")) };
                 chip(ui, &t, c);
             });
-            ui.label(RichText::new(format!("{jlpt}까지 꼭 알아야 하는 한자 {total}자(N5부터 차례로)를 모두 외워요. 한자를 보고 훈음(뜻·소리)을 4개 중에서 고르면 음독·훈독과 예시 단어를 알려 줘요. 하루 {KANJI_PER_DAY}장은 꼭!")).color(muted()));
+            ui.label(RichText::new(format!("{jlpt}까지 꼭 알아야 하는 한자 {total}자(N5부터 차례로)를 모두 외워요. 한자를 보고 훈음·읽는 법(음독·훈독)·일본어 뜻을 4개 중에서 고르고, 예시 단어로 확인해요. 하루 {KANJI_PER_DAY}장은 꼭!")).color(muted()));
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.label(RichText::new(format!("기억 완료 {known}/{total}")).strong().color(if known >= total { GOOD } else { text_strong() }));
@@ -366,13 +366,14 @@ impl App {
         card(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label(RichText::new(g).size(120.0).strong().color(text_strong()));
-                let ask = if let Deck::Kanji(_) = deck { "이 한자의 훈음(뜻·소리)은?" } else { "이 글자는 어떻게 읽을까요?" };
+                let ask = if let Deck::Kanji(_) = deck { "이 한자의 훈음·읽는 법·일본어 뜻은?" } else { "이 글자는 어떻게 읽을까요?" };
                 ui.label(RichText::new(ask).color(muted()));
             });
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
                 for &c in &q.choices {
-                    let mut b = egui::Button::new(RichText::new(deck.answer(c)).size(20.0)).min_size(egui::vec2(140.0, 52.0));
+                    let label = if let Deck::Kanji(_) = deck { kanji_choice(&crate::kanji::all()[c]) } else { RichText::new(deck.answer(c)).size(20.0).into() };
+                    let mut b = egui::Button::new(label).min_size(egui::vec2(if let Deck::Kanji(_) = deck { 220.0 } else { 140.0 }, 52.0));
                     if let Some(p) = q.picked {
                         if c == answer {
                             b = b.fill(GOOD.gamma_multiply(0.45));
@@ -399,13 +400,17 @@ impl App {
             });
             if let Some(p) = q.picked {
                 ui.add_space(8.0);
+                let short = match deck {
+                    Deck::Kanji(_) => crate::kanji::all()[answer].hun_eum(),
+                    _ => deck.answer(answer),
+                };
                 if p == answer {
-                    ui.label(RichText::new(format!("✓ 정답! {g} = {}", deck.answer(answer))).size(18.0).color(GOOD));
+                    ui.label(RichText::new(format!("✓ 정답! {g} = {short}")).size(18.0).color(GOOD));
                 } else {
-                    ui.label(RichText::new(format!("✗ 정답은 {} — 다음 판에 다시 나와요", deck.answer(answer))).size(18.0).color(BAD));
+                    ui.label(RichText::new(format!("✗ 정답은 {short} — 다음 판에 다시 나와요")).size(18.0).color(BAD));
                 }
                 if let Deck::Kanji(_) = deck {
-                    ui.label(RichText::new(kanji_info(&crate::kanji::all()[answer])).size(16.0).color(text_strong()));
+                    ui.label(RichText::new(kanji_info(&crate::kanji::all()[answer])).size(17.0).color(text_strong()));
                 }
                 ui.horizontal(|ui| {
                     if ui.button("🔊").on_hover_text("듣기").clicked() {
@@ -432,15 +437,20 @@ impl App {
     }
 }
 
-/// "날 일 · 음독 ニチ, ジツ · 훈독 ひ, か\n예: 日曜日(にちようび) 일요일".
+/// A kanji choice: 훈음 big, then 読み方 and the Japanese meaning smaller.
+fn kanji_choice(k: &crate::kanji::Kanji) -> egui::WidgetText {
+    let mut job = egui::text::LayoutJob::default();
+    let font = |size: f32| egui::FontId::proportional(size);
+    let fmt = |size: f32, color| egui::TextFormat { font_id: font(size), color, ..Default::default() };
+    job.append(&k.hun_eum(), 0.0, fmt(20.0, text_strong()));
+    job.append(&format!("\n{}", k.readings()), 0.0, fmt(14.0, ACCENT));
+    job.append(&format!("\n{}", k.ja), 0.0, fmt(14.0, muted()));
+    job.into()
+}
+
+/// "날 일\n읽기: 음 ニチ・ジツ  훈 ひ・か\n일본어 뜻: 太陽・ひる・一日\n예: 今日(きょう) 오늘".
 fn kanji_info(k: &crate::kanji::Kanji) -> String {
-    let mut s = k.hun_eum();
-    if !k.on.is_empty() {
-        s += &format!(" · 음독 {}", k.on.join(", "));
-    }
-    if !k.kun.is_empty() {
-        s += &format!(" · 훈독 {}", k.kun.join(", "));
-    }
+    let mut s = format!("{}\n읽기: {}\n일본어 뜻: {}", k.hun_eum(), k.readings(), k.ja);
     if let [w, r, ko, ..] = k.ex.as_slice() {
         s += &format!("\n예: {w}({r}) {ko}");
     }
