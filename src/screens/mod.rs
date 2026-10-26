@@ -9,6 +9,7 @@ pub mod progress;
 pub mod speaking;
 pub mod test;
 pub mod feedback;
+pub mod grammar;
 pub mod notify;
 pub mod read_along;
 pub mod speed;

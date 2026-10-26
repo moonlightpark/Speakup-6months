@@ -2395,6 +2395,41 @@ fn ft_kanji_cards_for_the_level() {
 }
 
 #[test]
+fn ft68_grammar_by_level_with_examples_and_quiz() {
+    // Level 4.0 = N3: the 문법 menu opens on the learner's level, lists its points, and a point
+    // has its pattern, examples to say aloud and a quiz; all right = learned.
+    let mut t = launch_at(temp_dir("grammar"), true, |s| {
+        s.profile.placement_done = true;
+        s.profile.start_date = today();
+        s.record_level(4.0, "test setup");
+        s.profile.today = no_idioms_today(mock_word_set());
+    });
+    t.nav("📐  문법");
+    assert!(t.has("★ N3 중급 0/7") && t.has("수동형 (～られる)"));
+    t.h.get_all_by_label("학습하기 ›").next().unwrap().click();
+    t.steps(3);
+    assert!(t.has("叱る → 叱られる") && t.has("先生に褒められました。"), "pattern, and examples (named by their text)");
+    t.h.get_all_by_label("🎤 따라 말하기").next().unwrap().click();
+    t.steps(3);
+    assert_eq!(t.app().grammar_drill_target().as_deref(), Some("先生に褒められました。"));
+    t.click("れました");
+    assert!(t.has("❌ 오답") && !t.has("🔄 퀴즈 다시 풀기"), "retry only once every question is answered");
+    t.click("られ");
+    t.click("まれ");
+    assert!(t.app().store.profile.grammar_done.is_empty(), "one wrong answer: not learned yet");
+    t.click("🔄 퀴즈 다시 풀기");
+    t.click("られました");
+    t.click("られ");
+    t.click("まれ");
+    assert_eq!(t.app().store.profile.grammar_done, vec!["N3:수동형 (～られる)".to_string()]);
+    t.click("← 문법 목록");
+    assert!(t.has("★ N3 중급 1/7") && t.has("다시 보기 ›"));
+    // Another level's tab.
+    t.click_contains("N1 능숙");
+    assert!(t.has("～をもって (~으로 · ~부로)"));
+}
+
+#[test]
 fn ft_phone_layout_fits_every_screen() {
     // A phone held upright (339 × 752 points: a Galaxy S20 at its default display size): the menu folds into ☰ and no page is wider than the screen.
     let mut t = launch_sized(temp_dir("phone"), true, egui::vec2(339.0, 752.0), |s| {
@@ -2404,7 +2439,7 @@ fn ft_phone_layout_fits_every_screen() {
         s.profile.today = no_idioms_today(mock_word_set());
     });
     assert!(t.has("☰ 메뉴") && !t.has_exact("📚  새 단어"), "no side bar on a phone");
-    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
+    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "📐  문법", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
     let mut wide = Vec::new();
     for s in screens {
         t.click("☰ 메뉴");
@@ -2450,6 +2485,13 @@ fn ft_phone_layout_fits_every_screen() {
     assert!(head.y1 <= sub.y0 + 0.5, "headline above the line under it: {head:?} {sub:?}");
     let (home, close, next) = (bounds(&t, "🏠 홈으로"), bounds(&t, "닫기"), bounds(&t, "다음 단어 ▶"));
     assert!((home.y0 - close.y0).abs() < 1.0 && (home.y0 - next.y0).abs() < 1.0, "one line: {home:?} {close:?} {next:?}");
+    t.click("☰ 메뉴");
+    t.nav("📐  문법");
+    t.h.get_all_by_label("학습하기 ›").next().unwrap().click();
+    t.steps(4);
+    if let Some(o) = t.app_mut().overflow.take() {
+        wide.push(format!("grammar point {:.0}: {}", o.1, t.past_edge(327.0)));
+    }
     assert!(wide.is_empty(), "wider than the phone: {wide:?}");
 }
 
@@ -2459,7 +2501,7 @@ fn ft_phone_layout_fits_every_screen() {
 #[test]
 #[ignore]
 fn phone_explore_every_button() {
-    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
+    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "📐  문법", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
     // Buttons that leave the app (browser, Finder) or only switch screens.
     let skip = |l: &str| l.is_empty() || l.contains("폴더") || l.contains("받기") || l.contains("다운로드") || l.contains("브라우저") || l.contains("유튜브") || l.contains("YouTube") || l.contains("메뉴") || l.contains("닫기") || l.contains("홈으로") || screens.contains(&l);
     let mut wide = Vec::new();

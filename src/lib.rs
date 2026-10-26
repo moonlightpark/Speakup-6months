@@ -17,6 +17,7 @@ mod dictionary;
 mod expressions;
 mod freetalk;
 mod grammar;
+mod grammar_book;
 mod idioms;
 mod ja;
 mod kanji;

@@ -192,6 +192,8 @@ pub struct Profile {
     pub tutor_sessions: Vec<NaiveDate>,
     /// Mock JLPT / JPT / OPIc 일본어 results, logged by the learner every two weeks.
     pub external_tests: Vec<ExternalTest>,
+    /// 📐 문법 points learned (quiz all right), as `grammar_book::Point::key`.
+    pub grammar_done: Vec<String>,
     /// 히라가나·가타카나 카드: right answers in a row by kana (あ, ア …).
     pub kana: std::collections::HashMap<String, u32>,
     /// 한자 카드: right answers in a row by kanji.
@@ -239,6 +241,7 @@ impl Default for Profile {
             tutor_sessions: Vec::new(),
             speed_book_pages: Default::default(),
             external_tests: Vec::new(),
+            grammar_done: Vec::new(),
             kana: Default::default(),
             kanji: Default::default(),
         }
