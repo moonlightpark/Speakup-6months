@@ -150,6 +150,22 @@ pub fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
     ui.add_space(12.0);
 }
 
+/// A list's first row: `left` (title, legend …) wrapping on the left and a 📄 인쇄 button at the
+/// top right. True when the button is clicked.
+pub fn print_header(ui: &mut Ui, left: impl FnOnce(&mut Ui)) -> bool {
+    // The button in a child that takes no room of its own, at the right end of the first row;
+    // `left` wraps in what's left of the width.
+    let row = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), ui.spacing().interact_size.y));
+    let mut right = ui.new_child(egui::UiBuilder::new().max_rect(row).layout(egui::Layout::right_to_left(egui::Align::Min)));
+    let button = right.button("📄 인쇄").on_hover_text("이 목록을 A4 용지에 인쇄해요");
+    let gap = button.rect.width() + ui.spacing().item_spacing.x * 2.0;
+    ui.horizontal_wrapped(|ui| {
+        ui.set_max_width((ui.available_width() - gap).max(60.0));
+        left(ui);
+    });
+    button.clicked()
+}
+
 /// Small rounded status pill.
 pub fn chip(ui: &mut Ui, text: &str, color: Color32) {
     // In a wrapping row a frame doesn't wrap by itself: next line when it won't fit (phones),

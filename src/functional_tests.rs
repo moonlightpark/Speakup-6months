@@ -2259,7 +2259,9 @@ fn ft66_days_the_app_was_not_opened_still_have_their_lists() {
 }
 
 #[test]
-fn ft67_print_a_days_words_on_one_a4_page() {
+fn ft67_print_each_word_and_sentence_list() {
+    // Every list of 새 단어 and 문장 읽기 has 📄 인쇄 at its top right: today's, the unfinished
+    // earlier days' and the chosen day's, each written as an A4 sheet.
     let yesterday = today() - chrono::Duration::days(1);
     let lw = |w: &str, ko: &str| LessonWord { word: w.into(), meaning_ko: ko.into(), example: format!("I said {w}."), example_ko: String::new() };
     let mut t = launch_at(temp_dir("printwords"), false, |s| {
@@ -2267,17 +2269,39 @@ fn ft67_print_a_days_words_on_one_a4_page() {
         s.profile.start_date = yesterday;
         s.word_days.insert(yesterday, WordSet { words: vec![lw("company", "회사"), lw("health", "건강")], ..Default::default() });
     });
+    let print = |t: &mut T, nth: usize| {
+        t.h.get_all_by_label("📄 인쇄").nth(nth).unwrap_or_else(|| panic!("print button {nth}")).click();
+        t.steps(3);
+    };
+    let read = |t: &T, name: String| std::fs::read_to_string(t.dir.join("print").join(format!("{name}.html"))).unwrap_or_else(|_| panic!("{name}.html"));
+    let count = |t: &T| t.h.get_all_by_label("📄 인쇄").count();
     t.nav("📚  새 단어");
-    assert!(!t.has("📄 인쇄"), "only once a day is open");
+    assert_eq!(count(&t), 2, "today's list and the unfinished earlier words");
     t.click("1일차 (0/2)");
-    t.click("📄 인쇄");
-    let html = std::fs::read_to_string(t.dir.join("print").join(format!("words-{yesterday}.html"))).unwrap();
+    assert_eq!(count(&t), 3, "and the chosen day");
+    print(&mut t, 2);
+    let html = read(&t, format!("words-{yesterday}"));
     assert!(html.contains("새 단어 · 1일차 · ") && html.contains("— 2개"));
     assert!(html.contains("<td class=w>company</td><td class=k>회사</td>") && html.contains("health") && html.contains("size: A4"));
-    // 문장 읽기 has no print button.
+    print(&mut t, 0);
+    let html = read(&t, format!("words-today-{}", today()));
+    assert!(html.contains("새 단어 · 2일차 · ") && html.contains("<th class=w>단어</th>"));
+    assert!(t.app_mut().word_set().words.iter().all(|w| html.contains(&format!("<td class=w>{}</td>", w.word))));
+    print(&mut t, 1);
+    let html = read(&t, format!("words-past-{}", today()));
+    assert!(html.contains("지난 날 못 끝낸 새 단어 — 2개") && html.contains("<td class=w>company</td>"));
+
     t.nav("📖  문장 읽기");
+    print(&mut t, 0);
+    let html = read(&t, format!("reading-today-{}", today()));
+    assert!(html.contains("문장 읽기 · 2일차 · ") && html.contains("<th class=w>문장</th>"));
+    let first = t.app_mut().idiom_set()[0].clone();
+    assert!(html.contains(&format!("<td class=k>{}</td>", first.ko)), "{}", first.en);
     t.click_contains("2일차 (0/");
-    assert!(!t.has("📄 인쇄"));
+    let n = count(&t);
+    print(&mut t, n - 1);
+    let html = read(&t, format!("reading-{}", today()));
+    assert!(html.contains("문장 읽기 · 2일차 · ") && html.contains("<th class=w>문장</th>"));
 }
 
 #[test]

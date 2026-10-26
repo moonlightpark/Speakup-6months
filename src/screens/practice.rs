@@ -254,10 +254,11 @@ impl App {
 
     /// Today's list (25 per page) and the start button. `marks` (same order as `rows`, may be
     /// empty) colours each row by how far it has been practised.
-    /// Returns (start pressed, row clicked, row marked 학습완료); rows are clickable when `marks`
-    /// are given, and unfinished rows get a 학습완료 button when `can_finish`.
-    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)], can_finish: bool) -> (bool, Option<usize>, Option<usize>) {
+    /// Returns (start pressed, row clicked, row marked 학습완료, 📄 인쇄 pressed); rows are
+    /// clickable when `marks` are given, and unfinished rows get a 학습완료 button when `can_finish`.
+    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)], can_finish: bool) -> (bool, Option<usize>, Option<usize>, bool) {
         let mut start = false;
+        let mut printed = false;
         let mut picked = None;
         let mut finished = None;
         page_title(ui, title, desc);
@@ -277,18 +278,18 @@ impl App {
         let page_id = egui::Id::new(("intro_page", step));
         let mut page = ui.data(|d| d.get_temp::<usize>(page_id)).unwrap_or(0).min(pages - 1);
         card(ui, |ui| {
-            if !marks.is_empty() {
-                let done = marks.iter().filter(|m| m.1.starts_with('✓')).count();
-                ui.horizontal_wrapped(|ui| {
+            printed = print_header(ui, |ui| {
+                if !marks.is_empty() {
+                    let done = marks.iter().filter(|m| m.1.starts_with('✓')).count();
                     ui.label(RichText::new(format!("기억 완료 {done}/{}", rows.len())).strong());
                     ui.label(RichText::new("■ 미완료").color(word_color(0)));
                     ui.label(RichText::new("■ 반복 중").color(word_color(1)));
                     ui.label(RichText::new("■").color(word_color(5)));
                     ui.label(RichText::new("■").color(word_color(9)));
                     ui.label(RichText::new(format!("■ 완료({WORD_DONE_PASSES}회 이상)")).color(word_color(WORD_DONE_PASSES)));
-                });
-                ui.add_space(6.0);
-            }
+                }
+            });
+            ui.add_space(6.0);
             for (i, (en, ko)) in rows.iter().enumerate().skip(page * LIST_PAGE).take(LIST_PAGE) {
                 if i > page * LIST_PAGE {
                     ui.add_space(8.0);
@@ -344,7 +345,27 @@ impl App {
             ui.label(RichText::new("✅ 오늘 완료했어요. 더 연습해도 좋아요!").color(GOOD));
         }
         start |= start_button(ui);
-        (start, picked, finished)
+        (start, picked, finished, printed)
+    }
+
+    /// 📄 인쇄: `rows` as an A4 sheet in the browser's print dialog (`print/<name>.html`).
+    fn print_list(&mut self, name: &str, title: &str, kind: crate::print::Sheet, rows: &[(String, String)]) {
+        match crate::print::print_sheet(&self.store.dir, name, title, kind, rows) {
+            Ok(path) => {
+                crate::applog!("print: {}", path.display());
+                self.toast("📄 브라우저에서 인쇄 창이 열려요 (A4)".to_string());
+            }
+            Err(e) => {
+                crate::applog!("print: 실패 · {e:#}");
+                self.toast(format!("인쇄 파일을 만들지 못했어요: {e}"));
+            }
+        }
+    }
+
+    /// "3일차 · 10월 27일": today's day of the course.
+    fn today_title(&self) -> String {
+        let d = today();
+        format!("{}일차 · {}", (d - self.store.profile.start_date).num_days() + 1, d.format("%m월 %d일"))
     }
 
     pub fn words_ui(&mut self, ui: &mut Ui) {
@@ -373,7 +394,7 @@ impl App {
             .map(|w| word_mark(self.store.word_stat(&w.word).passes))
             .collect();
         let reps = self.store.settings.reps_new;
-        let (start, picked, finished) = self.intro_card(
+        let (start, picked, finished, printed) = self.intro_card(
             ui,
             "📚 오늘의 덩어리 표현 · 새 단어",
             &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 시제 3문장(현재 ~할까 생각 중이에요 · 과거 ~했어요 · 미래 ~할 거예요)을 3번씩 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
@@ -390,6 +411,11 @@ impl App {
             .chain(lesson.words.iter().map(|w| (w, WordKind::Word)))
             .chain(lesson.expressions.iter().map(|w| (w, WordKind::Expression)))
             .collect();
+        if printed {
+            let list: Vec<(String, String)> = entries.iter().map(|(w, _)| (w.word.clone(), w.meaning_ko.clone())).collect();
+            let title = format!("새 단어 · {} — {}개", self.today_title(), list.len());
+            self.print_list(&format!("words-today-{}", today()), &title, crate::print::Sheet::Words, &list);
+        }
         if let Some((w, kind)) = finished.and_then(|i| entries.get(i).copied()) {
             self.mark_learned(w, kind);
             return;
@@ -615,9 +641,12 @@ impl App {
         let mut picked: Option<(usize, usize)> = None;
         let mut finished: Option<(usize, usize)> = None;
         let mut all = false;
+        let mut printed = false;
         ui.add_space(14.0);
         card(ui, |ui| {
-            ui.label(RichText::new(format!("📅 지난 날 못 끝낸 새 단어 {total}개")).size(18.0).strong());
+            printed = print_header(ui, |ui| {
+                ui.label(RichText::new(format!("📅 지난 날 못 끝낸 새 단어 {total}개")).size(18.0).strong());
+            });
             ui.label(RichText::new("전에 나왔지만 아직 통과하지 못한 단어예요. 클릭하면 그 단어를 바로 연습해요.").color(muted()));
             for (di, (date, left)) in days.iter().enumerate() {
                 let day_no = (*date - start).num_days() + 1;
@@ -654,6 +683,10 @@ impl App {
             all = ui.add(egui::Button::new(RichText::new(format!("▶ 지난 단어 {total}개 이어서 연습")).size(16.0)).min_size(crate::widgets::ACTION_BUTTON)).clicked();
         });
         let flat: Vec<(LessonWord, WordKind)> = days.iter().flat_map(|d| d.1.iter().cloned()).collect();
+        if printed {
+            let list: Vec<(String, String)> = flat.iter().map(|(w, _)| (w.word.clone(), w.meaning_ko.clone())).collect();
+            self.print_list(&format!("words-past-{}", today()), &format!("지난 날 못 끝낸 새 단어 — {total}개"), crate::print::Sheet::Words, &list);
+        }
         if let Some((di, wi)) = finished {
             let (w, kind) = days[di].1[wi].clone();
             self.mark_learned(&w, kind);
@@ -781,10 +814,12 @@ impl App {
         }
         let total: usize = days.iter().map(|d| d.1.len()).sum();
         let start = self.store.profile.start_date;
-        let (mut picked, mut finished, mut all) = (None, None, false);
+        let (mut picked, mut finished, mut all, mut printed) = (None, None, false, false);
         ui.add_space(14.0);
         card(ui, |ui| {
-            ui.label(RichText::new(format!("📅 지난 날 못 끝낸 문장 {total}개")).size(18.0).strong());
+            printed = print_header(ui, |ui| {
+                ui.label(RichText::new(format!("📅 지난 날 못 끝낸 문장 {total}개")).size(18.0).strong());
+            });
             ui.label(RichText::new("전에 나왔지만 아직 통과하지 못한 문장이에요. 클릭하면 그 문장을 바로 연습해요.").color(muted()));
             for (di, (date, left)) in days.iter().enumerate() {
                 let day_no = (*date - start).num_days() + 1;
@@ -817,6 +852,10 @@ impl App {
         });
         let title = |t: &str| format!("문장 읽기 · {}", t.chars().take(30).collect::<String>());
         let flat: Vec<Spec> = days.iter().flat_map(|d| d.1.iter().map(|r| r.2.clone())).collect();
+        if printed {
+            let list: Vec<(String, String)> = flat.iter().map(|s| (s.target.clone(), s.ko.clone())).collect();
+            self.print_list(&format!("reading-past-{}", today()), &format!("지난 날 못 끝낸 문장 — {total}개"), crate::print::Sheet::Sentences, &list);
+        }
         if let Some((di, ri)) = finished {
             let spec = days[di].1[ri].2.clone();
             self.mark_done(spec.new_item, &spec.target);
@@ -858,13 +897,11 @@ impl App {
             let Some((d, rows)) = days.iter().find(|(d, _)| Some(*d) == sel) else { return };
             ui.add_space(6.0);
             let day_title = format!("{}일차 · {} — {}개", (*d - start).num_days() + 1, d.format("%m월 %d일"), rows.len());
-            ui.horizontal_wrapped(|ui| {
+            if print_header(ui, |ui| {
                 ui.label(RichText::new(&day_title).strong());
-                // 단어 / 뜻 on one A4 page (the browser's print dialog).
-                if key == "words" && ui.button("📄 인쇄").on_hover_text("A4 한 장에 단어 / 뜻을 인쇄해요").clicked() {
-                    printed = Some((day_title.clone(), *d));
-                }
-            });
+            }) {
+                printed = Some((day_title.clone(), *d));
+            }
             for (i, r) in rows.iter().enumerate() {
                 let target = &r.specs[0].target;
                 let (color, mark) = word_mark(self.store.word_stat(target).passes);
@@ -889,16 +926,8 @@ impl App {
         let Some(rows) = days.iter().find(|(d, _)| Some(*d) == sel).map(|x| &x.1) else { return };
         if let Some((day_title, d)) = printed {
             let list: Vec<(String, String)> = rows.iter().map(|r| (r.specs[0].target.clone(), r.ko.clone())).collect();
-            match crate::print::print_words(&self.store.dir, &format!("words-{d}"), &format!("새 단어 · {day_title}"), &list) {
-                Ok(path) => {
-                    crate::applog!("print: {}", path.display());
-                    self.toast("📄 브라우저에서 인쇄 창이 열려요 (A4 한 장)".to_string());
-                }
-                Err(e) => {
-                    crate::applog!("print: 실패 · {e:#}");
-                    self.toast(format!("인쇄 파일을 만들지 못했어요: {e}"));
-                }
-            }
+            let kind = if key == "words" { crate::print::Sheet::Words } else { crate::print::Sheet::Sentences };
+            self.print_list(&format!("{key}-{d}"), &format!("{title} · {day_title}"), kind, &list);
         }
         let category = if key == "words" { "vocab" } else { "reading" };
         let name = |r: &DayRow| format!("{title} · {}", r.specs[0].target.chars().take(30).collect::<String>());
@@ -1072,7 +1101,7 @@ impl App {
                 }
             }))
             .collect();
-        let (start, picked, finished) = self.intro_card(
+        let (start, picked, finished, printed) = self.intro_card(
             ui,
             "📖 문장 소리 내어 읽기 (쉐도잉)",
             &format!(
@@ -1084,6 +1113,10 @@ impl App {
             &marks,
             true,
         );
+        if printed {
+            let title = format!("문장 읽기 · {} — {}개", self.today_title(), today_sentences.len());
+            self.print_list(&format!("reading-today-{}", today()), &title, crate::print::Sheet::Sentences, &today_sentences);
+        }
         if let Some(spec) = finished.and_then(|i| row_specs.get(i).cloned()) {
             self.mark_done(spec.new_item, &spec.target);
             return;
