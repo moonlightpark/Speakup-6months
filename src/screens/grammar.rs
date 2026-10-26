@@ -192,10 +192,14 @@ impl App {
             self.voice.say(&full);
             let all = self.grammar.picks.iter().all(Option::is_some);
             let right = self.grammar.picks.iter().all(|x| *x == Some(0));
-            if all && right && !self.grammar_done(cefr, p) {
-                self.store.profile.grammar_done.push(p.key(cefr));
-                self.store.save_profile();
-                self.toast("🎉 이 문법을 익혔어요!");
+            if all && right {
+                // One grammar point with its quiz all right (new or again) is today's 문법 step.
+                if !self.grammar_done(cefr, p) {
+                    self.store.profile.grammar_done.push(p.key(cefr));
+                    self.store.save_profile();
+                    self.toast("🎉 이 문법을 익혔어요!");
+                }
+                self.complete_step("grammar");
             }
         }
 

@@ -55,6 +55,7 @@ pub const STEPS: &[(&str, &str, Screen)] = &[
     ("review", "🔁 복습 (배운 단어·문장)", Screen::Review),
     ("words", "📚 새 단어", Screen::Words),
     ("reading", "📖 문장 소리내어 읽기", Screen::Reading),
+    ("grammar", "📐 문법 (설명·예문·퀴즈)", Screen::Grammar),
     ("speed", "⚡ 스피드 리딩·말하기", Screen::Speed),
     ("listening", "🎧 리스닝 랩 · 듣고 따라 말하기", Screen::Listening),
     ("speaking", "💬 자기 표현 말하기", Screen::SelfExpression),
@@ -1231,6 +1232,12 @@ impl App {
                     "review" => format!("{}개", srs::due_count(&self.store.items)),
                     "listening" => format!("따라 말하기 {}/5", self.store.profile.today.listening_passes.min(5)),
                     "speed" => format!("{}/3 라운드", self.store.profile.today.speed_rounds.min(3)),
+                    "grammar" => {
+                        // Points of the learner's level learned so far.
+                        let band = cefr_of(self.store.profile.level);
+                        let points = crate::grammar_book::level(band).map_or(&[][..], |l| &l.points[..]);
+                        format!("{band} {}/{}개", points.iter().filter(|g| self.store.profile.grammar_done.contains(&g.key(band))).count(), points.len())
+                    }
                     "library" => format!("{}/{} 문단", self.store.profile.today.paragraphs_read.min(crate::screens::library::READ_GOAL), crate::screens::library::READ_GOAL),
                     "writing" => format!("{}/{}개", self.store.profile.today.writings_done.min(crate::screens::writing::WRITING_GOAL), crate::screens::writing::WRITING_GOAL),
                     _ => String::new(),
