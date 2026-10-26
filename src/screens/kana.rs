@@ -405,6 +405,12 @@ impl App {
                 let full = ui.available_width();
                 let half = full.min(860.0) / 2.0 - ui.spacing().item_spacing.x;
                 let kanji_w = if half >= 220.0 { half } else { full };
+                // A phone (one choice per row): smaller text and padding, and each choice only as tall as its own lines.
+                let compact = kanji_w == full;
+                if compact {
+                    ui.spacing_mut().button_padding.y = 5.0;
+                    ui.spacing_mut().item_spacing.y = 6.0;
+                }
                 // Kana choices: two across even on a narrow phone.
                 let kana_w = ((full - ui.spacing().item_spacing.x) / 2.0).min(140.0);
                 // Laid out first, so every kanji choice gets the height of the tallest and the rows line up.
@@ -413,13 +419,17 @@ impl App {
                     .choices
                     .iter()
                     .map(|&c| match deck {
-                        Deck::Kanji(_) => Some(kanji_choice(&crate::kanji::all()[c], kanji_w - 2.0 * pad.x).into_galley(ui, Some(egui::TextWrapMode::Wrap), kanji_w - 2.0 * pad.x, egui::TextStyle::Button)),
+                        Deck::Kanji(_) => Some(kanji_choice(&crate::kanji::all()[c], kanji_w - 2.0 * pad.x, compact).into_galley(ui, Some(egui::TextWrapMode::Wrap), kanji_w - 2.0 * pad.x, egui::TextStyle::Button)),
                         _ => None,
                     })
                     .collect();
                 let kanji_h = galleys.iter().flatten().map(|g| g.size().y + 2.0 * pad.y).fold(52.0, f32::max);
                 for (&c, galley) in q.choices.iter().zip(galleys) {
-                    let (size, align) = if galley.is_some() { (egui::vec2(kanji_w, kanji_h), egui::Align::Min) } else { (egui::vec2(kana_w, 52.0), egui::Align::Center) };
+                    let (size, align) = match &galley {
+                        Some(g) if compact => (egui::vec2(kanji_w, g.size().y + 2.0 * pad.y), egui::Align::Min),
+                        Some(_) => (egui::vec2(kanji_w, kanji_h), egui::Align::Min),
+                        None => (egui::vec2(kana_w, 52.0), egui::Align::Center),
+                    };
                     let label = match galley {
                         Some(g) => egui::WidgetText::from(g),
                         None => RichText::new(deck.answer(c)).size(20.0).into(),
@@ -502,14 +512,15 @@ impl App {
 }
 
 /// A kanji choice: 훈음 big, then 読み方 and the Japanese meaning smaller.
-fn kanji_choice(k: &crate::kanji::Kanji, width: f32) -> egui::WidgetText {
+fn kanji_choice(k: &crate::kanji::Kanji, width: f32, compact: bool) -> egui::WidgetText {
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = width;
     let font = |size: f32| egui::FontId::proportional(size);
     let fmt = |size: f32, color| egui::TextFormat { font_id: font(size), color, ..Default::default() };
-    job.append(&k.hun_eum(), 0.0, fmt(20.0, text_strong()));
-    job.append(&format!("\n{}", k.readings()), 0.0, fmt(14.0, ACCENT));
-    job.append(&format!("\n{}", k.ja), 0.0, fmt(14.0, muted()));
+    let (big, small) = if compact { (18.0, 13.0) } else { (20.0, 14.0) };
+    job.append(&k.hun_eum(), 0.0, fmt(big, text_strong()));
+    job.append(&format!("\n{}", k.readings()), 0.0, fmt(small, ACCENT));
+    job.append(&format!("\n{}", k.ja), 0.0, fmt(small, muted()));
     job.into()
 }
 
