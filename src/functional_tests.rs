@@ -1847,7 +1847,7 @@ fn ft50_menu_tags_lead_through_todays_order() {
     let tags = t.app().step_tags();
     assert_eq!(tags[0], (Screen::Words, 1, StepTag::Next { first_run: true }));
     assert_eq!(StepTag::Next { first_run: true }.text(1), "1 시작");
-    assert!(tags[1..].iter().all(|x| x.2 == StepTag::Todo) && tags.len() == 8, "{tags:?}");
+    assert!(tags[1..].iter().all(|x| x.2 == StepTag::Todo) && tags.len() == 9, "{tags:?}");
     assert!(t.has("▶  오늘의 학습 시작 · 1. 📚 새 단어"));
     t.nav("▶  오늘의 학습 시작 · 1. 📚 새 단어");
     assert_eq!(t.app().screen, Screen::Words);
@@ -1860,6 +1860,10 @@ fn ft50_menu_tags_lead_through_todays_order() {
     assert!(t.has("다음은 2. 📖 문장 소리내어 읽기"));
     t.nav("🏠  홈");
     assert!(t.has("▶  오늘의 학습 이어하기 · 2. 📖 문장 소리내어 읽기"));
+    // 문법 comes right after 문장 읽기.
+    t.app_mut().complete_step("reading");
+    t.steps(2);
+    assert_eq!(t.app().step_tags()[2], (Screen::Grammar, 3, StepTag::Next { first_run: false }));
 }
 
 #[test]
@@ -2417,11 +2421,13 @@ fn ft68_grammar_by_level_with_examples_and_quiz() {
     t.click("られ");
     t.click("まれ");
     assert!(t.app().store.profile.grammar_done.is_empty(), "one wrong answer: not learned yet");
+    assert!(!t.app().step_done("grammar"));
     t.click("🔄 퀴즈 다시 풀기");
     t.click("られました");
     t.click("られ");
     t.click("まれ");
     assert_eq!(t.app().store.profile.grammar_done, vec!["N3:수동형 (～られる)".to_string()]);
+    assert!(t.app().step_done("grammar"), "a point learned is today's 문법 step");
     t.click("← 문법 목록");
     assert!(t.has("★ N3 중급 1/7") && t.has("다시 보기 ›"));
     // Another level's tab.
