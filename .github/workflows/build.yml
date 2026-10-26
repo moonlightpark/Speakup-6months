@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # The website (website/, deployed by pages.yml) doesn't need a new app build.
+    paths-ignore: ["website/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:

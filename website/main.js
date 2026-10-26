@@ -39,3 +39,13 @@ fetch("https://api.github.com/repos/moonlightpark/Speakup-6months/releases?per_p
     document.querySelectorAll('[data-ver="ja"]').forEach((el) => ja && (el.textContent = ja.replace("ja-", "")));
   })
   .catch(() => {});
+
+// 히어로의 영어판/일본어판 화면 탭
+const heroShot = document.getElementById("hero-shot");
+document.querySelectorAll(".shot-tabs button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".shot-tabs button").forEach((o) => o.setAttribute("aria-selected", String(o === b)));
+    heroShot.src = b.dataset.shot;
+    heroShot.alt = b.dataset.alt;
+  })
+);

@@ -16,7 +16,7 @@
     <meta property="og:site_name" content="SpeakUp 6M" />
     <meta property="og:title" content="SpeakUp 6M: 6개월 뒤, 입으로 나오는 외국어" />
     <meta property="og:description" content="영어·일본어를 소리 내어 따라 말하고 바로 채점받는 무료 학습 앱입니다." />
-    <meta property="og:image" content="img/home.png" />
+    <meta property="og:image" content="img/en-home.webp" />
     <meta property="og:locale" content="ko_KR" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -34,6 +34,7 @@
       </a>
       <nav class="nav-links" aria-label="주요 메뉴">
         <a href="#editions">영어 · 일본어</a>
+        <a href="#devices">네 가지 앱</a>
         <a href="#routine">하루 루틴</a>
         <a href="#speak">말하기 채점</a>
         <a href="#kana">일본어 카드</a>
@@ -81,7 +82,7 @@
             </a>
             <a class="btn btn-ghost btn-large" href="https://github.com/moonlightpark/Speakup-6months" target="_blank" rel="noopener">GitHub</a>
           </div>
-          <p class="hero-note">macOS(Apple Silicon) · Windows · Android 폰·태블릿 · 무료 · iOS는 준비 중</p>
+          <p class="hero-note">맥 · 윈도우 · Android 태블릿 · Android 폰, 네 가지 앱 · 무료 · iOS는 준비 중</p>
           <p class="hero-stats">
             <span><b>182</b>일 과정</span>
             <span><b>6,000</b>단어 내장</span>
@@ -92,10 +93,51 @@
         </div>
 
         <div class="showcase reveal">
+          <div class="shot-tabs" role="tablist" aria-label="화면 고르기">
+            <button role="tab" aria-selected="true" data-shot="img/en-home.webp" data-alt="영어판 홈 화면">영어판</button>
+            <button role="tab" aria-selected="false" data-shot="img/ja-home.webp" data-alt="일본어판 홈 화면">일본어판</button>
+          </div>
           <div class="window">
-            <img src="img/home.png" alt="SpeakUp 6M 홈 화면: 오늘의 학습, 연속 학습 일수, 오늘의 루틴" width="1600" height="806" />
+            <img id="hero-shot" src="img/en-home.webp" alt="영어판 홈 화면: 오늘의 학습, 연속 학습 일수, 진척율" width="2800" height="1720" />
           </div>
         </div>
+      </section>
+
+      <!-- 네 가지 기기 -->
+      <section class="devices wrap" id="devices">
+        <p class="eyebrow">네 가지 앱</p>
+        <h2>맥, 윈도우, 태블릿, 폰.<br />어디서든 같은 과정.</h2>
+        <p class="section-lede">
+          영어판과 일본어판 모두 <b>macOS · Windows · Android 태블릿 · Android 폰</b> 네 가지로 나옵니다.
+          화면 크기에 맞춰 배치가 바뀔 뿐, 학습 과정과 기능은 같습니다.
+        </p>
+        <div class="device-grid">
+          <article class="device reveal">
+            <div class="frame frame-laptop"><img src="img/en-home.webp" alt="macOS에서 연 영어판 홈 화면" width="2800" height="1720" loading="lazy" /></div>
+            <p class="device-os">macOS</p>
+            <h3>맥 앱</h3>
+            <p>Apple Silicon(M1 이상) 맥용. 압축을 풀고 <b>SpeakUp 6M.app</b>을 엽니다. 큰 화면에 왼쪽 메뉴와 넓은 학습 화면.</p>
+          </article>
+          <article class="device reveal">
+            <div class="frame frame-win"><img src="img/ja-words.webp" alt="Windows에서 연 일본어판 새 단어 화면" width="2800" height="1720" loading="lazy" /></div>
+            <p class="device-os">Windows</p>
+            <h3>윈도우 앱</h3>
+            <p>Windows 64비트(x64)용. 설치 없이 압축을 푼 폴더에서 바로 실행합니다. 맥과 같은 화면, 같은 기능.</p>
+          </article>
+          <article class="device reveal">
+            <div class="frame frame-tablet"><img src="img/en-tablet-library.webp" alt="Android 태블릿 가로 화면의 리딩 라이브러리" width="2360" height="1640" loading="lazy" /></div>
+            <p class="device-os">Android 태블릿</p>
+            <h3>태블릿 앱</h3>
+            <p>가로로 들면 PC와 같은 배치, 세로로 들면 폰처럼 ☰ 메뉴로 바뀝니다. 소파에서 리딩과 카드 학습에 좋습니다.</p>
+          </article>
+          <article class="device reveal">
+            <div class="frame frame-phone"><img src="img/ja-phone-kanji.webp" alt="Android 폰의 일본어판 한자 카드" width="780" height="1688" loading="lazy" /></div>
+            <p class="device-os">Android 폰</p>
+            <h3>폰 앱</h3>
+            <p>위쪽 <b>☰ 메뉴</b>로 화면을 고르고, 모든 화면이 폰 폭에 맞춰 접힙니다. 출퇴근길 단어·카드·쉐도잉. Android 9 이상.</p>
+          </article>
+        </div>
+        <p class="small-note">같은 학습 기록을 기기끼리 자동으로 옮기지는 않습니다. 기기마다 따로 기록합니다. iPhone · iPad 앱은 준비 중입니다.</p>
       </section>
 
       <!-- 비중 -->
@@ -240,7 +282,7 @@
             <span style="--c: #9ca3af"><b>every morning</b><i>매일 아침</i></span>
           </div>
           <div class="window window-flat">
-            <img src="img/speed.png" alt="스피드 트레이닝 화면의 직독직해와 문장 성분 색상" width="1600" height="806" loading="lazy" />
+            <img src="img/en-reading.webp" alt="문장 읽기 화면: 영어 문장과 성분별 색상의 한글 뜻" width="2800" height="1720" loading="lazy" />
           </div>
         </div>
       </section>
@@ -277,6 +319,16 @@
             </ul>
             <p class="kc-ex">예: 日本(にほん) 일본 · 毎日(まいにち) 매일</p>
           </div>
+        </div>
+        <div class="wrap gallery">
+          <figure class="reveal">
+            <div class="window window-dark"><img src="img/ja-words.webp" alt="새 단어 화면 맨 앞의 히라가나·가타카나 카드와 한자 카드" width="2800" height="1720" loading="lazy" /></div>
+            <figcaption>새 단어 맨 앞의 가나 카드와 한자 카드 (하루 20장 필수)</figcaption>
+          </figure>
+          <figure class="reveal">
+            <div class="window window-dark"><img src="img/ja-kana.webp" alt="히라가나 카드: 글자를 보고 소리 4개 중 고르기" width="2800" height="1720" loading="lazy" /></div>
+            <figcaption>히라가나 카드: 글자를 보고 소리를 4개 중에서</figcaption>
+          </figure>
         </div>
       </section>
 
