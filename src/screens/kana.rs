@@ -401,11 +401,30 @@ impl App {
             });
             ui.add_space(10.0);
             ui.horizontal_wrapped(|ui| {
-                for &c in &q.choices {
-                    // Kanji choices are three lines: the whole width on a phone, two across otherwise.
-                    let w = if let Deck::Kanji(_) = deck { (ui.available_width().min(860.0) / 2.0 - 8.0).max(220.0).min(ui.available_width()) } else { 140.0 };
-                    let label = if let Deck::Kanji(_) = deck { kanji_choice(&crate::kanji::all()[c], w - 2.0 * ui.spacing().button_padding.x) } else { RichText::new(deck.answer(c)).size(20.0).into() };
-                    let mut b = egui::Button::new(label).min_size(egui::vec2(w, 52.0));
+                // Kanji choices are three lines: the whole width on a phone, two across otherwise.
+                let full = ui.available_width();
+                let half = full.min(860.0) / 2.0 - ui.spacing().item_spacing.x;
+                let kanji_w = if half >= 220.0 { half } else { full };
+                // Kana choices: two across even on a narrow phone.
+                let kana_w = ((full - ui.spacing().item_spacing.x) / 2.0).min(140.0);
+                // Laid out first, so every kanji choice gets the height of the tallest and the rows line up.
+                let pad = ui.spacing().button_padding;
+                let galleys: Vec<_> = q
+                    .choices
+                    .iter()
+                    .map(|&c| match deck {
+                        Deck::Kanji(_) => Some(kanji_choice(&crate::kanji::all()[c], kanji_w - 2.0 * pad.x).into_galley(ui, Some(egui::TextWrapMode::Wrap), kanji_w - 2.0 * pad.x, egui::TextStyle::Button)),
+                        _ => None,
+                    })
+                    .collect();
+                let kanji_h = galleys.iter().flatten().map(|g| g.size().y + 2.0 * pad.y).fold(52.0, f32::max);
+                for (&c, galley) in q.choices.iter().zip(galleys) {
+                    let (size, align) = if galley.is_some() { (egui::vec2(kanji_w, kanji_h), egui::Align::Min) } else { (egui::vec2(kana_w, 52.0), egui::Align::Center) };
+                    let label = match galley {
+                        Some(g) => egui::WidgetText::from(g),
+                        None => RichText::new(deck.answer(c)).size(20.0).into(),
+                    };
+                    let mut b = egui::Button::new(label).min_size(size);
                     if let Some(p) = q.picked {
                         if c == answer {
                             b = b.fill(GOOD.gamma_multiply(0.45));
@@ -413,7 +432,10 @@ impl App {
                             b = b.fill(BAD.gamma_multiply(0.45));
                         }
                     }
-                    if ui.add_enabled(q.picked.is_none() || c == answer || Some(c) == q.picked, b).clicked() && q.picked.is_none() {
+                    let enabled = q.picked.is_none() || c == answer || Some(c) == q.picked;
+                    // Kanji text starts at the button's left edge, so the three lines of every choice line up; kana stays centred.
+                    let clicked = ui.allocate_ui_with_layout(size, egui::Layout::top_down(align), |ui| ui.add_enabled(enabled, b)).inner.clicked();
+                    if clicked && q.picked.is_none() {
                         q.picked = Some(c);
                         let ok = c == answer;
                         let map = if let Deck::Kanji(_) = deck { &mut self.store.profile.kanji } else { &mut self.store.profile.kana };
