@@ -123,6 +123,30 @@ pub fn ja_text(ui: &mut Ui, text: &str, size: f32, color: Color32) {
     });
 }
 
+/// A list entry (a word with its dictionary `reading`, or a sentence) in the current wrapping
+/// row, furigana above its kanji, clickable as a whole. A leading marker ("🔗 ", "💬 ") stays plain.
+pub fn ja_entry(ui: &mut Ui, text: &str, reading: &str, size: f32, color: Color32) -> egui::Response {
+    let (mark, body) = match text.split_once(' ') {
+        Some((m, b)) if !m.chars().any(crate::ja::is_japanese_char) => (Some(m), b),
+        _ => (None, text),
+    };
+    let show = furigana_on(ui.ctx()) && crate::ja::has_kanji(body);
+    let gap = std::mem::replace(&mut ui.spacing_mut().item_spacing.x, 0.0);
+    let mut resp = mark.map(|m| ruby_piece(ui, &format!("{m} "), None, size, color, show, Sense::click()));
+    for p in crate::ja::furigana_read_cached(body, reading).iter() {
+        let r = ruby_piece(ui, &p.text, p.ruby.as_deref(), size, color, show, Sense::click());
+        resp = Some(match resp {
+            Some(a) => a | r,
+            None => r,
+        });
+    }
+    ui.spacing_mut().item_spacing.x = gap;
+    let resp = resp.unwrap_or_else(|| ui.allocate_response(Vec2::ZERO, Sense::hover()));
+    // Painted, so it's named for screen readers (and tests) by its text.
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, text));
+    resp
+}
+
 /// A sentence (furigana kept) that can be clicked as a whole, e.g. in the reader: returns
 /// (clicked, hovered). `highlight` paints behind it.
 pub fn ja_sentence(ui: &mut Ui, text: &str, size: f32, color: Color32, highlight: Option<Color32>) -> (bool, bool) {

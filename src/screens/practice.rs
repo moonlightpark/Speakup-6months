@@ -256,7 +256,7 @@ impl App {
     /// empty) colours each row by how far it has been practised.
     /// Returns (start pressed, row clicked, row marked 학습완료); rows are clickable when `marks`
     /// are given, and unfinished rows get a 학습완료 button when `can_finish`.
-    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], step: &str, marks: &[(Color32, String)], can_finish: bool) -> (bool, Option<usize>, Option<usize>) {
+    fn intro_card(&mut self, ui: &mut Ui, title: &str, desc: &str, rows: &[(String, String)], readings: &[String], step: &str, marks: &[(Color32, String)], can_finish: bool) -> (bool, Option<usize>, Option<usize>) {
         let mut start = false;
         let mut picked = None;
         let mut finished = None;
@@ -298,18 +298,17 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, en);
                     let color = mark.map(|m| m.0).unwrap_or(text_strong());
-                    let text = RichText::new(en).size(self.store.settings.list_size()).strong().color(color);
+                    let reading = readings.get(i).map_or("", String::as_str);
+                    let r = ja_entry(ui, en, reading, self.store.settings.list_size(), color);
                     if mark.is_some() {
                         // Click a word to practise just that one right away.
-                        let r = ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                        let r = r.on_hover_text("클릭하면 이것만 바로 연습해요");
                         if r.hovered() {
                             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                         }
                         if r.clicked() {
                             picked = Some(i);
                         }
-                    } else {
-                        ui.label(text);
                     }
                     if let Some((c, text)) = mark {
                         ui.label(RichText::new(text).small().color(*c));
@@ -368,6 +367,7 @@ impl App {
             .chain(lesson.words.iter().map(|w| (w.word.clone(), format!("{} — {}", w.meaning_ko, w.example))))
             .chain(lesson.expressions.iter().map(|w| (format!("💬 {}", w.word), format!("{} — {}", w.meaning_ko, w.example))))
             .collect();
+        let readings: Vec<String> = lesson.phrases.iter().chain(&lesson.words).chain(&lesson.expressions).map(|w| w.reading.clone()).collect();
         // Practice so far per entry (word_stats.json): red → orange → green as passes add up.
         let marks: Vec<(Color32, String)> = lesson
             .phrases
@@ -382,6 +382,7 @@ impl App {
             "📚 오늘의 덩어리 표현 · 새 단어",
             &format!("🔗 덩어리 표현을 먼저, 통째로 익혀요. 듣고 → 소리 내어 {reps}번 → 시제 3문장(현재 ～しようと思っています · 과거 ～しようと思っていました · 미래 ～するつもりです)을 3번씩 말하면 저장되고 복습 일정이 잡힙니다. 단어를 클릭하면 그 단어만 바로 연습해요."),
             &rows,
+            &readings,
             "words",
             &marks,
             true,
@@ -435,11 +436,8 @@ impl App {
                 let rows = v
                     .iter()
                     .map(|(w, k)| DayRow {
-                        label: match k {
-                            WordKind::Chunk => format!("🔗 {}", word_label(w)),
-                            WordKind::Expression => format!("💬 {}", word_label(w)),
-                            WordKind::Word => word_label(w),
-                        },
+                        label: entry_label(w, *k),
+                        reading: w.reading.clone(),
                         ko: w.meaning_ko.clone(),
                         specs: self.entry_specs(w, *k, reps, true),
                     })
@@ -633,12 +631,7 @@ impl App {
                             let (color, mark) = word_mark(self.store.word_stat(&w.word).passes);
                             ui.horizontal_wrapped(|ui| {
                                 speaker_button(ui, &mut self.voice, &w.word);
-                                let label = match kind {
-                                    WordKind::Chunk => format!("🔗 {}", word_label(w)),
-                                    WordKind::Expression => format!("💬 {}", word_label(w)),
-                                    WordKind::Word => word_label(w),
-                                };
-                                let r = ui.add(egui::Label::new(RichText::new(label).size(self.store.settings.list_size()).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                                let r = ja_entry(ui, &entry_label(w, *kind), &w.reading, self.store.settings.list_size(), color).on_hover_text("클릭하면 이것만 바로 연습해요");
                                 if r.hovered() {
                                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                                 }
@@ -874,7 +867,7 @@ impl App {
                 let (color, mark) = word_mark(self.store.word_stat(target).passes);
                 ui.horizontal_wrapped(|ui| {
                     speaker_button(ui, &mut self.voice, target);
-                    let resp = ui.add(egui::Label::new(RichText::new(&r.label).size(self.store.settings.list_size()).strong().color(color)).sense(egui::Sense::click())).on_hover_text("클릭하면 이것만 바로 연습해요");
+                    let resp = ja_entry(ui, &r.label, &r.reading, self.store.settings.list_size(), color).on_hover_text("클릭하면 이것만 바로 연습해요");
                     if resp.hovered() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                     }
@@ -1084,6 +1077,7 @@ impl App {
                 idioms.len()
             ),
             &rows,
+            &[],
             "reading",
             &marks,
             true,
@@ -1122,7 +1116,7 @@ impl App {
                     .into_iter()
                     .map(|(label, ko, spec)| {
                         let tenses = self.sentence_tense_specs(&spec.target);
-                        DayRow { label, ko, specs: std::iter::once(spec).chain(tenses).collect() }
+                        DayRow { label, reading: String::new(), ko, specs: std::iter::once(spec).chain(tenses).collect() }
                     })
                     .collect();
                 (d, rows)
@@ -1255,12 +1249,18 @@ fn finish_button(ui: &mut Ui) -> bool {
 /// One row of a day's full list: what is shown and the drills for it.
 pub struct DayRow {
     pub label: String,
+    /// Reading of a word (furigana); empty for sentences (worked out by the analyser).
+    pub reading: String,
     pub ko: String,
     pub specs: Vec<Spec>,
 }
 
 /// A word as listed: with its reading when it has kanji ("食べる · たべる").
-fn word_label(w: &LessonWord) -> String {
-    let reading = if w.reading.is_empty() && crate::ja::has_kanji(&w.word) { crate::ja::reading(&w.word) } else { w.reading.clone() };
-    if crate::ja::has_kanji(&w.word) && !reading.is_empty() && reading != w.word { format!("{} · {reading}", w.word) } else { w.word.clone() }
+/// A word list entry with its kind's marker; the reading goes above the kanji (`ja_entry`).
+fn entry_label(w: &LessonWord, kind: WordKind) -> String {
+    match kind {
+        WordKind::Chunk => format!("🔗 {}", w.word),
+        WordKind::Expression => format!("💬 {}", w.word),
+        WordKind::Word => w.word.clone(),
+    }
 }

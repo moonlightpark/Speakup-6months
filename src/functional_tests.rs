@@ -1744,14 +1744,14 @@ fn ft46_words_left_unfinished_on_earlier_days_can_be_seen_and_practised() {
         s.items.push(StudyItem { id: crate::srs::make_id(ItemKind::Word, "理由"), kind: ItemKind::Word, text: "理由".into(), ..Default::default() });
     });
     t.nav("📚  새 단어");
-    assert!(t.has("📅 지난 날 못 끝낸 새 단어 2개") && t.has("1일차 ·") && t.has("説明 · せつめい") && t.has("健康 · けんこう"));
+    assert!(t.has("📅 지난 날 못 끝낸 새 단어 2개") && t.has("1일차 ·") && t.has_exact("説明") && t.has_exact("健康"));
     // Today's list is new words only (not yesterday's), and is kept by date too.
     let today_words: Vec<String> = t.app().store.profile.today.word_set.as_ref().unwrap().words.iter().map(|w| w.word.clone()).collect();
     assert!(!today_words.iter().any(|w| w == "説明" || w == "健康"), "{today_words:?}");
     let saved = std::fs::read_to_string(t.dir.join("word_days.json")).unwrap();
     assert!(saved.contains(&today().to_string()) && saved.contains(&yesterday.to_string()));
     // Click one: practise it, then go on to the next unfinished word.
-    t.click_contains("説明 · ");
+    t.nav("説明");
     assert!(t.has("새 단어 · 説明"));
     for _ in 0..3 {
         t.say("説明", 0.8);
@@ -1826,8 +1826,8 @@ fn ft49_full_lists_by_day_include_finished_ones() {
     t.nav("📚  새 단어");
     assert!(t.has("📚 날짜별 전체 단어") && t.has("1일차 (1/3)") && t.has("2일차 (0/"));
     t.click("1일차 (1/3)");
-    assert!(t.has("1일차 · ") && t.has("理由 · りゆう"), "a learned word is listed too");
-    t.click_contains("理由 · ");
+    assert!(t.has("1일차 · ") && t.has_exact("理由"), "a learned word is listed too");
+    t.nav("理由");
     assert!(t.has("새 단어 · 理由"), "practise it again");
     t.click("그만하기");
     t.nav("📖  문장 읽기");

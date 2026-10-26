@@ -280,21 +280,39 @@ pub fn furigana(text: &str) -> Vec<Ruby> {
     out
 }
 
+/// `furigana` for a word list entry whose reading is known (a lone word can be misread by the
+/// analyser): the reading spread over its kanji, or the analyser's when it doesn't fit.
+pub fn furigana_read(text: &str, reading: &str) -> Vec<Ruby> {
+    if reading.is_empty() || !has_kanji(text) {
+        return furigana(text);
+    }
+    match align(text, reading) {
+        Some(parts) => parts.into_iter().map(|(text, ruby)| Ruby { text, ruby }).collect(),
+        None => furigana(text),
+    }
+}
+
 /// `furigana`, remembered for texts shown again every frame (bounded; cleared when full).
 pub fn furigana_cached(text: &str) -> std::sync::Arc<Vec<Ruby>> {
+    furigana_read_cached(text, "")
+}
+
+/// `furigana_read`, remembered like `furigana_cached`.
+pub fn furigana_read_cached(text: &str, reading: &str) -> std::sync::Arc<Vec<Ruby>> {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
     static CACHE: OnceLock<Mutex<HashMap<String, Arc<Vec<Ruby>>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
-    if let Some(v) = cache.lock().unwrap().get(text) {
+    let key = format!("{reading}\u{1}{text}");
+    if let Some(v) = cache.lock().unwrap().get(&key) {
         return v.clone();
     }
-    let v = Arc::new(furigana(text));
+    let v = Arc::new(furigana_read(text, reading));
     let mut c = cache.lock().unwrap();
     if c.len() > 3000 {
         c.clear();
     }
-    c.insert(text.to_string(), v.clone());
+    c.insert(key, v.clone());
     v
 }
 
@@ -472,6 +490,18 @@ mod tests {
         let ruby: Vec<(&str, Option<&str>)> = f.iter().map(|r| (r.text.as_str(), r.ruby.as_deref())).collect();
         assert_eq!(ruby, vec![("朝", Some("あさ")), ("ごはん", None), ("を", None), ("食", Some("た")), ("べ", None), ("まし", None), ("た", None), ("。", None)]);
         assert!(furigana("コーヒーをください").iter().all(|r| r.ruby.is_none()));
+    }
+
+    #[test]
+    fn furigana_from_a_known_reading() {
+        // A word list entry: its dictionary reading goes over the kanji, okurigana stay plain.
+        let f = furigana_read("食べる", "たべる");
+        let ruby: Vec<(&str, Option<&str>)> = f.iter().map(|r| (r.text.as_str(), r.ruby.as_deref())).collect();
+        assert_eq!(ruby, vec![("食", Some("た")), ("べる", None)]);
+        assert_eq!(furigana_read("今日", "きょう")[0].ruby.as_deref(), Some("きょう"));
+        // No reading, or one that doesn't fit: the analyser's.
+        assert_eq!(furigana_read("朝", ""), furigana("朝"));
+        assert_eq!(furigana_read("食べる", "のむ"), furigana("食べる"));
     }
 
     #[test]
