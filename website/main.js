@@ -40,12 +40,14 @@ fetch("https://api.github.com/repos/moonlightpark/Speakup-6months/releases?per_p
   })
   .catch(() => {});
 
-// 히어로의 영어판/일본어판 화면 탭
-const heroShot = document.getElementById("hero-shot");
-document.querySelectorAll(".shot-tabs button").forEach((b) =>
-  b.addEventListener("click", () => {
-    document.querySelectorAll(".shot-tabs button").forEach((o) => o.setAttribute("aria-selected", String(o === b)));
-    heroShot.src = b.dataset.shot;
-    heroShot.alt = b.dataset.alt;
-  })
-);
+// 영어판/일본어판 화면 탭 (히어로, 문법): 탭 묶음마다 바로 옆 화면을 바꿉니다
+document.querySelectorAll(".shot-tabs").forEach((tabs) => {
+  const shot = tabs.parentElement.querySelector(".window img");
+  tabs.querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => {
+      tabs.querySelectorAll("button").forEach((o) => o.setAttribute("aria-selected", String(o === b)));
+      shot.src = b.dataset.shot;
+      shot.alt = b.dataset.alt;
+    })
+  );
+});

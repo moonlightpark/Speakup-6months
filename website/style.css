@@ -547,7 +547,7 @@ section.wrap,
   padding: 0;
   margin-top: 48px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   background: #ffffff1f;
   border: 1px solid #ffffff1f;
@@ -561,6 +561,10 @@ section.wrap,
   counter-increment: r;
   position: relative;
   transition: background 0.25s;
+}
+/* 11 steps: the last one fills the rest of its row (4 columns, 2 on tablets) */
+.routine-list li:last-child {
+  grid-column: span 2;
 }
 .routine-list li:hover {
   background: #26208a;
@@ -1019,6 +1023,18 @@ section.wrap,
   background: var(--white);
   color: var(--indigo-deep);
 }
+/* 밝은 배경의 화면 탭 (문법) */
+.shot-tabs-light {
+  background: var(--paper);
+  border-color: var(--line);
+}
+.shot-tabs-light button {
+  color: var(--muted);
+}
+.shot-tabs-light button[aria-selected="true"] {
+  background: var(--indigo);
+  color: #fff;
+}
 .window img {
   width: 100%;
 }
@@ -1294,6 +1310,9 @@ section.wrap,
 @media (max-width: 420px) {
   .routine-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .routine-list li:last-child {
+    grid-column: auto;
   }
   .kc-choices {
     grid-template-columns: minmax(0, 1fr);
