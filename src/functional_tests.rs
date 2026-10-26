@@ -2277,6 +2277,36 @@ fn ft67_print_a_days_words_on_one_a4_page() {
 }
 
 #[test]
+fn ft68_grammar_by_level_with_examples_and_quiz() {
+    // Level 3.0 = A2: the 문법 menu opens on the learner's level, lists its points, and a point
+    // has its pattern, examples to say aloud and a quiz; all right = learned.
+    let mut t = launch("grammar");
+    t.nav("📐  문법");
+    assert!(t.has("★ A2 초중급 0/7") && t.has("과거형 (규칙 · 불규칙 동사)"));
+    t.h.get_all_by_label("학습하기 ›").next().unwrap().click();
+    t.steps(3);
+    assert!(t.has("주어 + 동사 과거형") && t.has("I visited my grandmother last weekend."));
+    t.h.get_all_by_label("🎤 따라 말하기").next().unwrap().click();
+    t.steps(3);
+    assert!(t.app().grammar_drill_target().as_deref() == Some("I visited my grandmother last weekend."));
+    t.click("seen");
+    assert!(t.has("❌ 오답") && !t.has("🔄 퀴즈 다시 풀기"), "retry only once every question is answered");
+    t.click("eat");
+    t.click("didn't");
+    assert!(t.app().store.profile.grammar_done.is_empty(), "one wrong answer: not learned yet");
+    t.click("🔄 퀴즈 다시 풀기");
+    t.click("saw");
+    t.click("eat");
+    t.click("didn't");
+    assert_eq!(t.app().store.profile.grammar_done, vec!["A2:과거형 (규칙 · 불규칙 동사)".to_string()]);
+    t.click("← 문법 목록");
+    assert!(t.has("★ A2 초중급 1/7") && t.has("다시 보기 ›"));
+    // Another level's tab.
+    t.click_contains("C1 능숙");
+    assert!(t.has("조건문의 if 생략 도치"));
+}
+
+#[test]
 fn ft_phone_layout_fits_every_screen() {
     // A phone held upright (339 × 752 points: a Galaxy S20 at its default display size): the menu folds into ☰ and no page is wider than the screen.
     let mut t = launch_sized(temp_dir("phone"), true, egui::vec2(339.0, 752.0), |s| {
@@ -2286,7 +2316,7 @@ fn ft_phone_layout_fits_every_screen() {
         s.profile.today = no_idioms_today(mock_word_set());
     });
     assert!(t.has("☰ 메뉴") && !t.has_exact("📚  새 단어"), "no side bar on a phone");
-    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
+    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "📐  문법", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
     let mut wide = Vec::new();
     for s in screens {
         t.click("☰ 메뉴");
@@ -2327,6 +2357,10 @@ fn ft_phone_layout_fits_every_screen() {
     t.nav("🔁  복습");
     t.h.get_by_label_contains("낱말 맞추기").click();
     check(&mut t, "wordle");
+    t.click("☰ 메뉴");
+    t.nav("📐  문법");
+    t.h.get_all_by_label("학습하기 ›").next().unwrap().click();
+    check(&mut t, "grammar point");
     assert!(wide.is_empty(), "wider than the phone: {wide:?}");
 }
 
@@ -2336,7 +2370,7 @@ fn ft_phone_layout_fits_every_screen() {
 #[test]
 #[ignore]
 fn phone_explore_every_button() {
-    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
+    let screens = ["🏠  홈", "📝  숙제", "🔁  복습", "📚  새 단어", "📖  문장 읽기", "📐  문법", "⚡  스피드 트레이닝", "🎧  리스닝 랩", "💬  자기 표현", "💼  회화 · 비즈니스", "📘  리딩 라이브러리", "✏  쓰기", "🌐  자동 번역기", "🔬  피드백 센터", "📒  내 단어장", "📅  학습 기록", "📈  레벨 · 평가", "⚙  설정"];
     // Buttons that leave the app (browser, Finder) or only switch screens.
     let skip = |l: &str| l.is_empty() || l.contains("폴더") || l.contains("받기") || l.contains("다운로드") || l.contains("브라우저") || l.contains("유튜브") || l.contains("YouTube") || l.contains("메뉴") || l.contains("닫기") || l.contains("홈으로") || screens.contains(&l);
     let mut wide = Vec::new();

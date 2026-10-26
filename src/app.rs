@@ -6,7 +6,7 @@ use crate::content;
 use crate::curriculum::{self, TOTAL_DAYS};
 use crate::language::{self, LanguagePack};
 use crate::models::*;
-use crate::screens::{translator::TranslatorState, library::LibraryState, writing::WritingState, audio_check::AudioCheckState, feedback::FeedbackState, speed::SpeedState, listening::ListeningState, practice::DrillQueue, speaking::{RoleplayState, SelfExprState}, homework::HomeworkState, test::LevelTest};
+use crate::screens::{grammar::GrammarState, translator::TranslatorState, library::LibraryState, writing::WritingState, audio_check::AudioCheckState, feedback::FeedbackState, speed::SpeedState, listening::ListeningState, practice::DrillQueue, speaking::{RoleplayState, SelfExprState}, homework::HomeworkState, test::LevelTest};
 use crate::srs;
 use crate::storage::Store;
 use crate::stt::{self, Stt, SttStatus};
@@ -24,6 +24,7 @@ pub enum Screen {
     Review,
     Words,
     Reading,
+    Grammar,
     Speed,
     Listening,
     SelfExpression,
@@ -120,6 +121,7 @@ pub struct App {
     pub library: LibraryState,
     pub writing: WritingState,
     pub translator: TranslatorState,
+    pub grammar: GrammarState,
     pub coach: crate::screens::coach::CoachState,
     pub test: Option<LevelTest>,
     pub toast: Option<(String, Instant)>,
@@ -236,6 +238,7 @@ impl App {
             library: LibraryState::default(),
             writing: WritingState::default(),
             translator: TranslatorState::default(),
+            grammar: GrammarState::default(),
             coach: Default::default(),
             test: None,
             toast: None,
@@ -987,6 +990,7 @@ impl App {
                 &[
                     (Screen::Words, "📚  새 단어"),
                     (Screen::Reading, "📖  문장 읽기"),
+                    (Screen::Grammar, "📐  문법"),
                     (Screen::Speed, "⚡  스피드 트레이닝"),
                     (Screen::Listening, "🎧  리스닝 랩"),
                     (Screen::SelfExpression, "💬  자기 표현"),
@@ -1766,6 +1770,7 @@ impl eframe::App for App {
                             Screen::Review => self.review_ui(ui),
                             Screen::Words => self.words_ui(ui),
                             Screen::Reading => self.reading_ui(ui),
+                            Screen::Grammar => self.grammar_ui(ui),
                             Screen::Speed => self.speed_ui(ui),
                             Screen::Listening => self.listening_ui(ui),
                             Screen::SelfExpression => self.self_expression_ui(ui),

@@ -181,6 +181,8 @@ pub struct Profile {
     pub tutor_sessions: Vec<NaiveDate>,
     /// Mock OPIc / TOEIC Speaking results, logged by the learner every two weeks.
     pub external_tests: Vec<ExternalTest>,
+    /// 📐 문법 points learned (quiz all right), as `grammar_book::Point::key`.
+    pub grammar_done: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -224,6 +226,7 @@ impl Default for Profile {
             tutor_sessions: Vec::new(),
             speed_book_pages: Default::default(),
             external_tests: Vec::new(),
+            grammar_done: Vec::new(),
         }
     }
 }
