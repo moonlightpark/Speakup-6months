@@ -204,11 +204,23 @@ impl Cache {
 }
 
 fn open_engine(dir: &Path, british: bool) -> Result<KokoroTts> {
-    let p = |f: &str| dir.join(f).to_string_lossy().into_owned();
     let model = dir.join("model.onnx");
     if !model.exists() {
         return Err(anyhow!("모델 파일이 없습니다: {}", model.display()));
     }
+    // sherpa-onnx opens files through narrow paths, and with a model folder it can't open it
+    // crashes the app (sherpa-rs doesn't check for a failed start). When the folder has no
+    // ASCII path (a Windows user folder like C:\Users\макс without 8.3 short names), work
+    // from inside it and pass names relative to it.
+    let base = match crate::storage::c_path(dir) {
+        Some(b) => b,
+        None => {
+            std::env::set_current_dir(dir)?;
+            crate::applog!("neural tts: 영문이 아닌 경로라 모델 폴더에서 상대 경로로 엽니다 · {}", dir.display());
+            PathBuf::new()
+        }
+    };
+    let p = |f: &str| base.join(f).to_string_lossy().into_owned();
     let threads = std::thread::available_parallelism().map(|n| n.get().clamp(2, 8) as i32).unwrap_or(4);
     let lexicon = if british { "lexicon-gb-en.txt" } else { "lexicon-us-en.txt" };
     Ok(KokoroTts::new(KokoroTtsConfig {
@@ -218,7 +230,7 @@ fn open_engine(dir: &Path, british: bool) -> Result<KokoroTts> {
         data_dir: p("espeak-ng-data"),
         // The model insists on the Chinese word-segmentation dictionary, and the Chinese lexicon
         // is left out: only English is spoken, and loading them in full takes hundreds of MB.
-        dict_dir: slim_dict(dir).unwrap_or_else(|_| p("dict")),
+        dict_dir: p(if slim_dict(dir).is_ok() { "dict-slim" } else { "dict" }),
         lexicon: p(lexicon),
         length_scale: 1.0,
         // "en-gb" makes sherpa-onnx throw (and abort the process); the British lexicon with
@@ -231,7 +243,7 @@ fn open_engine(dir: &Path, british: bool) -> Result<KokoroTts> {
 
 /// A tiny copy of the jieba dictionary folder (`dict-slim`): the multi-language model needs one
 /// to start, but English text never reaches it, so a few entries per file are enough.
-fn slim_dict(dir: &Path) -> Result<String> {
+fn slim_dict(dir: &Path) -> Result<()> {
     let src = dir.join("dict");
     let dst = dir.join("dict-slim");
     let done = dst.join(".complete");
@@ -247,7 +259,7 @@ fn slim_dict(dir: &Path) -> Result<String> {
         }
         std::fs::write(&done, "")?;
     }
-    Ok(dst.to_string_lossy().into_owned())
+    Ok(())
 }
 
 /// The voice model is released after this long without speech.
