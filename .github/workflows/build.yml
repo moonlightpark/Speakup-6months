@@ -92,6 +92,12 @@ jobs:
           New-Item -ItemType Directory -Force pkg | Out-Null
           Copy-Item target/release/speakup.exe pkg/
           Copy-Item target/release/*.dll pkg/
+          # speakup.exe and onnxruntime.dll need the Visual C++ runtime. PCs without the
+          # VC++ Redistributable (or with an old copy) can't start the app, so ship it beside
+          # the .exe (app-local deployment of the redistributable files).
+          foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
+            Copy-Item "$env:WINDIR\System32\$dll" pkg/
+          }
           Get-ChildItem pkg
           Compress-Archive -Path pkg/* -DestinationPath "dist/SpeakUp6M-${{ matrix.name }}.zip"
 
