@@ -46,6 +46,16 @@ jobs:
         shell: bash
         run: echo "LIBCLANG_PATH=C:\\Program Files\\LLVM\\bin" >> "$GITHUB_ENV"
 
+      # whisper.cpp must not be tuned to the runner's CPU (it picked /arch:AVX512 and the app
+      # closed silently on PCs without AVX-512): see cmake/portable_cpu.cmake. whisper-rs-sys's
+      # build script doesn't rerun when the variable changes, so its cached build is dropped.
+      - name: Windows portable whisper.cpp
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "CMAKE_PROJECT_INCLUDE_BEFORE=$(cygpath -m "$GITHUB_WORKSPACE/cmake/portable_cpu.cmake")" >> "$GITHUB_ENV"
+          cargo clean --release -p whisper-rs-sys
+
       - name: Test
         shell: bash
         run: cargo test --release
