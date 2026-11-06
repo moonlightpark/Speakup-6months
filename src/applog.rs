@@ -73,18 +73,46 @@ fn rss_mb() -> Option<u64> {
     String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().ok().map(|kb| kb / 1024)
 }
 
+/// Asked of Windows directly: running `tasklist` every minute flashed a console window over the
+/// app (a windowed program that starts a console program gets a new console).
 #[cfg(windows)]
 fn rss_mb() -> Option<u64> {
-    let filter = format!("PID eq {}", std::process::id());
-    let out = std::process::Command::new("tasklist").args(["/FI", &filter, "/FO", "CSV", "/NH"]).output().ok()?;
-    // "speakup.exe","1234","Console","1","123,456 K"
-    let text = String::from_utf8_lossy(&out.stdout);
-    let kb: String = text.trim().rsplit("\",\"").next()?.chars().filter(|c| c.is_ascii_digit()).collect();
-    kb.parse::<u64>().ok().map(|kb| kb / 1024)
+    #[repr(C)]
+    #[derive(Default)]
+    struct ProcessMemoryCounters {
+        cb: u32,
+        page_fault_count: u32,
+        peak_working_set_size: usize,
+        working_set_size: usize,
+        quota_peak_paged_pool_usage: usize,
+        quota_paged_pool_usage: usize,
+        quota_peak_non_paged_pool_usage: usize,
+        quota_non_paged_pool_usage: usize,
+        pagefile_usage: usize,
+        peak_pagefile_usage: usize,
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> *mut std::ffi::c_void;
+        fn K32GetProcessMemoryInfo(process: *mut std::ffi::c_void, counters: *mut ProcessMemoryCounters, cb: u32) -> i32;
+    }
+    let mut c = ProcessMemoryCounters { cb: std::mem::size_of::<ProcessMemoryCounters>() as u32, ..Default::default() };
+    let ok = unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb) };
+    (ok != 0).then(|| c.working_set_size as u64 / (1024 * 1024))
 }
 
 /// `applog!("...", args)` — formats and appends a line to the debug log.
 #[macro_export]
 macro_rules! applog {
     ($($t:tt)*) => { $crate::applog::write(&format!($($t)*)) };
+}
+
+#[cfg(test)]
+mod tests {
+    /// The memory line works without starting another program (on Windows that flashed a console).
+    #[test]
+    fn reads_own_memory() {
+        let mb = super::rss_mb().expect("memory of this process");
+        assert!(mb > 0 && mb < 64 * 1024, "{mb} MB");
+    }
 }
