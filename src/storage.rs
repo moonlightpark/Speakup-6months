@@ -72,6 +72,34 @@ fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     Ok(())
 }
 
+/// A path to `p` that the C/C++ libraries (whisper.cpp, Open JTalk) can open, or None.
+/// They take narrow `char*` paths, and on Windows those only reach files whose path is ASCII:
+/// a user folder such as `C:\Users\макс` made the English edition's voice engine crash on start. There the 8.3 short
+/// name (`C:\Users\8D4F~1\…`) is ASCII when the volume keeps short names.
+pub fn c_path(p: &Path) -> Option<PathBuf> {
+    if p.to_str().is_some_and(|s| s.is_ascii()) || !cfg!(target_os = "windows") {
+        return Some(p.to_path_buf());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetShortPathNameW(long: *const u16, short: *mut u16, len: u32) -> u32;
+        }
+        let wide: Vec<u16> = p.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let mut buf = vec![0u16; 1024];
+        let n = unsafe { GetShortPathNameW(wide.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) } as usize;
+        if n > 0 && n < buf.len() {
+            let short = PathBuf::from(std::ffi::OsString::from_wide(&buf[..n]));
+            if short.to_str().is_some_and(|s| s.is_ascii()) {
+                return Some(short);
+            }
+        }
+    }
+    None
+}
+
 pub fn data_dir() -> PathBuf {
     if let Ok(d) = std::env::var("SPEAKUP_DATA_DIR") {
         return PathBuf::from(d);

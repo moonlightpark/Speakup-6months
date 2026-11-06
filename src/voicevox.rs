@@ -190,7 +190,17 @@ fn open_engine(dir: &Path) -> Result<Synthesizer<OpenJtalk>> {
         None => runtime_lib(dir).ok_or_else(|| anyhow!("ONNX Runtime 파일이 없습니다"))?.into_os_string(),
     };
     let ort = Onnxruntime::load_once().filename(lib).perform().context("ONNX Runtime을 열 수 없습니다")?;
-    let dict = dir.join(DICT);
+    // Open JTalk (C++) opens the dictionary through a narrow path, which on Windows only works
+    // for ASCII paths. A user folder like C:\Users\макс without 8.3 short names: work from
+    // inside the model folder and pass the dictionary's name relative to it.
+    let dict = match crate::storage::c_path(&dir.join(DICT)) {
+        Some(d) => d,
+        None => {
+            std::env::set_current_dir(dir)?;
+            crate::applog!("voicevox: 영문이 아닌 경로라 모델 폴더에서 상대 경로로 엽니다 · {}", dir.display());
+            PathBuf::from(DICT)
+        }
+    };
     let ojt = OpenJtalk::new(dict.to_string_lossy().as_ref()).context("일본어 사전을 열 수 없습니다")?;
     let threads = std::thread::available_parallelism().map(|n| n.get().clamp(2, 8) as u16).unwrap_or(4);
     let synth = Synthesizer::builder(ort).text_analyzer(ojt).cpu_num_threads(threads).build().context("음성 엔진을 만들 수 없습니다")?;

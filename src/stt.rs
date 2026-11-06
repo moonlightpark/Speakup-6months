@@ -163,9 +163,19 @@ fn worker(rx: Receiver<Job>, status: Arc<Mutex<SttStatus>>, loaded: Arc<std::syn
         if ctx.is_some() {
             return Ok(());
         }
-        let p = path.as_ref().ok_or_else(|| anyhow!("모델이 선택되지 않았습니다"))?.to_string_lossy().to_string();
+        let file = path.as_ref().ok_or_else(|| anyhow!("모델이 선택되지 않았습니다"))?;
+        let p = file.to_string_lossy().to_string();
         let _guard = MODEL_LOAD.lock().unwrap_or_else(|e| e.into_inner());
-        let c = WhisperContext::new_with_params(&p, WhisperContextParameters::default()).map_err(|e| anyhow!("모델 로드 실패: {e}"))?;
+        let c = match crate::storage::c_path(file) {
+            Some(cp) => WhisperContext::new_with_params(&cp.to_string_lossy(), WhisperContextParameters::default()),
+            // whisper.cpp can't open a path that isn't ASCII on Windows (C:\Users\макс\…):
+            // read the file here and hand it over from memory.
+            None => {
+                let bytes = std::fs::read(file).map_err(|e| anyhow!("모델 파일을 읽을 수 없습니다: {e}"))?;
+                WhisperContext::new_from_buffer_with_params(&bytes, WhisperContextParameters::default())
+            }
+        }
+        .map_err(|e| anyhow!("모델 로드 실패: {e}"))?;
         crate::applog!("stt: 모델 로드 · {p}");
         *ctx = Some(c);
         loaded.store(true, Ordering::Relaxed);
